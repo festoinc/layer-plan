@@ -1,14 +1,22 @@
 import { defineConfig } from "@playwright/test";
+
+const production = process.env.E2E_TARGET === "production";
+const port = production ? 4174 : 5173;
+const baseURL = `http://127.0.0.1:${port}`;
+
 export default defineConfig({
   testDir: "./tests",
+  testIgnore: ["**/unit/**"],
   use: {
-    baseURL: "http://127.0.0.1:5173",
+    baseURL,
     browserName: "chromium",
     reducedMotion: "reduce",
   },
   webServer: {
-    command: "npm run dev",
-    url: "http://127.0.0.1:5173",
+    command: production
+      ? `npm run preview -- --port ${port} --strictPort`
+      : "npm run dev",
+    url: baseURL,
     reuseExistingServer: true,
   },
 });

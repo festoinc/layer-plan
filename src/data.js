@@ -1,3 +1,8 @@
+/**
+ * @param {string} id
+ * @param {string} text
+ * @param {boolean} [checked]
+ */
 const criterion = (id, text, checked = false) => ({ id, text, checked });
 
 export const initialChapters = [
@@ -95,24 +100,3 @@ export const initialChapters = [
     children: [],
   },
 ];
-
-export function findChapter(chapters, id, path = []) {
-  for (const chapter of chapters) {
-    const nextPath = [...path, { id: chapter.id, title: chapter.title }];
-    if (chapter.id === id) return { chapter, path: nextPath };
-    const found = findChapter(chapter.children, id, nextPath);
-    if (found) return found;
-  }
-  return null;
-}
-
-export function updateChapter(chapters, id, transform) {
-  return chapters.map((chapter) =>
-    chapter.id === id
-      ? transform(chapter)
-      : {
-          ...chapter,
-          children: updateChapter(chapter.children, id, transform),
-        },
-  );
-}

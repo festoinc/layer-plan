@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import { useDeferredValue, useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
@@ -33,6 +33,9 @@ export function AutoTextarea({ value, ...props }) {
 
 export function EditableMarkdown({ value, previewLabel, onBlur, ...props }) {
   const [editing, setEditing] = useState(false);
+  // Keep long descriptions typeable: the preview may lag a frame behind the
+  // textarea without blocking the input.
+  const previewValue = useDeferredValue(value);
   if (editing)
     return (
       <AutoTextarea
@@ -56,7 +59,7 @@ export function EditableMarkdown({ value, previewLabel, onBlur, ...props }) {
     );
   return (
     <MarkdownContent
-      text={value}
+      text={previewValue}
       label={previewLabel}
       placeholder={props.placeholder}
       tabIndex={0}

@@ -389,19 +389,14 @@ test("new criteria create subchapters while manual subchapters stay outside the 
   await page.getByLabel("New success criterion").press("Enter");
   await expect(page.locator(".criterion")).toHaveCount(5);
   const stored = await page.evaluate(() =>
-    JSON.parse(localStorage.getItem("layers-chapters-v2")),
+    JSON.parse(localStorage.getItem("layers:doc:v3")),
   );
-  const parent = stored.chapters[0].children.find(
-    (chapter) => chapter.id === "password-reset",
-  );
+  const parent = stored.chapters.byId["password-reset"];
   const createdCriterion = parent.criteria.at(-1);
-  expect(
-    parent.children.filter((child) => child.id === createdCriterion.chapterId),
-  ).toHaveLength(1);
-  expect(
-    parent.children.find((child) => child.id === createdCriterion.chapterId)
-      .description,
-  ).toBe(text);
+  expect(parent.childIds).toContain(createdCriterion.chapterId);
+  expect(stored.chapters.byId[createdCriterion.chapterId].description).toBe(
+    text,
+  );
 });
 
 test("final level stops automatic subdocuments and persists per document", async ({
