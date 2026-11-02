@@ -32,20 +32,20 @@ src/store/       Reducer, React provider, persistence/repository layer
 src/hooks/       Hash router, memoized chapter tree, focus trap
 src/components/  Sidebar, tree, editor, activity, coverage, banners
 src/app/         App shell and error boundaries
-src/Markdown.jsx Markdown preview/editor primitives
-src/data.js      Sample chapter content
+src/Markdown.tsx Markdown preview/editor primitives
+src/data.ts      Sample chapter content
 ```
 
 - **Normalized document.** `{ byId, rootIds }` with `childIds` and `parentId`.
   Lookups are O(1) and unrelated chapters keep object identity, so sidebar rows
   are memoized and typing does not re-render the whole tree.
-- **One reducer for document state.** `src/store/workspaceReducer.js` owns
+- **One reducer for document state.** `src/store/workspaceReducer.ts` owns
   chapters, criteria, activity and selection. Ephemeral UI state (open branch,
   create form, mobile drawer) stays in components.
-- **Repository seam.** `src/store/persistence.js` exposes `load`, `save`,
+- **Repository seam.** `src/store/persistence.ts` exposes `load`, `save`,
   `flush`, `subscribe` and status. Components never touch `localStorage`, so an
   HTTP repository can replace it later.
-- **Validation and migration.** `src/domain/schema.js` repairs saved data
+- **Validation and migration.** `src/domain/schema.ts` repairs saved data
   (missing fields, duplicate ids, dangling links, cycles, orphans) and migrates
   the phase 1 nested payload. Unreadable payloads are copied to a backup key
   before a fresh workspace is shown.

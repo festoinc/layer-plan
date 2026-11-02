@@ -1,25 +1,21 @@
 import {
+  Chapter,
+  ChapterDocument,
   createChapter,
+  Criterion,
   getChapter,
   insertChapter,
   patchChapter,
   setCriteria,
-} from "./chapters.js";
+} from "./chapters";
 
-/**
- * @typedef {import("./chapters.js").Criterion} Criterion
- * @typedef {import("./chapters.js").Chapter} Chapter
- * @typedef {import("./chapters.js").ChapterDocument} ChapterDocument
- */
+export type { Criterion, Chapter, ChapterDocument };
 
 /**
  * Derive a chapter title from a Markdown criterion. The first line is used;
  * leading block markers, link targets and inline formatting are removed.
- *
- * @param {string} markdown
- * @returns {string}
  */
-export function deriveCriterionTitle(markdown) {
+export function deriveCriterionTitle(markdown: string): string {
   return (
     String(markdown)
       .split(/\r?\n/)[0]
@@ -30,13 +26,15 @@ export function deriveCriterionTitle(markdown) {
   );
 }
 
-/**
- * @param {{ id: string, text: string, checked?: boolean, chapterId?: string }} input
- * @returns {Criterion}
- */
-export function createCriterion(input) {
-  /** @type {Criterion} */
-  const criterion = {
+export interface CreateCriterionInput {
+  id: string;
+  text: string;
+  checked?: boolean;
+  chapterId?: string;
+}
+
+export function createCriterion(input: CreateCriterionInput): Criterion {
+  const criterion: Criterion = {
     id: input.id,
     text: input.text,
     checked: Boolean(input.checked),
@@ -47,11 +45,14 @@ export function createCriterion(input) {
 
 /**
  * Build the chapter that a success criterion creates automatically.
- *
- * @param {{ id: string, text: string }} input
- * @returns {Chapter}
  */
-export function createSubchapterFromCriterion({ id, text }) {
+export function createSubchapterFromCriterion({
+  id,
+  text,
+}: {
+  id: string;
+  text: string;
+}): Chapter {
   return createChapter({
     id,
     title: deriveCriterionTitle(text),
@@ -61,19 +62,13 @@ export function createSubchapterFromCriterion({ id, text }) {
 
 /**
  * Append a criterion to a chapter and, when provided, its linked subchapter.
- *
- * @param {ChapterDocument} document
- * @param {string} chapterId
- * @param {Criterion} criterion
- * @param {Chapter|null} [subchapter]
- * @returns {ChapterDocument}
  */
 export function addCriterion(
-  document,
-  chapterId,
-  criterion,
-  subchapter = null,
-) {
+  document: ChapterDocument,
+  chapterId: string,
+  criterion: Criterion,
+  subchapter: Chapter | null = null,
+): ChapterDocument {
   const chapter = getChapter(document, chapterId);
   if (!chapter) return document;
 
@@ -89,14 +84,12 @@ export function addCriterion(
   return next;
 }
 
-/**
- * @param {ChapterDocument} document
- * @param {string} chapterId
- * @param {string} criterionId
- * @param {Partial<Criterion>} patch
- * @returns {ChapterDocument}
- */
-export function patchCriterion(document, chapterId, criterionId, patch) {
+export function patchCriterion(
+  document: ChapterDocument,
+  chapterId: string,
+  criterionId: string,
+  patch: Partial<Criterion>,
+): ChapterDocument {
   const chapter = getChapter(document, chapterId);
   if (!chapter) return document;
   let changed = false;
@@ -108,13 +101,11 @@ export function patchCriterion(document, chapterId, criterionId, patch) {
   return changed ? setCriteria(document, chapterId, criteria) : document;
 }
 
-/**
- * @param {ChapterDocument} document
- * @param {string} chapterId
- * @param {string} criterionId
- * @returns {ChapterDocument}
- */
-export function removeCriterion(document, chapterId, criterionId) {
+export function removeCriterion(
+  document: ChapterDocument,
+  chapterId: string,
+  criterionId: string,
+): ChapterDocument {
   const chapter = getChapter(document, chapterId);
   if (!chapter) return document;
   const criteria = chapter.criteria.filter(
@@ -124,13 +115,11 @@ export function removeCriterion(document, chapterId, criterionId) {
   return setCriteria(document, chapterId, criteria);
 }
 
-/**
- * @param {ChapterDocument} document
- * @param {string} chapterId
- * @param {string} criterionId
- * @returns {ChapterDocument}
- */
-export function toggleCriterion(document, chapterId, criterionId) {
+export function toggleCriterion(
+  document: ChapterDocument,
+  chapterId: string,
+  criterionId: string,
+): ChapterDocument {
   const chapter = getChapter(document, chapterId);
   const criterion = chapter?.criteria.find((item) => item.id === criterionId);
   if (!chapter || !criterion) return document;
@@ -141,11 +130,11 @@ export function toggleCriterion(document, chapterId, criterionId) {
 
 /**
  * Progress for one chapter's checklist.
- *
- * @param {Chapter|undefined|null} chapter
- * @returns {{ done: number, total: number }}
  */
-export function criterionProgress(chapter) {
+export function criterionProgress(chapter: Chapter | undefined | null): {
+  done: number;
+  total: number;
+} {
   const criteria = chapter?.criteria ?? [];
   return {
     done: criteria.filter((criterion) => criterion.checked).length,
@@ -155,12 +144,11 @@ export function criterionProgress(chapter) {
 
 /**
  * Keep the criterion list of a chapter in sync with a new set of criteria.
- *
- * @param {ChapterDocument} document
- * @param {string} chapterId
- * @param {Criterion[]} criteria
- * @returns {ChapterDocument}
  */
-export function replaceCriteria(document, chapterId, criteria) {
+export function replaceCriteria(
+  document: ChapterDocument,
+  chapterId: string,
+  criteria: Criterion[],
+): ChapterDocument {
   return patchChapter(document, chapterId, { criteria });
 }

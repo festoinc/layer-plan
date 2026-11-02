@@ -1,14 +1,19 @@
+import { FormEvent } from "react";
 import { Check, FileText, X } from "lucide-react";
 
-/**
- * @param {{
- *   title: string,
- *   onTitleChange: (value: string) => void,
- *   onSubmit: (event: React.FormEvent<HTMLFormElement>) => void,
- *   onCancel: () => void,
- * }} props
- */
-export function ChapterForm({ title, onTitleChange, onSubmit, onCancel }) {
+export interface ChapterFormProps {
+  title: string;
+  onTitleChange: (value: string) => void;
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+  onCancel: () => void;
+}
+
+export function ChapterForm({
+  title,
+  onTitleChange,
+  onSubmit,
+  onCancel,
+}: ChapterFormProps) {
   return (
     <form className="chapter-form" onSubmit={onSubmit}>
       <FileText size={15} />

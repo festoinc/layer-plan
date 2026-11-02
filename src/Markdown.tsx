@@ -1,13 +1,27 @@
-import { useDeferredValue, useEffect, useRef, useState } from "react";
+import {
+  ComponentPropsWithoutRef,
+  FocusEvent,
+  KeyboardEvent,
+  useDeferredValue,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+
+export interface MarkdownContentProps extends ComponentPropsWithoutRef<"div"> {
+  text: string;
+  label?: string;
+  placeholder?: string;
+}
 
 export function MarkdownContent({
   text,
   label,
   placeholder = "Nothing to preview yet.",
   ...props
-}) {
+}: MarkdownContentProps) {
   return (
     <div className="markdown-body" role="region" aria-label={label} {...props}>
       {text.trim() ? (
@@ -21,8 +35,12 @@ export function MarkdownContent({
   );
 }
 
-export function AutoTextarea({ value, ...props }) {
-  const ref = useRef(null);
+export interface AutoTextareaProps extends ComponentPropsWithoutRef<"textarea"> {
+  value: string;
+}
+
+export function AutoTextarea({ value, ...props }: AutoTextareaProps) {
+  const ref = useRef<HTMLTextAreaElement>(null);
   useEffect(() => {
     if (!ref.current) return;
     ref.current.style.height = "auto";
@@ -31,12 +49,26 @@ export function AutoTextarea({ value, ...props }) {
   return <textarea {...props} ref={ref} value={value} />;
 }
 
-export function EditableMarkdown({ value, previewLabel, onBlur, ...props }) {
+export interface EditableMarkdownProps extends ComponentPropsWithoutRef<"textarea"> {
+  value: string;
+  previewLabel?: string;
+  placeholder?: string;
+  onBlur?: (event: FocusEvent<HTMLTextAreaElement>) => void;
+  onFocus?: (event: FocusEvent<HTMLTextAreaElement>) => void;
+}
+
+export function EditableMarkdown({
+  value,
+  previewLabel,
+  onBlur,
+  ...props
+}: EditableMarkdownProps) {
   const [editing, setEditing] = useState(false);
   // Keep long descriptions typeable: the preview may lag a frame behind the
   // textarea without blocking the input.
   const previewValue = useDeferredValue(value);
-  if (editing)
+
+  if (editing) {
     return (
       <AutoTextarea
         {...props}
@@ -46,7 +78,7 @@ export function EditableMarkdown({ value, previewLabel, onBlur, ...props }) {
           onBlur?.(event);
           setEditing(false);
         }}
-        onKeyDown={(event) => {
+        onKeyDown={(event: KeyboardEvent<HTMLTextAreaElement>) => {
           if (
             event.key === "Escape" ||
             (event.key === "Enter" && (event.metaKey || event.ctrlKey))
@@ -57,6 +89,8 @@ export function EditableMarkdown({ value, previewLabel, onBlur, ...props }) {
         }}
       />
     );
+  }
+
   return (
     <MarkdownContent
       text={previewValue}

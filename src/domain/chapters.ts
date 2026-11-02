@@ -4,37 +4,37 @@
  * The document is a flat map plus an ordered list of root ids. Chapter and
  * criterion records are never mutated; every operation returns a new document
  * that shares untouched records with the previous one.
- *
- * @typedef {Object} Criterion
- * @property {string} id
- * @property {string} text
- * @property {boolean} checked
- * @property {string} [chapterId] ID of the subchapter created from this criterion.
- *
- * @typedef {Object} Chapter
- * @property {string} id
- * @property {string|null} parentId
- * @property {string} title
- * @property {string} description
- * @property {boolean} finalLevel
- * @property {Criterion[]} criteria
- * @property {string[]} childIds
- *
- * @typedef {Object} ChapterDocument
- * @property {Record<string, Chapter>} byId
- * @property {string[]} rootIds
  */
 
-/** @returns {ChapterDocument} */
-export function createEmptyDocument() {
+export interface Criterion {
+  id: string;
+  text: string;
+  checked: boolean;
+  chapterId?: string; // ID of the subchapter created from this criterion.
+}
+
+export interface Chapter {
+  id: string;
+  parentId: string | null;
+  title: string;
+  description: string;
+  finalLevel: boolean;
+  criteria: Criterion[];
+  childIds: string[];
+}
+
+export interface ChapterDocument {
+  byId: Record<string, Chapter>;
+  rootIds: string[];
+}
+
+export function createEmptyDocument(): ChapterDocument {
   return { byId: {}, rootIds: [] };
 }
 
-/**
- * @param {Partial<Chapter> & { id: string }} input
- * @returns {Chapter}
- */
-export function createChapter(input) {
+export function createChapter(
+  input: Partial<Chapter> & { id: string },
+): Chapter {
   return {
     id: input.id,
     parentId: input.parentId ?? null,
@@ -46,43 +46,39 @@ export function createChapter(input) {
   };
 }
 
-/**
- * @param {ChapterDocument} document
- * @param {string|null|undefined} id
- * @returns {Chapter|null}
- */
-export function getChapter(document, id) {
+export function getChapter(
+  document: ChapterDocument,
+  id: string | null | undefined,
+): Chapter | null {
   if (!id) return null;
   return document.byId[id] ?? null;
 }
 
-/**
- * @param {ChapterDocument} document
- * @param {string|null} parentId
- * @returns {Chapter[]}
- */
-export function getChildren(document, parentId) {
+export function getChildren(
+  document: ChapterDocument,
+  parentId: string | null,
+): Chapter[] {
   const ids = parentId ? document.byId[parentId]?.childIds : document.rootIds;
   if (!ids) return [];
-  return ids.map((id) => document.byId[id]).filter(Boolean);
+  return ids
+    .map((id) => document.byId[id])
+    .filter((ch): ch is Chapter => Boolean(ch));
 }
 
-/** @param {ChapterDocument} document */
-export function getRoots(document) {
+export function getRoots(document: ChapterDocument): Chapter[] {
   return getChildren(document, null);
 }
 
 /**
  * Root-to-chapter path, or an empty array when the id is unknown.
- *
- * @param {ChapterDocument} document
- * @param {string|null|undefined} id
- * @returns {Chapter[]}
  */
-export function getPath(document, id) {
-  const path = [];
+export function getPath(
+  document: ChapterDocument,
+  id: string | null | undefined,
+): Chapter[] {
+  const path: Chapter[] = [];
   let current = getChapter(document, id);
-  const guard = new Set();
+  const guard = new Set<string>();
   while (current && !guard.has(current.id)) {
     guard.add(current.id);
     path.unshift(current);
@@ -93,28 +89,22 @@ export function getPath(document, id) {
 
 /**
  * Pick a usable selected id, falling back to the first root chapter.
- *
- * @param {ChapterDocument} document
- * @param {string|null|undefined} preferredId
- * @returns {string|null}
  */
-export function getDefaultId(document, preferredId) {
+export function getDefaultId(
+  document: ChapterDocument,
+  preferredId: string | null | undefined,
+): string | null {
   if (preferredId && document.byId[preferredId]) return preferredId;
   return document.rootIds[0] ?? null;
 }
 
 /**
  * Pre-order traversal over the whole document.
- *
- * @param {ChapterDocument} document
- * @returns {Chapter[]}
  */
-export function walkChapters(document) {
-  /** @type {Chapter[]} */
-  const result = [];
-  const guard = new Set();
-  /** @param {string} id */
-  const visit = (id) => {
+export function walkChapters(document: ChapterDocument): Chapter[] {
+  const result: Chapter[] = [];
+  const guard = new Set<string>();
+  const visit = (id: string) => {
     const chapter = document.byId[id];
     if (!chapter || guard.has(id)) return;
     guard.add(id);
@@ -125,13 +115,11 @@ export function walkChapters(document) {
   return result;
 }
 
-/**
- * @param {ChapterDocument} document
- * @param {string} id
- * @param {Partial<Chapter>} patch
- * @returns {ChapterDocument}
- */
-export function patchChapter(document, id, patch) {
+export function patchChapter(
+  document: ChapterDocument,
+  id: string,
+  patch: Partial<Chapter>,
+): ChapterDocument {
   const current = document.byId[id];
   if (!current) return document;
   return {
@@ -140,25 +128,22 @@ export function patchChapter(document, id, patch) {
   };
 }
 
-/**
- * @param {ChapterDocument} document
- * @param {string} id
- * @param {Criterion[]} criteria
- * @returns {ChapterDocument}
- */
-export function setCriteria(document, id, criteria) {
+export function setCriteria(
+  document: ChapterDocument,
+  id: string,
+  criteria: Criterion[],
+): ChapterDocument {
   return patchChapter(document, id, { criteria });
 }
 
 /**
  * Append or insert a chapter under a parent (or at the root).
- *
- * @param {ChapterDocument} document
- * @param {Chapter} chapter
- * @param {{ index?: number }} [options]
- * @returns {ChapterDocument}
  */
-export function insertChapter(document, chapter, { index } = {}) {
+export function insertChapter(
+  document: ChapterDocument,
+  chapter: Chapter,
+  { index }: { index?: number } = {},
+): ChapterDocument {
   if (document.byId[chapter.id]) return document;
   const parentId = chapter.parentId ?? null;
   if (parentId && !document.byId[parentId]) return document;
@@ -168,8 +153,7 @@ export function insertChapter(document, chapter, { index } = {}) {
     [chapter.id]: { ...chapter, parentId, childIds: [...chapter.childIds] },
   };
 
-  /** @param {string[]} ids @returns {string[]} */
-  const addAt = (ids) => {
+  const addAt = (ids: string[]) => {
     const next = [...ids];
     const at =
       typeof index === "number" && index >= 0 && index <= next.length
@@ -189,16 +173,15 @@ export function insertChapter(document, chapter, { index } = {}) {
 }
 
 /**
- * @param {ChapterDocument} document
- * @param {string} id
- * @returns {string[]} ids of the removed chapter and its descendants
+ * @returns ids of the removed chapter and its descendants
  */
-export function collectSubtreeIds(document, id) {
-  /** @type {string[]} */
-  const result = [];
-  const guard = new Set();
-  /** @param {string} currentId */
-  const visit = (currentId) => {
+export function collectSubtreeIds(
+  document: ChapterDocument,
+  id: string,
+): string[] {
+  const result: string[] = [];
+  const guard = new Set<string>();
+  const visit = (currentId: string) => {
     const chapter = document.byId[currentId];
     if (!chapter || guard.has(currentId)) return;
     guard.add(currentId);
@@ -212,19 +195,17 @@ export function collectSubtreeIds(document, id) {
 /**
  * Delete a chapter and its descendants. Criteria elsewhere that linked to a
  * removed chapter keep their text but lose the dangling link.
- *
- * @param {ChapterDocument} document
- * @param {string} id
- * @returns {{ document: ChapterDocument, removedIds: string[] }}
  */
-export function deleteSubtree(document, id) {
+export function deleteSubtree(
+  document: ChapterDocument,
+  id: string,
+): { document: ChapterDocument; removedIds: string[] } {
   const chapter = document.byId[id];
   if (!chapter) return { document, removedIds: [] };
   const removedIds = collectSubtreeIds(document, id);
   const removed = new Set(removedIds);
 
-  /** @type {Record<string, Chapter>} */
-  const byId = {};
+  const byId: Record<string, Chapter> = {};
   for (const [key, value] of Object.entries(document.byId)) {
     if (removed.has(key)) continue;
     const criteria = value.criteria.map((criterion) => {
@@ -256,20 +237,18 @@ export function deleteSubtree(document, id) {
   };
 }
 
-/**
- * @param {ChapterDocument} document
- * @param {string} ancestorId
- * @param {string} candidateId
- * @returns {boolean}
- */
-export function isDescendant(document, ancestorId, candidateId) {
-  let current = document.byId[candidateId];
-  const guard = new Set();
+export function isDescendant(
+  document: ChapterDocument,
+  ancestorId: string,
+  candidateId: string,
+): boolean {
+  let current: Chapter | null = document.byId[candidateId];
+  const guard = new Set<string>();
   while (current?.parentId) {
     if (current.parentId === ancestorId) return true;
     if (guard.has(current.parentId)) return false;
     guard.add(current.parentId);
-    current = document.byId[current.parentId];
+    current = document.byId[current.parentId] ?? null;
   }
   return false;
 }
@@ -277,14 +256,13 @@ export function isDescendant(document, ancestorId, candidateId) {
 /**
  * Move a chapter to another parent (or the root) at an optional index.
  * Moving a chapter into its own subtree is rejected.
- *
- * @param {ChapterDocument} document
- * @param {string} id
- * @param {string|null} parentId
- * @param {number} [index]
- * @returns {ChapterDocument}
  */
-export function moveChapter(document, id, parentId, index) {
+export function moveChapter(
+  document: ChapterDocument,
+  id: string,
+  parentId: string | null,
+  index?: number,
+): ChapterDocument {
   const chapter = document.byId[id];
   if (!chapter) return document;
   if (parentId && !document.byId[parentId]) return document;
@@ -292,7 +270,7 @@ export function moveChapter(document, id, parentId, index) {
     return document;
   }
 
-  let byId = { ...document.byId };
+  const byId = { ...document.byId };
   let rootIds = document.rootIds;
   const currentParentId = chapter.parentId;
 
@@ -307,8 +285,7 @@ export function moveChapter(document, id, parentId, index) {
     rootIds = rootIds.filter((rootId) => rootId !== id);
   }
 
-  /** @param {string[]} ids @returns {string[]} */
-  const insertAt = (ids) => {
+  const insertAt = (ids: string[]) => {
     const next = [...ids];
     const at =
       typeof index === "number" && index >= 0 && index <= next.length
@@ -331,14 +308,12 @@ export function moveChapter(document, id, parentId, index) {
   return { byId, rootIds };
 }
 
-/**
- * @param {ChapterDocument} document
- * @param {string} chapterId
- * @param {string} criterionId
- * @param {number} toIndex
- * @returns {ChapterDocument}
- */
-export function moveCriterion(document, chapterId, criterionId, toIndex) {
+export function moveCriterion(
+  document: ChapterDocument,
+  chapterId: string,
+  criterionId: string,
+  toIndex: number,
+): ChapterDocument {
   const chapter = document.byId[chapterId];
   if (!chapter) return document;
   const fromIndex = chapter.criteria.findIndex(
@@ -348,14 +323,12 @@ export function moveCriterion(document, chapterId, criterionId, toIndex) {
   return reorderCriteria(document, chapterId, fromIndex, toIndex);
 }
 
-/**
- * @param {ChapterDocument} document
- * @param {string} chapterId
- * @param {number} fromIndex
- * @param {number} toIndex
- * @returns {ChapterDocument}
- */
-export function reorderCriteria(document, chapterId, fromIndex, toIndex) {
+export function reorderCriteria(
+  document: ChapterDocument,
+  chapterId: string,
+  fromIndex: number,
+  toIndex: number,
+): ChapterDocument {
   const chapter = document.byId[chapterId];
   if (!chapter) return document;
   const criteria = [...chapter.criteria];
@@ -375,27 +348,26 @@ export function reorderCriteria(document, chapterId, fromIndex, toIndex) {
 /**
  * Deep copy a chapter subtree, assigning fresh chapter and criterion ids.
  * The copy is inserted directly after the original under the same parent.
- *
- * @param {ChapterDocument} document
- * @param {string} id
- * @param {() => string} newId
- * @returns {{ document: ChapterDocument, chapterId: string|null }}
  */
-export function duplicateSubtree(document, id, newId) {
+export function duplicateSubtree(
+  document: ChapterDocument,
+  id: string,
+  newId: () => string,
+): { document: ChapterDocument; chapterId: string | null } {
   const original = document.byId[id];
   if (!original) return { document, chapterId: null };
 
-  const idMap = new Map();
+  const idMap = new Map<string, string>();
   const cloneIds = collectSubtreeIds(document, id);
   for (const originalId of cloneIds) idMap.set(originalId, newId());
 
-  /** @type {Record<string, Chapter>} */
-  const clones = {};
+  const clones: Record<string, Chapter> = {};
   for (const originalId of cloneIds) {
     const source = document.byId[originalId];
-    clones[idMap.get(originalId)] = {
+    const mappedId = idMap.get(originalId)!;
+    clones[mappedId] = {
       ...source,
-      id: idMap.get(originalId),
+      id: mappedId,
       parentId:
         source.parentId === null
           ? null
@@ -407,11 +379,11 @@ export function duplicateSubtree(document, id, newId) {
           ? idMap.get(criterion.chapterId)
           : undefined,
       })),
-      childIds: source.childIds.map((childId) => idMap.get(childId)),
+      childIds: source.childIds.map((childId) => idMap.get(childId)!),
     };
   }
 
-  const duplicateId = idMap.get(id);
+  const duplicateId = idMap.get(id)!;
   let byId = { ...document.byId, ...clones };
   let rootIds = document.rootIds;
 

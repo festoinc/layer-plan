@@ -1,4 +1,4 @@
-import { memo } from "react";
+import { FormEvent, memo } from "react";
 import {
   ChevronDown,
   ChevronRight,
@@ -6,24 +6,24 @@ import {
   Folder,
   Plus,
 } from "lucide-react";
-import { ChapterForm } from "./ChapterForm.jsx";
+import { ChapterForm } from "./ChapterForm";
+import { TreeNode } from "../hooks/useChapterTree";
 
-/**
- * @param {{
- *   node: import("../hooks/useChapterTree.js").TreeNode,
- *   selectedId: string|null,
- *   activeView: string,
- *   collapsed: Set<string>,
- *   creating: { parentId: string|null }|null,
- *   chapterTitle: string,
- *   onTitleChange: (value: string) => void,
- *   onSubmit: (event: React.FormEvent<HTMLFormElement>) => void,
- *   onCancel: () => void,
- *   onSelect: (id: string) => void,
- *   onToggleCollapsed: (id: string) => void,
- *   onStartChapter: (parentId: string) => void,
- * }} props
- */
+export interface ChapterNodeProps {
+  node: TreeNode;
+  selectedId: string | null;
+  activeView: string;
+  collapsed: Set<string>;
+  creating: { parentId: string | null } | null;
+  chapterTitle: string;
+  onTitleChange: (value: string) => void;
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+  onCancel: () => void;
+  onSelect: (id: string) => void;
+  onToggleCollapsed: (id: string) => void;
+  onStartChapter: (parentId: string) => void;
+}
+
 function ChapterNodeComponent({
   node,
   selectedId,
@@ -37,7 +37,7 @@ function ChapterNodeComponent({
   onSelect,
   onToggleCollapsed,
   onStartChapter,
-}) {
+}: ChapterNodeProps) {
   const { chapter, children } = node;
   const isOpen = !collapsed.has(chapter.id);
   const hasChildren = children.length > 0 || creating?.parentId === chapter.id;

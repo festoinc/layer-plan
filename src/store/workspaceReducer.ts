@@ -1,11 +1,12 @@
-import { appendActivity, createActivityEntry } from "../domain/activity.js";
+import { appendActivity, createActivityEntry } from "../domain/activity";
 import {
+  Chapter,
   createChapter,
   getChapter,
   getDefaultId,
   insertChapter,
   patchChapter,
-} from "../domain/chapters.js";
+} from "../domain/chapters";
 import {
   addCriterion as addCriterionToDocument,
   createCriterion,
@@ -13,20 +14,17 @@ import {
   patchCriterion,
   removeCriterion as removeCriterionFromDocument,
   toggleCriterion as toggleCriterionInDocument,
-} from "../domain/criteria.js";
-import { createId } from "../domain/schema.js";
+} from "../domain/criteria";
+import { createId, Workspace } from "../domain/schema";
 
-/**
- * @typedef {import("../domain/schema.js").Workspace} Workspace
- * @typedef {import("../domain/chapters.js").Chapter} Chapter
- */
+export type { Workspace, Chapter };
 
 /**
  * Actions that are written to storage synchronously. Text editing is the only
  * debounced case; structural changes and checkboxes are small and must survive
  * an immediate reload.
  */
-export const IMMEDIATE_ACTIONS = new Set([
+export const IMMEDIATE_ACTIONS = new Set<string>([
   "createChapter",
   "addCriterion",
   "setCriterionText",
@@ -38,21 +36,19 @@ export const IMMEDIATE_ACTIONS = new Set([
 
 const nowIso = () => new Date().toISOString();
 
-/**
- * @param {Workspace} state
- * @param {string|null} chapterId
- * @returns {Chapter|null}
- */
-function chapterOf(state, chapterId) {
+function chapterOf(state: Workspace, chapterId: string | null): Chapter | null {
   return getChapter(state.chapters, chapterId);
 }
 
-/**
- * @param {Workspace} state
- * @param {{ id?: string, message: string, chapterId?: string|null, chapterName?: string, time?: string }} input
- * @returns {Workspace}
- */
-function withActivity(state, input) {
+interface ActivityInput {
+  id?: string;
+  message: string;
+  chapterId?: string | null;
+  chapterName?: string;
+  time?: string;
+}
+
+function withActivity(state: Workspace, input: ActivityInput): Workspace {
   const chapterId = input.chapterId ?? state.selectedId;
   const chapter = chapterOf(state, chapterId);
   const entry = createActivityEntry({
@@ -65,12 +61,71 @@ function withActivity(state, input) {
   return { ...state, events: appendActivity(state.events, entry) };
 }
 
-/**
- * @param {Workspace} state
- * @param {any} action
- * @returns {Workspace}
- */
-export function workspaceReducer(state, action) {
+export type WorkspaceAction =
+  | { type: "select"; id: string }
+  | {
+      type: "createChapter";
+      id?: string;
+      parentId?: string | null;
+      title: string;
+      description?: string;
+      activityId?: string;
+      time?: string;
+    }
+  | {
+      type: "setChapterField";
+      id: string;
+      field: "title" | "description" | "finalLevel" | string;
+      value: string | boolean;
+    }
+  | {
+      type: "logActivity";
+      message: string;
+      chapterId?: string | null;
+      chapterName?: string;
+      id?: string;
+      time?: string;
+    }
+  | {
+      type: "addCriterion";
+      chapterId: string;
+      text: string;
+      criterionId?: string;
+      subchapterId?: string;
+      createSubchapter?: boolean;
+      activityId?: string;
+      subchapterActivityId?: string;
+      time?: string;
+    }
+  | {
+      type: "setCriterionText";
+      chapterId: string;
+      criterionId: string;
+      text: string;
+    }
+  | {
+      type: "toggleCriterion";
+      chapterId: string;
+      criterionId: string;
+      activityId?: string;
+      time?: string;
+    }
+  | {
+      type: "removeCriterion";
+      chapterId: string;
+      criterionId: string;
+      activityId?: string;
+      time?: string;
+    }
+  | {
+      type: "replaceWorkspace";
+      workspace: Workspace;
+    };
+
+export function workspaceReducer(
+  state: Workspace,
+  action: WorkspaceAction,
+): Workspace {
   switch (action.type) {
     case "select": {
       if (!action.id || !state.chapters.byId[action.id]) return state;

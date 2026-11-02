@@ -1,4 +1,5 @@
 import {
+  FormEvent,
   Suspense,
   lazy,
   useCallback,
@@ -7,28 +8,26 @@ import {
   useRef,
   useState,
 } from "react";
-import { ChapterEditor } from "../components/ChapterEditor.jsx";
-import { Sidebar } from "../components/Sidebar.jsx";
-import { SkipLink } from "../components/SkipLink.jsx";
-import { StorageBanner } from "../components/StorageBanner.jsx";
-import { Topbar } from "../components/Topbar.jsx";
-import { getDefaultId, getPath } from "../domain/chapters.js";
-import { useChapterTree } from "../hooks/useChapterTree.js";
-import { useFocusTrap } from "../hooks/useFocusTrap.js";
-import { ROUTE_VIEWS, useRoute } from "../hooks/useRoute.js";
-import { useWorkspace } from "../store/WorkspaceProvider.jsx";
-import { ErrorBoundary } from "./ErrorBoundary.jsx";
+import { ChapterEditor } from "../components/ChapterEditor";
+import { Sidebar } from "../components/Sidebar";
+import { SkipLink } from "../components/SkipLink";
+import { StorageBanner } from "../components/StorageBanner";
+import { Topbar } from "../components/Topbar";
+import { getDefaultId, getPath } from "../domain/chapters";
+import { useChapterTree } from "../hooks/useChapterTree";
+import { useFocusTrap } from "../hooks/useFocusTrap";
+import { ROUTE_VIEWS, useRoute } from "../hooks/useRoute";
+import { useWorkspace } from "../store/WorkspaceProvider";
+import { ErrorBoundary } from "./ErrorBoundary";
 
 const ActivityView = lazy(() =>
-  import("../components/ActivityView.jsx").then((module) => ({
+  import("../components/ActivityView").then((module) => ({
     default: module.ActivityView,
   })),
 );
-const TestCoverageView = lazy(
-  () => import("../components/TestCoverageView.jsx"),
-);
+const TestCoverageView = lazy(() => import("../components/TestCoverageView"));
 
-const VIEW_LABELS = {
+const VIEW_LABELS: Record<string, string> = {
   [ROUTE_VIEWS.specifications]: "Specifications",
   [ROUTE_VIEWS.coverage]: "Test coverage",
   [ROUTE_VIEWS.activity]: "Activity",
@@ -50,16 +49,14 @@ export function App() {
   const route = useRoute();
   const tree = useChapterTree(state.chapters);
 
-  const [collapsed, setCollapsed] = useState(() => new Set());
-  const [creating, setCreating] = useState(
-    /** @type {{ parentId: string|null }|null} */ (null),
-  );
+  const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set());
+  const [creating, setCreating] = useState<{
+    parentId: string | null;
+  } | null>(null);
   const [chapterTitle, setChapterTitle] = useState("");
   const [navOpen, setNavOpen] = useState(false);
-  const [focusRequest, setFocusRequest] = useState(
-    /** @type {string|null} */ (null),
-  );
-  const sidebarRef = useRef(/** @type {HTMLElement|null} */ (null));
+  const [focusRequest, setFocusRequest] = useState<string | null>(null);
+  const sidebarRef = useRef<HTMLElement | null>(null);
 
   const activeId = useMemo(() => {
     const requested = route.chapterId;
@@ -92,7 +89,7 @@ export function App() {
   }, [view, activeId, state.selectedId, select]);
 
   const selectChapter = useCallback(
-    (id) => {
+    (id: string) => {
       setFocusRequest(id);
       select(id);
       setNavOpen(false);
@@ -102,7 +99,7 @@ export function App() {
   );
 
   const navigateView = useCallback(
-    (nextView) => {
+    (nextView: string) => {
       setCreating(null);
       setNavOpen(false);
       route.navigate({ view: nextView });
@@ -111,7 +108,7 @@ export function App() {
   );
 
   const startChapter = useCallback(
-    (parentId) => {
+    (parentId: string | null) => {
       setCreating({ parentId });
       setChapterTitle("");
       if (parentId) {
@@ -133,7 +130,7 @@ export function App() {
   );
 
   const createChapterFromForm = useCallback(
-    (event) => {
+    (event: FormEvent<HTMLFormElement>) => {
       event.preventDefault();
       const title = chapterTitle.trim();
       if (!title) return;
@@ -154,7 +151,7 @@ export function App() {
     setChapterTitle("");
   }, []);
 
-  const toggleCollapsed = useCallback((id) => {
+  const toggleCollapsed = useCallback((id: string) => {
     setCollapsed((previous) => {
       const next = new Set(previous);
       if (next.has(id)) next.delete(id);
@@ -163,7 +160,7 @@ export function App() {
     });
   }, []);
 
-  const revealChildren = useCallback((id) => {
+  const revealChildren = useCallback((id: string) => {
     setCollapsed((previous) => {
       if (!previous.has(id)) return previous;
       const next = new Set(previous);

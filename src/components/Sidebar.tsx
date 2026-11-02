@@ -1,44 +1,47 @@
-import { useRef, useState } from "react";
+import { ChangeEvent, FormEvent, RefObject, useRef, useState } from "react";
 import {
   ChartNoAxesColumnIncreasing,
   Clock3,
   FileText,
   Layers,
+  LucideIcon,
   Plus,
   X,
 } from "lucide-react";
-import { ChapterTree } from "./ChapterTree.jsx";
+import { ChapterTree } from "./ChapterTree";
+import { TreeNode } from "../hooks/useChapterTree";
+import { Project } from "../domain/schema";
+import { RepositoryStatus } from "../store/persistence";
 
-const VIEWS = [
+const VIEWS: [string, string, LucideIcon][] = [
   ["specifications", "Specifications", FileText],
   ["coverage", "Test coverage", ChartNoAxesColumnIncreasing],
   ["activity", "Activity", Clock3],
 ];
 
-/**
- * @param {{
- *   project: { name: string, account: string },
- *   view: string,
- *   nodes: import("../hooks/useChapterTree.js").TreeNode[],
- *   selectedId: string|null,
- *   collapsed: Set<string>,
- *   creating: { parentId: string|null }|null,
- *   chapterTitle: string,
- *   status: { state: string, message: string },
- *   navOpen: boolean,
- *   sidebarRef: import("react").RefObject<HTMLElement|null>,
- *   onNavigateView: (view: string) => void,
- *   onCloseNav: () => void,
- *   onSelectChapter: (id: string) => void,
- *   onToggleCollapsed: (id: string) => void,
- *   onStartChapter: (parentId: string|null) => void,
- *   onChapterTitleChange: (value: string) => void,
- *   onCreateChapter: (event: React.FormEvent<HTMLFormElement>) => void,
- *   onCancelChapter: () => void,
- *   onExport: () => void,
- *   onImport: (text: string) => { ok: boolean, issues: string[] },
- * }} props
- */
+export interface SidebarProps {
+  project: Project;
+  view: string;
+  nodes: TreeNode[];
+  selectedId: string | null;
+  collapsed: Set<string>;
+  creating: { parentId: string | null } | null;
+  chapterTitle: string;
+  status: RepositoryStatus;
+  navOpen: boolean;
+  sidebarRef: RefObject<HTMLElement | null>;
+  onNavigateView: (view: string) => void;
+  onCloseNav: () => void;
+  onSelectChapter: (id: string) => void;
+  onToggleCollapsed: (id: string) => void;
+  onStartChapter: (parentId: string | null) => void;
+  onChapterTitleChange: (value: string) => void;
+  onCreateChapter: (event: FormEvent<HTMLFormElement>) => void;
+  onCancelChapter: () => void;
+  onExport: () => void;
+  onImport: (text: string) => { ok: boolean; issues: string[] };
+}
+
 export function Sidebar({
   project,
   view,
@@ -60,11 +63,11 @@ export function Sidebar({
   onCancelChapter,
   onExport,
   onImport,
-}) {
-  const fileInput = useRef(/** @type {HTMLInputElement|null} */ (null));
+}: SidebarProps) {
+  const fileInput = useRef<HTMLInputElement | null>(null);
   const [importError, setImportError] = useState("");
 
-  async function handleImport(event) {
+  async function handleImport(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     event.target.value = "";
     if (!file) return;
@@ -141,7 +144,7 @@ export function Sidebar({
           onCancel={onCancelChapter}
           onSelect={onSelectChapter}
           onToggleCollapsed={onToggleCollapsed}
-          onStartChapter={onStartChapter}
+          onStartChapter={(id) => onStartChapter(id)}
         />
       </nav>
       <button className="new-chapter" onClick={() => onStartChapter(null)}>

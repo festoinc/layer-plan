@@ -1,22 +1,23 @@
-import { ChapterForm } from "./ChapterForm.jsx";
-import { ChapterNode } from "./ChapterNode.jsx";
+import { FormEvent } from "react";
+import { ChapterForm } from "./ChapterForm";
+import { ChapterNode } from "./ChapterNode";
+import { TreeNode } from "../hooks/useChapterTree";
 
-/**
- * @param {{
- *   nodes: import("../hooks/useChapterTree.js").TreeNode[],
- *   selectedId: string|null,
- *   activeView: string,
- *   collapsed: Set<string>,
- *   creating: { parentId: string|null }|null,
- *   chapterTitle: string,
- *   onTitleChange: (value: string) => void,
- *   onSubmit: (event: React.FormEvent<HTMLFormElement>) => void,
- *   onCancel: () => void,
- *   onSelect: (id: string) => void,
- *   onToggleCollapsed: (id: string) => void,
- *   onStartChapter: (parentId: string) => void,
- * }} props
- */
+export interface ChapterTreeProps {
+  nodes: TreeNode[];
+  selectedId: string | null;
+  activeView: string;
+  collapsed: Set<string>;
+  creating: { parentId: string | null } | null;
+  chapterTitle: string;
+  onTitleChange: (value: string) => void;
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+  onCancel: () => void;
+  onSelect: (id: string) => void;
+  onToggleCollapsed: (id: string) => void;
+  onStartChapter: (parentId: string) => void;
+}
+
 export function ChapterTree({
   nodes,
   selectedId,
@@ -30,7 +31,7 @@ export function ChapterTree({
   onSelect,
   onToggleCollapsed,
   onStartChapter,
-}) {
+}: ChapterTreeProps) {
   return (
     <ul className="chapter-tree">
       {nodes.map((node) => (

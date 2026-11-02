@@ -1,18 +1,31 @@
 import { useCallback, useMemo, useSyncExternalStore } from "react";
 
 export const ROUTE_VIEWS = {
-  specifications: "specifications",
-  coverage: "coverage",
-  activity: "activity",
+  specifications: "specifications" as const,
+  coverage: "coverage" as const,
+  activity: "activity" as const,
 };
 
-const listeners = new Set();
+export type RouteView = (typeof ROUTE_VIEWS)[keyof typeof ROUTE_VIEWS];
+
+export interface ParsedRoute {
+  view: RouteView;
+  chapterId: string | null;
+  valid: boolean;
+}
+
+export interface RouteTarget {
+  view?: RouteView | string;
+  chapterId?: string | null;
+}
+
+const listeners = new Set<() => void>();
 
 function notify() {
   for (const listener of listeners) listener();
 }
 
-function subscribe(listener) {
+function subscribe(listener: () => void) {
   listeners.add(listener);
   if (typeof window === "undefined") {
     return () => listeners.delete(listener);
@@ -26,15 +39,11 @@ function subscribe(listener) {
   };
 }
 
-function getSnapshot() {
+function getSnapshot(): string {
   return typeof window === "undefined" ? "" : window.location.hash;
 }
 
-/**
- * @param {string} hash
- * @returns {{ view: string, chapterId: string|null, valid: boolean }}
- */
-export function parseRoute(hash) {
+export function parseRoute(hash: string): ParsedRoute {
   const path = String(hash ?? "")
     .replace(/^#/, "")
     .replace(/^\//, "")
@@ -69,11 +78,7 @@ export function parseRoute(hash) {
   return { view: ROUTE_VIEWS.specifications, chapterId: null, valid: false };
 }
 
-/**
- * @param {{ view?: string, chapterId?: string|null }} route
- * @returns {string}
- */
-export function routeToHash(route) {
+export function routeToHash(route: RouteTarget): string {
   if (route.view === ROUTE_VIEWS.coverage) return "#/coverage";
   if (route.view === ROUTE_VIEWS.activity) return "#/activity";
   return route.chapterId
@@ -81,11 +86,17 @@ export function routeToHash(route) {
     : "#/chapters";
 }
 
-export function useRoute() {
+export interface RouteContextValue extends ParsedRoute {
+  hash: string;
+  navigate: (next: RouteTarget) => void;
+  replace: (next: RouteTarget) => void;
+}
+
+export function useRoute(): RouteContextValue {
   const hash = useSyncExternalStore(subscribe, getSnapshot, () => "");
   const route = useMemo(() => parseRoute(hash), [hash]);
 
-  const navigate = useCallback((next) => {
+  const navigate = useCallback((next: RouteTarget) => {
     const target = routeToHash(next);
     if (typeof window === "undefined") return;
     if (window.location.hash === target) {
@@ -95,7 +106,7 @@ export function useRoute() {
     window.location.hash = target;
   }, []);
 
-  const replace = useCallback((next) => {
+  const replace = useCallback((next: RouteTarget) => {
     const target = routeToHash(next);
     if (typeof window === "undefined") return;
     if (window.location.hash === target) return;

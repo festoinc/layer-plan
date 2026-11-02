@@ -1,21 +1,32 @@
-import { Component } from "react";
-import { downloadJson, readRawBackup } from "../store/persistence.js";
+import { Component, ErrorInfo, ReactNode } from "react";
+import { downloadJson, readRawBackup } from "../store/persistence";
 
-export class ErrorBoundary extends Component {
-  constructor(props) {
+export interface ErrorBoundaryProps {
+  children?: ReactNode;
+}
+
+export interface ErrorBoundaryState {
+  error: Error | null;
+}
+
+export class ErrorBoundary extends Component<
+  ErrorBoundaryProps,
+  ErrorBoundaryState
+> {
+  constructor(props: ErrorBoundaryProps) {
     super(props);
     this.state = { error: null };
   }
 
-  static getDerivedStateFromError(error) {
+  static getDerivedStateFromError(error: Error): ErrorBoundaryState {
     return { error };
   }
 
-  componentDidCatch(error, info) {
+  componentDidCatch(error: Error, info: ErrorInfo): void {
     console.error("Layers crashed while rendering:", error, info);
   }
 
-  render() {
+  render(): ReactNode {
     if (!this.state.error) return this.props.children;
 
     return (

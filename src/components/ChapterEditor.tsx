@@ -1,19 +1,26 @@
-import React, { useEffect, useRef, useState } from "react";
+import {
+  FocusEvent,
+  FormEvent,
+  Fragment,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import { ChevronRight, Plus, X } from "lucide-react";
-import { AutoTextarea, EditableMarkdown } from "../Markdown.jsx";
-import { criterionProgress } from "../domain/criteria.js";
-import { useWorkspace } from "../store/WorkspaceProvider.jsx";
+import { AutoTextarea, EditableMarkdown } from "../Markdown";
+import { Chapter } from "../domain/chapters";
+import { criterionProgress } from "../domain/criteria";
+import { useWorkspace } from "../store/WorkspaceProvider";
 
-/**
- * @param {{
- *   chapter: import("../domain/chapters.js").Chapter,
- *   path: import("../domain/chapters.js").Chapter[],
- *   autoFocusTitle: boolean,
- *   onAutoFocused: () => void,
- *   onSelectChapter: (id: string) => void,
- *   onRevealChildren: (id: string) => void,
- * }} props
- */
+export interface ChapterEditorProps {
+  chapter: Chapter;
+  path: Chapter[];
+  autoFocusTitle: boolean;
+  onAutoFocused: () => void;
+  onSelectChapter: (id: string) => void;
+  onRevealChildren: (id: string) => void;
+}
+
 export function ChapterEditor({
   chapter,
   path,
@@ -21,7 +28,7 @@ export function ChapterEditor({
   onAutoFocused,
   onSelectChapter,
   onRevealChildren,
-}) {
+}: ChapterEditorProps) {
   const {
     setChapterField,
     addCriterion,
@@ -31,7 +38,7 @@ export function ChapterEditor({
     logActivity,
     flushSave,
   } = useWorkspace();
-  const titleRef = useRef(/** @type {HTMLInputElement|null} */ (null));
+  const titleRef = useRef<HTMLInputElement | null>(null);
   const [newCriterion, setNewCriterion] = useState("");
   const progress = criterionProgress(chapter);
 
@@ -43,11 +50,17 @@ export function ChapterEditor({
     onAutoFocused();
   }, [autoFocusTitle, chapter.id, onAutoFocused]);
 
-  function rememberValue(event) {
+  function rememberValue(
+    event: FocusEvent<HTMLInputElement | HTMLTextAreaElement>,
+  ) {
     event.currentTarget.dataset.originalValue = event.currentTarget.value;
   }
 
-  function logFieldChange(event, message, target = chapter) {
+  function logFieldChange(
+    event: FocusEvent<HTMLInputElement | HTMLTextAreaElement>,
+    message: string,
+    target: Chapter = chapter,
+  ) {
     if (
       event.currentTarget.value === event.currentTarget.dataset.originalValue
     ) {
@@ -60,7 +73,7 @@ export function ChapterEditor({
     flushSave();
   }
 
-  function submitCriterion(event) {
+  function submitCriterion(event: FormEvent) {
     event.preventDefault();
     if (!newCriterion.trim()) return;
     addCriterion(chapter.id, newCriterion);
@@ -73,7 +86,7 @@ export function ChapterEditor({
       <div className="document-header">
         <nav className="breadcrumbs" aria-label="Chapter path">
           {path.map((part, index) => (
-            <React.Fragment key={part.id}>
+            <Fragment key={part.id}>
               {index > 0 && <ChevronRight size={12} />}
               <button
                 aria-current={index === path.length - 1 ? "page" : undefined}
@@ -81,7 +94,7 @@ export function ChapterEditor({
               >
                 {part.title || "Untitled chapter"}
               </button>
-            </React.Fragment>
+            </Fragment>
           ))}
         </nav>
         <div className="document-options">

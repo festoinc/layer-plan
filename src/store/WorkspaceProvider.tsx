@@ -1,5 +1,6 @@
 import {
   createContext,
+  ReactNode,
   useCallback,
   useContext,
   useEffect,
@@ -12,45 +13,83 @@ import {
   downloadJson,
   createRepository,
   STORAGE_STATUS,
-} from "./persistence.js";
-import { IMMEDIATE_ACTIONS, workspaceReducer } from "./workspaceReducer.js";
-import { createId } from "../domain/schema.js";
+  Repository,
+  StorageNotice,
+  RepositoryStatus,
+} from "./persistence";
+import {
+  IMMEDIATE_ACTIONS,
+  workspaceReducer,
+  WorkspaceAction,
+} from "./workspaceReducer";
+import { createId, Project, Workspace } from "../domain/schema";
 
-/** @typedef {import("../domain/schema.js").Workspace} Workspace */
-
-const WorkspaceContext = createContext(null);
-
-/**
- * Only checkbox/structural edits bypass the debounce. Typing in the title or
- * description is debounced so a large document is not serialized per keystroke.
- *
- * @param {{ type: string, field?: string }} action
- * @returns {boolean}
- */
-function shouldSaveImmediately(action) {
-  if (action.type === "setChapterField") return action.field === "finalLevel";
-  return IMMEDIATE_ACTIONS.has(action.type);
+export interface WorkspaceActions {
+  select: (id: string) => void;
+  createChapter: (input: {
+    id?: string;
+    parentId?: string | null;
+    title: string;
+  }) => string;
+  setChapterField: (
+    id: string,
+    field: "title" | "description" | "finalLevel" | string,
+    value: string | boolean,
+  ) => void;
+  addCriterion: (chapterId: string, text: string) => void;
+  setCriterionText: (
+    chapterId: string,
+    criterionId: string,
+    text: string,
+  ) => void;
+  toggleCriterion: (chapterId: string, criterionId: string) => void;
+  removeCriterion: (chapterId: string, criterionId: string) => void;
+  logActivity: (
+    message: string,
+    options?: { chapterId?: string | null; chapterName?: string },
+  ) => void;
+  dismissNotices: () => void;
+  retrySave: () => void;
+  flushSave: () => void;
+  importWorkspace: (text: string) => { ok: boolean; issues: string[] };
 }
 
-/**
- * @param {{
- *   repository?: ReturnType<typeof createRepository>,
- *   children: React.ReactNode,
- * }} props
- */
+export interface WorkspaceContextValue extends WorkspaceActions {
+  state: Workspace;
+  status: RepositoryStatus;
+  notices: StorageNotice[];
+  project: Project;
+  exportWorkspace: () => void;
+}
+
+const WorkspaceContext = createContext<WorkspaceContextValue | null>(null);
+
+function shouldSaveImmediately(action: {
+  type?: string;
+  field?: string;
+}): boolean {
+  if (action.type === "setChapterField") return action.field === "finalLevel";
+  return Boolean(action.type && IMMEDIATE_ACTIONS.has(action.type));
+}
+
+export interface WorkspaceProviderProps {
+  repository?: Repository;
+  children: ReactNode;
+}
+
 export function WorkspaceProvider({
   repository: providedRepository,
   children,
-}) {
+}: WorkspaceProviderProps) {
   const [repository] = useState(() => providedRepository ?? createRepository());
   const [initial] = useState(() => repository.load());
   const [state, rawDispatch] = useReducer(workspaceReducer, initial.workspace);
   const [status, setStatus] = useState(() => repository.status());
   const [notices, setNotices] = useState(() => initial.notices);
-  const lastAction = useRef(/** @type {any} */ (null));
+  const lastAction = useRef<WorkspaceAction | null>(null);
   const skipNextSave = useRef(true);
 
-  const dispatch = useCallback((action) => {
+  const dispatch = useCallback((action: WorkspaceAction) => {
     lastAction.current = action;
     rawDispatch(action);
   }, []);
@@ -63,7 +102,7 @@ export function WorkspaceProvider({
   useEffect(() => {
     const unsubscribe = repository.subscribe(({ workspace, notices: next }) => {
       if (workspace) {
-        lastAction.current = { type: "replaceWorkspace" };
+        lastAction.current = { type: "replaceWorkspace", workspace };
         rawDispatch({ type: "replaceWorkspace", workspace });
       }
       if (next?.length) setNotices(next);
@@ -87,9 +126,9 @@ export function WorkspaceProvider({
     };
   }, [repository]);
 
-  const actions = useMemo(
+  const actions: WorkspaceActions = useMemo(
     () => ({
-      select: (id) => dispatch({ type: "select", id }),
+      select: (id: string) => dispatch({ type: "select", id }),
       createChapter: ({ id = createId(), parentId = null, title }) => {
         dispatch({
           type: "createChapter",
@@ -152,7 +191,7 @@ export function WorkspaceProvider({
             issues: issues.length ? issues : ["The file has no chapters."],
           };
         }
-        lastAction.current = { type: "replaceWorkspace" };
+        lastAction.current = { type: "replaceWorkspace", workspace };
         rawDispatch({ type: "replaceWorkspace", workspace });
         if (issues.length) {
           setNotices([
@@ -172,7 +211,7 @@ export function WorkspaceProvider({
     downloadJson(repository.exportWorkspace(state));
   }, [repository, state]);
 
-  const value = useMemo(
+  const value = useMemo<WorkspaceContextValue>(
     () => ({
       state,
       status,
@@ -191,7 +230,7 @@ export function WorkspaceProvider({
   );
 }
 
-export function useWorkspace() {
+export function useWorkspace(): WorkspaceContextValue {
   const context = useContext(WorkspaceContext);
   if (!context) {
     throw new Error("useWorkspace must be used inside a WorkspaceProvider.");

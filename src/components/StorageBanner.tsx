@@ -1,21 +1,21 @@
 import { X } from "lucide-react";
+import { StorageNotice, RepositoryStatus } from "../store/persistence";
 
-/**
- * @param {{
- *   notices: Array<{ level: string, message: string, backupKey?: string }>,
- *   status: { state: string, message: string },
- *   onRetry: () => void,
- *   onDismiss: () => void,
- *   onExport: () => void,
- * }} props
- */
+export interface StorageBannerProps {
+  notices: StorageNotice[];
+  status: RepositoryStatus;
+  onRetry: () => void;
+  onDismiss: () => void;
+  onExport: () => void;
+}
+
 export function StorageBanner({
   notices,
   status,
   onRetry,
   onDismiss,
   onExport,
-}) {
+}: StorageBannerProps) {
   const failed = status.state === "error";
   const unavailable = status.state === "unavailable";
 

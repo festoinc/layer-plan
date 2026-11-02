@@ -1,11 +1,24 @@
-/**
- * @param {string} id
- * @param {string} text
- * @param {boolean} [checked]
- */
-const criterion = (id, text, checked = false) => ({ id, text, checked });
+export interface InitialCriterion {
+  id: string;
+  text: string;
+  checked?: boolean;
+}
 
-export const initialChapters = [
+export interface InitialChapter {
+  id: string;
+  title: string;
+  description: string;
+  criteria: InitialCriterion[];
+  children?: InitialChapter[];
+}
+
+const criterion = (
+  id: string,
+  text: string,
+  checked: boolean = false,
+): InitialCriterion => ({ id, text, checked });
+
+export const initialChapters: InitialChapter[] = [
   {
     id: "authentication",
     title: "Authentication",

@@ -1,49 +1,43 @@
-import { initialChapters } from "../data.js";
-import { createEmptyDocument, getDefaultId } from "./chapters.js";
-import { MAX_ACTIVITY_ENTRIES } from "./activity.js";
+import { initialChapters } from "../data";
+import {
+  Chapter,
+  ChapterDocument,
+  createEmptyDocument,
+  Criterion,
+  getDefaultId,
+} from "./chapters";
+import { ActivityEntry, MAX_ACTIVITY_ENTRIES } from "./activity";
 
-/**
- * @typedef {import("./chapters.js").Chapter} Chapter
- * @typedef {import("./chapters.js").Criterion} Criterion
- * @typedef {import("./chapters.js").ChapterDocument} ChapterDocument
- * @typedef {import("./activity.js").ActivityEntry} ActivityEntry
- */
+export type { Chapter, Criterion, ChapterDocument, ActivityEntry };
 
 export const SCHEMA_VERSION = 3;
 
-/** @typedef {{ id: string, name: string, account: string }} Project */
+export interface Project {
+  id: string;
+  name: string;
+  account: string;
+}
 
-/** @type {Project} */
-export const SAMPLE_PROJECT = {
+export const SAMPLE_PROJECT: Project = {
   id: "website",
   name: "Website project",
   account: "W",
 };
 
-/**
- * @typedef {Object} Workspace
- * @property {number} schemaVersion
- * @property {Project} project
- * @property {ChapterDocument} chapters
- * @property {ActivityEntry[]} events
- * @property {string|null} selectedId
- */
+export interface Workspace {
+  schemaVersion: number;
+  project: Project;
+  chapters: ChapterDocument;
+  events: ActivityEntry[];
+  selectedId: string | null;
+}
 
-/**
- * @param {unknown} value
- * @returns {value is Record<string, any>}
- */
-const isRecord = (value) =>
+const isRecord = (value: unknown): value is Record<string, any> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
-/**
- * @param {unknown} value
- * @returns {value is string}
- */
-const isString = (value) => typeof value === "string";
+const isString = (value: unknown): value is string => typeof value === "string";
 
-/** @returns {string} */
-export function createId() {
+export function createId(): string {
   if (
     typeof globalThis.crypto !== "undefined" &&
     typeof globalThis.crypto.randomUUID === "function"
@@ -53,11 +47,7 @@ export function createId() {
   return `id-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
-/**
- * @param {unknown} [input]
- * @returns {Project}
- */
-export function createProject(input = {}) {
+export function createProject(input: unknown = {}): Project {
   const source = isRecord(input) ? input : {};
   return {
     id: isString(source.id) && source.id ? source.id : SAMPLE_PROJECT.id,
@@ -72,11 +62,7 @@ export function createProject(input = {}) {
   };
 }
 
-/**
- * @param {Partial<Workspace>} [input]
- * @returns {Workspace}
- */
-export function createWorkspace(input = {}) {
+export function createWorkspace(input: Partial<Workspace> = {}): Workspace {
   const chapters = input.chapters ?? createEmptyDocument();
   return {
     schemaVersion: SCHEMA_VERSION,
@@ -89,12 +75,21 @@ export function createWorkspace(input = {}) {
 
 /**
  * Coerce a chapter record, repairing missing or malformed fields.
- *
- * @param {unknown} raw
- * @param {{ id: string, parentId: string|null, newId: () => string, issues: string[] }} context
- * @returns {Chapter|null}
  */
-function coerceChapter(raw, { id, parentId, newId, issues }) {
+function coerceChapter(
+  raw: unknown,
+  {
+    id,
+    parentId,
+    newId,
+    issues,
+  }: {
+    id: string;
+    parentId: string | null;
+    newId: () => string;
+    issues: string[];
+  },
+): Chapter | null {
   if (!isRecord(raw)) {
     issues.push("Skipped a chapter that is not an object.");
     return null;
@@ -116,21 +111,18 @@ function coerceChapter(raw, { id, parentId, newId, issues }) {
   };
 }
 
-/**
- * @param {unknown} raw
- * @param {{ newId: () => string, issues: string[] }} context
- * @returns {Criterion[]}
- */
-function normalizeCriteria(raw, { newId, issues }) {
+function normalizeCriteria(
+  raw: unknown,
+  { newId, issues }: { newId: () => string; issues: string[] },
+): Criterion[] {
   if (raw == null) return [];
   if (!Array.isArray(raw)) {
     issues.push("Replaced a criterion list that was not an array.");
     return [];
   }
 
-  /** @type {Criterion[]} */
-  const criteria = [];
-  const usedIds = new Set();
+  const criteria: Criterion[] = [];
+  const usedIds = new Set<string>();
 
   for (const item of raw) {
     if (!isRecord(item)) {
@@ -149,8 +141,7 @@ function normalizeCriteria(raw, { newId, issues }) {
     }
     usedIds.add(id);
 
-    /** @type {Criterion} */
-    const criterion = {
+    const criterion: Criterion = {
       id,
       text: item.text,
       checked: item.checked === true,
@@ -164,18 +155,21 @@ function normalizeCriteria(raw, { newId, issues }) {
   return criteria;
 }
 
+export interface NormalizeOptions {
+  newId?: () => string;
+  now?: () => string;
+}
+
 /**
  * Accepts either a normalized document, a nested phase 1 chapter array, or a
  * payload wrapper containing `chapters`.
- *
- * @param {unknown} raw
- * @param {{ newId?: () => string }} [options]
- * @returns {{ document: ChapterDocument, issues: string[] }}
  */
-export function normalizeDocument(raw, options = {}) {
+export function normalizeDocument(
+  raw: unknown,
+  options: NormalizeOptions = {},
+): { document: ChapterDocument; issues: string[] } {
   const newId = options.newId ?? createId;
-  /** @type {string[]} */
-  const issues = [];
+  const issues: string[] = [];
   let input = raw;
 
   if (isRecord(input) && "chapters" in input) input = input.chapters;
@@ -193,21 +187,17 @@ export function normalizeDocument(raw, options = {}) {
 
 /**
  * Phase 1 shape: `Chapter[]` with nested `children`.
- *
- * @param {unknown[]} rawChapters
- * @param {{ newId: () => string, issues: string[] }} context
- * @returns {{ document: ChapterDocument, issues: string[] }}
  */
-function normalizeNested(rawChapters, context) {
+function normalizeNested(
+  rawChapters: unknown[],
+  context: { newId: () => string; issues: string[] },
+): { document: ChapterDocument; issues: string[] } {
   const { newId, issues } = context;
-  /** @type {Record<string, Chapter>} */
-  const byId = {};
-  const usedIds = new Set();
+  const byId: Record<string, Chapter> = {};
+  const usedIds = new Set<string>();
 
-  /** @param {unknown[]} list @param {string|null} parentId */
-  const visit = (list, parentId) => {
-    /** @type {string[]} */
-    const childIds = [];
+  const visit = (list: unknown[], parentId: string | null): string[] => {
+    const childIds: string[] = [];
     for (const raw of list) {
       if (!isRecord(raw)) {
         issues.push("Skipped a chapter that is not an object.");
@@ -243,19 +233,16 @@ function normalizeNested(rawChapters, context) {
 /**
  * Rebuild reachability from `rootIds` and `childIds`, dropping cycles, orphans
  * and duplicate references.
- *
- * @param {unknown} raw
- * @param {{ newId: () => string, issues: string[] }} context
- * @returns {{ document: ChapterDocument, issues: string[] }}
  */
-function normalizeNormalized(raw, context) {
+function normalizeNormalized(
+  raw: unknown,
+  context: { newId: () => string; issues: string[] },
+): { document: ChapterDocument; issues: string[] } {
   const { newId, issues } = context;
-  const source =
-    /** @type {{ byId: Record<string, unknown>, rootIds: unknown[] }} */ (raw);
+  const source = raw as { byId: Record<string, unknown>; rootIds: unknown[] };
   const rawById = source.byId;
-  /** @type {Record<string, Chapter>} */
-  const byId = {};
-  const usedIds = new Set();
+  const byId: Record<string, Chapter> = {};
+  const usedIds = new Set<string>();
 
   for (const [key, value] of Object.entries(rawById)) {
     if (!isRecord(value)) {
@@ -281,12 +268,14 @@ function normalizeNormalized(raw, context) {
     byId[id] = chapter;
   }
 
-  /** @type {string[]} */
-  const rootIds = [];
-  const visited = new Set();
+  const rootIds: string[] = [];
+  const visited = new Set<string>();
 
-  /** @param {string} id @param {string|null} parentId @param {string[]} target @returns {boolean} */
-  const attach = (id, parentId, target) => {
+  const attach = (
+    id: string,
+    parentId: string | null,
+    target: string[],
+  ): boolean => {
     const chapter = byId[id];
     if (!chapter) {
       issues.push(`Dropped a reference to a missing chapter (${id}).`);
@@ -300,8 +289,7 @@ function normalizeNormalized(raw, context) {
     byId[id] = { ...chapter, parentId };
     target.push(id);
 
-    /** @type {string[]} */
-    const childIds = [];
+    const childIds: string[] = [];
     for (const childId of chapter.childIds) attach(childId, id, childIds);
     byId[id] = { ...byId[id], childIds };
     return true;
@@ -325,14 +313,12 @@ function normalizeNormalized(raw, context) {
 
 /**
  * Final consistency pass: parent ids, criterion links and empty criteria.
- *
- * @param {ChapterDocument} document
- * @param {{ issues: string[] }} context
- * @returns {ChapterDocument}
  */
-function cleanupDocument(document, { issues }) {
-  /** @type {Record<string, Chapter>} */
-  const byId = {};
+function cleanupDocument(
+  document: ChapterDocument,
+  { issues }: { issues: string[] },
+): ChapterDocument {
+  const byId: Record<string, Chapter> = {};
   for (const [id, chapter] of Object.entries(document.byId)) {
     const children = chapter.childIds.filter(
       (childId) => childId !== id && Boolean(document.byId[childId]),
@@ -361,16 +347,13 @@ function cleanupDocument(document, { issues }) {
   return { byId, rootIds };
 }
 
-/**
- * @param {unknown} raw
- * @param {{ now?: () => string, newId?: () => string }} [options]
- * @returns {{ events: ActivityEntry[], issues: string[] }}
- */
-export function normalizeActivity(raw, options = {}) {
+export function normalizeActivity(
+  raw: unknown,
+  options: NormalizeOptions = {},
+): { events: ActivityEntry[]; issues: string[] } {
   const now = options.now ?? (() => new Date().toISOString());
   const newId = options.newId ?? createId;
-  /** @type {string[]} */
-  const issues = [];
+  const issues: string[] = [];
 
   if (raw == null) return { events: [], issues };
   const input = Array.isArray(raw)
@@ -386,9 +369,8 @@ export function normalizeActivity(raw, options = {}) {
     return { events: [], issues };
   }
 
-  /** @type {ActivityEntry[]} */
-  const events = [];
-  const usedIds = new Set();
+  const events: ActivityEntry[] = [];
+  const usedIds = new Set<string>();
 
   for (const item of input) {
     if (!isRecord(item)) {
@@ -428,12 +410,11 @@ export function normalizeActivity(raw, options = {}) {
 
 /**
  * Normalize a complete workspace payload (legacy or new split format).
- *
- * @param {unknown} raw
- * @param {{ now?: () => string, newId?: () => string }} [options]
- * @returns {{ workspace: Workspace, issues: string[] }}
  */
-export function normalizeWorkspace(raw, options = {}) {
+export function normalizeWorkspace(
+  raw: unknown,
+  options: NormalizeOptions = {},
+): { workspace: Workspace; issues: string[] } {
   const input = isRecord(raw) ? raw : {};
   const { document, issues } = normalizeDocument(input, options);
   const activity = normalizeActivity(input.events, options);
@@ -454,10 +435,7 @@ export function normalizeWorkspace(raw, options = {}) {
   };
 }
 
-/**
- * @returns {Workspace}
- */
-export function createSampleWorkspace() {
+export function createSampleWorkspace(): Workspace {
   const { document } = normalizeDocument(initialChapters);
   return createWorkspace({
     chapters: document,
@@ -465,10 +443,11 @@ export function createSampleWorkspace() {
   });
 }
 
-/**
- * @param {Workspace} workspace
- */
-export function serializeDocument(workspace) {
+export function serializeDocument(workspace: Workspace): {
+  schemaVersion: number;
+  project: Project;
+  chapters: ChapterDocument;
+} {
   return {
     schemaVersion: SCHEMA_VERSION,
     project: workspace.project,
@@ -476,16 +455,16 @@ export function serializeDocument(workspace) {
   };
 }
 
-/**
- * @param {Workspace} workspace
- */
-export function serializeActivity(workspace) {
+export function serializeActivity(workspace: Workspace): {
+  schemaVersion: number;
+  events: ActivityEntry[];
+} {
   return { schemaVersion: SCHEMA_VERSION, events: workspace.events };
 }
 
-/**
- * @param {Workspace} workspace
- */
-export function serializeUi(workspace) {
+export function serializeUi(workspace: Workspace): {
+  schemaVersion: number;
+  selectedId: string | null;
+} {
   return { schemaVersion: SCHEMA_VERSION, selectedId: workspace.selectedId };
 }

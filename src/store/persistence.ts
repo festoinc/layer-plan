@@ -9,8 +9,9 @@ import {
   serializeActivity,
   serializeDocument,
   serializeUi,
-} from "../domain/schema.js";
-import { getDefaultId } from "../domain/chapters.js";
+  Workspace,
+} from "../domain/schema";
+import { getDefaultId } from "../domain/chapters";
 
 export const STORAGE_KEYS = {
   document: "layers:doc:v3",
@@ -20,18 +21,20 @@ export const STORAGE_KEYS = {
   legacy: ["layers-chapters-v2", "layers-chapters-v1"],
 };
 
-/**
- * @typedef {{ status: "ok", raw: string, value: any }
- *   | { status: "missing", raw: null }
- *   | { status: "corrupt", raw: string|null, error?: unknown }} ReadResult
- */
+export type ReadResult =
+  | { status: "ok"; raw: string; value: any }
+  | { status: "missing"; raw: null }
+  | { status: "corrupt"; raw: string | null; error?: unknown };
 
 export const STORAGE_STATUS = {
-  saved: /** @type {"saved"} */ ("saved"),
-  pending: /** @type {"pending"} */ ("pending"),
-  error: /** @type {"error"} */ ("error"),
-  unavailable: /** @type {"unavailable"} */ ("unavailable"),
+  saved: "saved" as const,
+  pending: "pending" as const,
+  error: "error" as const,
+  unavailable: "unavailable" as const,
 };
+
+export type StorageStatusState =
+  (typeof STORAGE_STATUS)[keyof typeof STORAGE_STATUS];
 
 const ALL_KEYS = [
   STORAGE_KEYS.document,
@@ -42,12 +45,9 @@ const ALL_KEYS = [
 /**
  * Minimal in-memory Storage implementation used when localStorage is blocked
  * (private mode, sandboxed frames) and by the unit tests.
- *
- * @returns {Storage}
  */
-export function createMemoryStorage() {
-  /** @type {Map<string, string>} */
-  const values = new Map();
+export function createMemoryStorage(): Storage {
+  const values = new Map<string, string>();
   return {
     get length() {
       return values.size;
@@ -55,26 +55,25 @@ export function createMemoryStorage() {
     clear() {
       values.clear();
     },
-    getItem(key) {
+    getItem(key: string) {
       return values.has(key) ? (values.get(key) ?? null) : null;
     },
-    key(index) {
+    key(index: number) {
       return [...values.keys()][index] ?? null;
     },
-    removeItem(key) {
+    removeItem(key: string) {
       values.delete(key);
     },
-    setItem(key, value) {
+    setItem(key: string, value: string) {
       values.set(String(key), String(value));
     },
   };
 }
 
-/**
- * @param {Storage} [storage]
- * @returns {{ storage: Storage, available: boolean }}
- */
-function resolveStorage(storage) {
+function resolveStorage(storage?: Storage): {
+  storage: Storage;
+  available: boolean;
+} {
   if (storage) return { storage, available: true };
   try {
     if (typeof window === "undefined" || !window.localStorage) {
@@ -89,45 +88,47 @@ function resolveStorage(storage) {
   }
 }
 
-/**
- * @typedef {Object} StorageNotice
- * @property {"info"|"warning"} level
- * @property {string} message
- * @property {string} [backupKey]
- */
+export interface StorageNotice {
+  level: "info" | "warning";
+  message: string;
+  backupKey?: string;
+}
 
-/**
- * @typedef {Object} RepositoryStatus
- * @property {"saved"|"pending"|"error"|"unavailable"} state
- * @property {string} message
- */
+export interface RepositoryStatus {
+  state: StorageStatusState;
+  message: string;
+}
 
-/**
- * @typedef {Object} Repository
- * @property {() => { workspace: import("../domain/schema.js").Workspace, notices: StorageNotice[] }} load
- * @property {(workspace: import("../domain/schema.js").Workspace, options?: { immediate?: boolean }) => void} save
- * @property {() => void} flush
- * @property {() => RepositoryStatus} status
- * @property {(listener: (status: RepositoryStatus) => void) => () => void} onStatusChange
- * @property {(listener: (payload: { workspace: import("../domain/schema.js").Workspace, notices: StorageNotice[] }) => void) => () => void} subscribe
- * @property {(event: { key?: string|null }) => void} handleStorageEvent
- * @property {() => boolean} hasPending
- * @property {(workspace: import("../domain/schema.js").Workspace) => string} exportWorkspace
- * @property {(text: string) => { workspace: import("../domain/schema.js").Workspace, issues: string[] }} parseImport
- * @property {() => void} dispose
- */
+export interface Repository {
+  load: () => { workspace: Workspace; notices: StorageNotice[] };
+  save: (workspace: Workspace, options?: { immediate?: boolean }) => void;
+  flush: () => void;
+  status: () => RepositoryStatus;
+  onStatusChange: (listener: (status: RepositoryStatus) => void) => () => void;
+  subscribe: (
+    listener: (payload: {
+      workspace?: Workspace;
+      notices?: StorageNotice[];
+    }) => void,
+  ) => () => void;
+  handleStorageEvent: (event: { key?: string | null }) => void;
+  hasPending: () => boolean;
+  exportWorkspace: (workspace: Workspace) => string;
+  parseImport: (text: string) => { workspace: Workspace; issues: string[] };
+  dispose: () => void;
+}
 
-/**
- * @param {{
- *   storage?: Storage,
- *   debounceMs?: number,
- *   windowObject?: (Window & typeof globalThis) | null,
- *   now?: () => string,
- *   newId?: () => string,
- * }} [options]
- * @returns {Repository}
- */
-export function createRepository(options = {}) {
+export interface CreateRepositoryOptions {
+  storage?: Storage;
+  debounceMs?: number;
+  windowObject?: (Window & typeof globalThis) | null;
+  now?: () => string;
+  newId?: () => string;
+}
+
+export function createRepository(
+  options: CreateRepositoryOptions = {},
+): Repository {
   const {
     storage: storageOption,
     debounceMs = 250,
@@ -142,27 +143,21 @@ export function createRepository(options = {}) {
       : options.windowObject;
   const { storage, available } = resolveStorage(storageOption);
 
-  /** @type {import("../domain/schema.js").Workspace|null} */
-  let pending = null;
-  /** @type {import("../domain/schema.js").Workspace|null} */
-  let lastWritten = null;
-  /** @type {ReturnType<typeof setTimeout>|null} */
-  let timer = null;
-  /** @type {RepositoryStatus} */
-  let currentStatus = {
+  let pending: Workspace | null = null;
+  let lastWritten: Workspace | null = null;
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  let currentStatus: RepositoryStatus = {
     state: available ? STORAGE_STATUS.saved : STORAGE_STATUS.unavailable,
     message: available
       ? "Saved in this browser."
       : "Browser storage is unavailable. Changes stay in this tab.",
   };
-  const statusListeners = new Set();
-  const syncListeners = new Set();
+  const statusListeners = new Set<(status: RepositoryStatus) => void>();
+  const syncListeners = new Set<
+    (payload: { workspace?: Workspace; notices?: StorageNotice[] }) => void
+  >();
 
-  /**
-   * @param {RepositoryStatus["state"]} state
-   * @param {string} message
-   */
-  function setStatus(state, message) {
+  function setStatus(state: StorageStatusState, message: string) {
     if (currentStatus.state === state && currentStatus.message === message) {
       return;
     }
@@ -170,12 +165,8 @@ export function createRepository(options = {}) {
     for (const listener of statusListeners) listener(currentStatus);
   }
 
-  /**
-   * @param {string} key
-   * @returns {ReadResult}
-   */
-  function readJson(key) {
-    let raw;
+  function readJson(key: string): ReadResult {
+    let raw: string | null;
     try {
       raw = storage.getItem(key);
     } catch (error) {
@@ -189,12 +180,7 @@ export function createRepository(options = {}) {
     }
   }
 
-  /**
-   * @param {string} key
-   * @param {string|null} raw
-   * @returns {string|null}
-   */
-  function backup(key, raw) {
+  function backup(key: string, raw: string | null): string | null {
     if (!raw) return null;
     const backupKey = `${STORAGE_KEYS.backupPrefix}${key
       .replace(/^layers:/, "")
@@ -207,8 +193,7 @@ export function createRepository(options = {}) {
     }
   }
 
-  /** @returns {ReadResult & { key: string|null }} */
-  function readLegacy() {
+  function readLegacy(): ReadResult & { key: string | null } {
     for (const key of STORAGE_KEYS.legacy) {
       const result = readJson(key);
       if (result.status === "ok") return { ...result, key };
@@ -217,12 +202,14 @@ export function createRepository(options = {}) {
     return { status: "missing", raw: null, key: null };
   }
 
-  /**
-   * @param {{ document: ReadResult, activity: ReadResult, ui: ReadResult }} payloads
-   * @param {StorageNotice[]} notices
-   * @returns {import("../domain/schema.js").Workspace}
-   */
-  function workspaceFromPayloads({ document, activity, ui }, notices) {
+  function workspaceFromPayloads(
+    {
+      document,
+      activity,
+      ui,
+    }: { document: ReadResult; activity: ReadResult; ui: ReadResult },
+    notices: StorageNotice[],
+  ): Workspace {
     const documentPayload =
       document.status === "ok" &&
       document.value &&
@@ -273,14 +260,10 @@ export function createRepository(options = {}) {
     });
   }
 
-  /**
-   * @param {string[]} issues
-   * @returns {StorageNotice[]}
-   */
-  function describeIssues(issues) {
+  function describeIssues(issues: string[]): StorageNotice[] {
     return [
       {
-        level: /** @type {const} */ ("warning"),
+        level: "warning",
         message: `Some saved data was repaired: ${issues
           .slice(0, 3)
           .join(
@@ -290,15 +273,12 @@ export function createRepository(options = {}) {
     ];
   }
 
-  /** @type {Repository["load"]} */
-  function load() {
-    /** @type {StorageNotice[]} */
-    const notices = [];
+  function load(): { workspace: Workspace; notices: StorageNotice[] } {
+    const notices: StorageNotice[] = [];
     const document = readJson(STORAGE_KEYS.document);
     let migrated = false;
 
-    /** @type {import("../domain/schema.js").Workspace} */
-    let workspace;
+    let workspace: Workspace;
 
     if (document.status === "ok") {
       const activity = readJson(STORAGE_KEYS.activity);
@@ -347,9 +327,6 @@ export function createRepository(options = {}) {
       );
     }
 
-    // Treat the loaded workspace as already persisted so loading never rewrites
-    // storage (which would ping-pong between tabs). Migration is the only case
-    // that writes immediately.
     pending = null;
     lastWritten = workspace;
     if (migrated) {
@@ -360,10 +337,7 @@ export function createRepository(options = {}) {
     return { workspace, notices };
   }
 
-  /**
-   * @param {import("../domain/schema.js").Workspace} workspace
-   */
-  function write(workspace) {
+  function write(workspace: Workspace) {
     if (!lastWritten || workspace.chapters !== lastWritten.chapters) {
       storage.setItem(
         STORAGE_KEYS.document,
@@ -385,7 +359,6 @@ export function createRepository(options = {}) {
     }
   }
 
-  /** @type {Repository["flush"]} */
   function flush() {
     if (!pending) return;
     if (timer) {
@@ -409,8 +382,7 @@ export function createRepository(options = {}) {
     }
   }
 
-  /** @type {Repository["save"]} */
-  function save(workspace, { immediate = false } = {}) {
+  function save(workspace: Workspace, { immediate = false } = {}) {
     pending = workspace;
     if (immediate) {
       flush();
@@ -424,21 +396,20 @@ export function createRepository(options = {}) {
     }, debounceMs);
   }
 
-  /** @type {Repository["status"]} */
-  function status() {
+  function status(): RepositoryStatus {
     return currentStatus;
   }
 
-  /** @type {Repository["onStatusChange"]} */
-  function onStatusChange(listener) {
+  function onStatusChange(
+    listener: (status: RepositoryStatus) => void,
+  ): () => void {
     statusListeners.add(listener);
     return () => {
       statusListeners.delete(listener);
     };
   }
 
-  /** @type {Repository["handleStorageEvent"]} */
-  function handleStorageEvent(event) {
+  function handleStorageEvent(event: { key?: string | null }) {
     const key = event?.key;
     if (key && !ALL_KEYS.includes(key)) return;
     if (pending) return;
@@ -446,18 +417,21 @@ export function createRepository(options = {}) {
     for (const listener of syncListeners) listener({ workspace, notices });
   }
 
-  /** @type {Repository["subscribe"]} */
-  function subscribe(listener) {
+  function subscribe(
+    listener: (payload: {
+      workspace?: Workspace;
+      notices?: StorageNotice[];
+    }) => void,
+  ): () => void {
     syncListeners.add(listener);
     return () => {
       syncListeners.delete(listener);
     };
   }
 
-  /** @param {{ key?: string|null }} event */
-  const onStorage = (event) => handleStorageEvent(event);
+  const onStorage = (event: StorageEvent) => handleStorageEvent(event);
   if (windowObject?.addEventListener) {
-    windowObject.addEventListener("storage", onStorage);
+    windowObject.addEventListener("storage", onStorage as EventListener);
   }
 
   const flushOnHide = () => flush();
@@ -474,8 +448,7 @@ export function createRepository(options = {}) {
     visibilitySource.addEventListener("visibilitychange", onVisibility);
   }
 
-  /** @type {Repository["exportWorkspace"]} */
-  function exportWorkspace(workspace) {
+  function exportWorkspace(workspace: Workspace): string {
     return JSON.stringify(
       {
         schemaVersion: SCHEMA_VERSION,
@@ -490,9 +463,11 @@ export function createRepository(options = {}) {
     );
   }
 
-  /** @type {Repository["parseImport"]} */
-  function parseImport(text) {
-    let parsed;
+  function parseImport(text: string): {
+    workspace: Workspace;
+    issues: string[];
+  } {
+    let parsed: unknown;
     try {
       parsed = JSON.parse(text);
     } catch {
@@ -509,7 +484,7 @@ export function createRepository(options = {}) {
     timer = null;
     pending = null;
     if (windowObject?.removeEventListener) {
-      windowObject.removeEventListener("storage", onStorage);
+      windowObject.removeEventListener("storage", onStorage as EventListener);
       windowObject.removeEventListener("pagehide", flushOnHide);
       windowObject.removeEventListener("beforeunload", flushOnHide);
     }
@@ -535,13 +510,10 @@ export function createRepository(options = {}) {
   };
 }
 
-/**
- * Download a JSON export of a workspace in the browser.
- *
- * @param {string} json
- * @param {string} [filename]
- */
-export function downloadJson(json, filename = "layers-workspace.json") {
+export function downloadJson(
+  json: string,
+  filename: string = "layers-workspace.json",
+): void {
   if (typeof document === "undefined") return;
   const blob = new Blob([json], { type: "application/json" });
   const url = URL.createObjectURL(blob);
@@ -554,17 +526,10 @@ export function downloadJson(json, filename = "layers-workspace.json") {
   URL.revokeObjectURL(url);
 }
 
-/**
- * Best-effort raw backup of everything this app stores, for the error screen.
- *
- * @param {Storage} [storage]
- * @returns {string}
- */
-export function readRawBackup(storage) {
+export function readRawBackup(storage?: Storage): string {
   try {
     const source = storage ?? window.localStorage;
-    /** @type {Record<string,string|null>} */
-    const data = {};
+    const data: Record<string, string | null> = {};
     for (let index = 0; index < source.length; index += 1) {
       const key = source.key(index);
       if (!key) continue;

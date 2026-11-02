@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { RefObject, useEffect, useRef } from "react";
 
 const FOCUSABLE =
   'a[href], button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
@@ -6,13 +6,13 @@ const FOCUSABLE =
 /**
  * Trap Tab inside a container while it is open, close it on Escape and return
  * focus to the element that opened it.
- *
- * @param {boolean} active
- * @param {import("react").RefObject<HTMLElement|null>} containerRef
- * @param {() => void} onClose
  */
-export function useFocusTrap(active, containerRef, onClose) {
-  const previouslyFocused = useRef(/** @type {HTMLElement|null} */ (null));
+export function useFocusTrap(
+  active: boolean,
+  containerRef: RefObject<HTMLElement | null>,
+  onClose: () => void,
+): void {
+  const previouslyFocused = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     if (!active) return undefined;
@@ -24,8 +24,8 @@ export function useFocusTrap(active, containerRef, onClose) {
         ? document.activeElement
         : null;
 
-    const focusable = () =>
-      Array.from(node.querySelectorAll(FOCUSABLE)).filter(
+    const focusable = (): HTMLElement[] =>
+      Array.from(node.querySelectorAll<HTMLElement>(FOCUSABLE)).filter(
         (element) =>
           element instanceof HTMLElement &&
           (element.offsetParent !== null || element === document.activeElement),
@@ -33,7 +33,7 @@ export function useFocusTrap(active, containerRef, onClose) {
 
     focusable()[0]?.focus();
 
-    const onKeyDown = (event) => {
+    const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         event.preventDefault();
         onClose();

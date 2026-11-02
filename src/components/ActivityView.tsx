@@ -1,7 +1,7 @@
 import { Clock3 } from "lucide-react";
-import { useWorkspace } from "../store/WorkspaceProvider.jsx";
+import { useWorkspace } from "../store/WorkspaceProvider";
 
-function formatTime(time) {
+function formatTime(time: string): string {
   return new Date(time).toLocaleString([], {
     month: "short",
     day: "numeric",
@@ -10,10 +10,11 @@ function formatTime(time) {
   });
 }
 
-/**
- * @param {{ onSelectChapter: (id: string) => void }} props
- */
-export function ActivityView({ onSelectChapter }) {
+export interface ActivityViewProps {
+  onSelectChapter: (id: string) => void;
+}
+
+export function ActivityView({ onSelectChapter }: ActivityViewProps) {
   const { state } = useWorkspace();
 
   return (
@@ -33,8 +34,8 @@ export function ActivityView({ onSelectChapter }) {
                 <span className="activity-marker" />
                 <div>
                   <p>{event.message}</p>
-                  {exists ? (
-                    <button onClick={() => onSelectChapter(event.chapterId)}>
+                  {exists && event.chapterId ? (
+                    <button onClick={() => onSelectChapter(event.chapterId!)}>
                       {event.chapterName || "Untitled chapter"}
                     </button>
                   ) : (

@@ -1,15 +1,21 @@
 import { ChevronRight, CircleCheck, Menu } from "lucide-react";
+import { RepositoryStatus } from "../store/persistence";
 
-/**
- * @param {{
- *   projectName: string,
- *   view: string,
- *   rootTitle: string,
- *   status: { state: string, message: string },
- *   onOpenNav: () => void,
- * }} props
- */
-export function Topbar({ projectName, view, rootTitle, status, onOpenNav }) {
+export interface TopbarProps {
+  projectName: string;
+  view: string;
+  rootTitle: string;
+  status: RepositoryStatus;
+  onOpenNav: () => void;
+}
+
+export function Topbar({
+  projectName,
+  view,
+  rootTitle,
+  status,
+  onOpenNav,
+}: TopbarProps) {
   const saved = status.state === "saved";
   const label = saved
     ? "All changes saved"

@@ -1,4 +1,5 @@
 import js from "@eslint/js";
+import tseslint from "typescript-eslint";
 import globals from "globals";
 import react from "eslint-plugin-react";
 import reactHooks from "eslint-plugin-react-hooks";
@@ -8,7 +9,7 @@ const hooksRules =
   reactHooks.configs?.recommended?.rules ??
   {};
 
-export default [
+export default tseslint.config(
   {
     ignores: [
       "dist/**",
@@ -19,8 +20,9 @@ export default [
     ],
   },
   js.configs.recommended,
+  ...tseslint.configs.recommended,
   {
-    files: ["**/*.{js,jsx}"],
+    files: ["**/*.{js,jsx,ts,tsx}"],
     languageOptions: {
       ecmaVersion: 2023,
       sourceType: "module",
@@ -33,15 +35,17 @@ export default [
       ...hooksRules,
       "react/jsx-uses-vars": "error",
       "react/jsx-uses-react": "off",
-      "no-unused-vars": [
+      "@typescript-eslint/no-unused-vars": [
         "error",
         { argsIgnorePattern: "^_", varsIgnorePattern: "^_" },
       ],
+      "no-unused-vars": "off",
       "no-empty": ["error", { allowEmptyCatch: true }],
+      "@typescript-eslint/no-explicit-any": "off",
     },
   },
   {
     files: ["tests/**/*.js"],
     languageOptions: { globals: { ...globals.node } },
   },
-];
+);
