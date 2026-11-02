@@ -1,11 +1,12 @@
 import { ChevronRight, CircleCheck, Menu } from "lucide-react";
 import { RepositoryStatus } from "../store/persistence";
+import { useWorkspaceStatus } from "../store/WorkspaceProvider";
 
 export interface TopbarProps {
   projectName: string;
   view: string;
   rootTitle: string;
-  status: RepositoryStatus;
+  status?: RepositoryStatus;
   onOpenNav: () => void;
 }
 
@@ -13,9 +14,11 @@ export function Topbar({
   projectName,
   view,
   rootTitle,
-  status,
+  status: statusProp,
   onOpenNav,
 }: TopbarProps) {
+  const statusContext = useWorkspaceStatus();
+  const status = statusProp ?? statusContext.status;
   const saved = status.state === "saved";
   const label = saved
     ? "All changes saved"

@@ -17,7 +17,10 @@ import { getDefaultId, getPath } from "../domain/chapters";
 import { useChapterTree } from "../hooks/useChapterTree";
 import { useFocusTrap } from "../hooks/useFocusTrap";
 import { ROUTE_VIEWS, useRoute } from "../hooks/useRoute";
-import { useWorkspace } from "../store/WorkspaceProvider";
+import {
+  useWorkspaceActions,
+  useWorkspaceState,
+} from "../store/WorkspaceProvider";
 import { ErrorBoundary } from "./ErrorBoundary";
 
 const ActivityView = lazy(() =>
@@ -34,18 +37,10 @@ const VIEW_LABELS: Record<string, string> = {
 };
 
 export function App() {
-  const {
-    state,
-    project,
-    status,
-    notices,
-    select,
-    createChapter,
-    dismissNotices,
-    retrySave,
-    exportWorkspace,
-    importWorkspace,
-  } = useWorkspace();
+  const state = useWorkspaceState();
+  const { select, createChapter, exportWorkspace, importWorkspace } =
+    useWorkspaceActions();
+  const project = state.project;
   const route = useRoute();
   const tree = useChapterTree(state.chapters);
 
@@ -189,7 +184,6 @@ export function App() {
         collapsed={collapsed}
         creating={creating}
         chapterTitle={chapterTitle}
-        status={status}
         navOpen={navOpen}
         sidebarRef={sidebarRef}
         onNavigateView={navigateView}
@@ -208,16 +202,9 @@ export function App() {
           projectName={project.name}
           view={VIEW_LABELS[view] ?? view}
           rootTitle={path[0]?.title ?? "No chapters"}
-          status={status}
           onOpenNav={() => setNavOpen(true)}
         />
-        <StorageBanner
-          notices={notices}
-          status={status}
-          onRetry={retrySave}
-          onDismiss={dismissNotices}
-          onExport={exportWorkspace}
-        />
+        <StorageBanner />
         <ErrorBoundary key={view}>
           {view === ROUTE_VIEWS.specifications &&
             (chapter ? (

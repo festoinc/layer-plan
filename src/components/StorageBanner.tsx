@@ -1,21 +1,27 @@
 import { X } from "lucide-react";
 import { StorageNotice, RepositoryStatus } from "../store/persistence";
+import {
+  useWorkspaceActions,
+  useWorkspaceStatus,
+} from "../store/WorkspaceProvider";
 
 export interface StorageBannerProps {
-  notices: StorageNotice[];
-  status: RepositoryStatus;
-  onRetry: () => void;
-  onDismiss: () => void;
-  onExport: () => void;
+  notices?: StorageNotice[];
+  status?: RepositoryStatus;
+  onRetry?: () => void;
+  onDismiss?: () => void;
+  onExport?: () => void;
 }
 
-export function StorageBanner({
-  notices,
-  status,
-  onRetry,
-  onDismiss,
-  onExport,
-}: StorageBannerProps) {
+export function StorageBanner(props: StorageBannerProps) {
+  const statusContext = useWorkspaceStatus();
+  const actionsContext = useWorkspaceActions();
+
+  const notices = props.notices ?? statusContext.notices;
+  const status = props.status ?? statusContext.status;
+  const onRetry = props.onRetry ?? actionsContext.retrySave;
+  const onDismiss = props.onDismiss ?? actionsContext.dismissNotices;
+  const onExport = props.onExport ?? actionsContext.exportWorkspace;
   const failed = status.state === "error";
   const unavailable = status.state === "unavailable";
 

@@ -12,6 +12,7 @@ import { ChapterTree } from "./ChapterTree";
 import { TreeNode } from "../hooks/useChapterTree";
 import { Project } from "../domain/schema";
 import { RepositoryStatus } from "../store/persistence";
+import { useWorkspaceStatus } from "../store/WorkspaceProvider";
 
 const VIEWS: [string, string, LucideIcon][] = [
   ["specifications", "Specifications", FileText],
@@ -27,7 +28,7 @@ export interface SidebarProps {
   collapsed: Set<string>;
   creating: { parentId: string | null } | null;
   chapterTitle: string;
-  status: RepositoryStatus;
+  status?: RepositoryStatus;
   navOpen: boolean;
   sidebarRef: RefObject<HTMLElement | null>;
   onNavigateView: (view: string) => void;
@@ -50,7 +51,7 @@ export function Sidebar({
   collapsed,
   creating,
   chapterTitle,
-  status,
+  status: statusProp,
   navOpen,
   sidebarRef,
   onNavigateView,
@@ -66,6 +67,8 @@ export function Sidebar({
 }: SidebarProps) {
   const fileInput = useRef<HTMLInputElement | null>(null);
   const [importError, setImportError] = useState("");
+  const statusContext = useWorkspaceStatus();
+  const status = statusProp ?? statusContext.status;
 
   async function handleImport(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];

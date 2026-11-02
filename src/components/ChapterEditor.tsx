@@ -10,7 +10,7 @@ import { ChevronRight, Plus, X } from "lucide-react";
 import { AutoTextarea, EditableMarkdown } from "../Markdown";
 import { Chapter } from "../domain/chapters";
 import { criterionProgress } from "../domain/criteria";
-import { useWorkspace } from "../store/WorkspaceProvider";
+import { useWorkspaceActions } from "../store/WorkspaceProvider";
 
 export interface ChapterEditorProps {
   chapter: Chapter;
@@ -37,7 +37,7 @@ export function ChapterEditor({
     removeCriterion,
     logActivity,
     flushSave,
-  } = useWorkspace();
+  } = useWorkspaceActions();
   const titleRef = useRef<HTMLInputElement | null>(null);
   const [newCriterion, setNewCriterion] = useState("");
   const progress = criterionProgress(chapter);

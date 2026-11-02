@@ -119,13 +119,29 @@ function ChapterNodeComponent({
  */
 export const ChapterNode = memo(ChapterNodeComponent, (previous, next) => {
   if (previous.node !== next.node) return false;
-  if (previous.selectedId !== next.selectedId) return false;
-  if (previous.activeView !== next.activeView) return false;
-  if (previous.collapsed !== next.collapsed) return false;
-  if (previous.creating?.parentId !== next.creating?.parentId) return false;
+
+  const isSelectedPrev =
+    previous.activeView === "specifications" &&
+    previous.selectedId === previous.node.chapter.id;
+  const isSelectedNext =
+    next.activeView === "specifications" &&
+    next.selectedId === next.node.chapter.id;
+  if (isSelectedPrev !== isSelectedNext) return false;
+
+  const isOpenPrev = !previous.collapsed.has(previous.node.chapter.id);
+  const isOpenNext = !next.collapsed.has(next.node.chapter.id);
+  if (isOpenPrev !== isOpenNext) return false;
+
+  const isCreatingPrev =
+    previous.creating?.parentId === previous.node.chapter.id;
+  const isCreatingNext = next.creating?.parentId === next.node.chapter.id;
+  if (isCreatingPrev !== isCreatingNext) return false;
+
   // A node that hosts the open create form must always receive the latest
-  // controlled input value and handlers.
-  if (next.creating?.parentId === next.node.chapter.id) return false;
+  // controlled input value.
+  if (isCreatingNext && previous.chapterTitle !== next.chapterTitle)
+    return false;
+
   return (
     previous.onSelect === next.onSelect &&
     previous.onToggleCollapsed === next.onToggleCollapsed &&

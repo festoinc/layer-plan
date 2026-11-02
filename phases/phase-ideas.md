@@ -4,8 +4,9 @@ Status: living document
 Updated: 2026-11-03
 
 Ideas captured while delivering phase 1 and phase 2 that were deliberately left
-out. They are consolidated here so they can be reviewed, promoted into a phase,
-or dropped without re-reading the delivery notes.
+out, plus a few candidates raised while planning phase 3. They are consolidated
+here so they can be reviewed, promoted into a phase, or dropped without
+re-reading the delivery notes.
 
 How to use this file:
 

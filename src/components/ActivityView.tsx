@@ -1,5 +1,5 @@
 import { Clock3 } from "lucide-react";
-import { useWorkspace } from "../store/WorkspaceProvider";
+import { useWorkspaceState } from "../store/WorkspaceProvider";
 
 function formatTime(time: string): string {
   return new Date(time).toLocaleString([], {
@@ -15,7 +15,7 @@ export interface ActivityViewProps {
 }
 
 export function ActivityView({ onSelectChapter }: ActivityViewProps) {
-  const { state } = useWorkspace();
+  const state = useWorkspaceState();
 
   return (
     <section className="chapter-editor overview-page">

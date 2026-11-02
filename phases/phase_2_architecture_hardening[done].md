@@ -202,9 +202,5 @@ the criterion Markdown as its description) against `layers:doc:v3`.
 
 ## Out of scope (carried forward)
 
-- Real backend, authentication, collaboration, permissions.
-- Drag-and-drop reordering and chapter delete UI. Domain operations and tests are
-  delivered; UI is planned for phase 3.
-- Real test-coverage computation and persistence of `Criterion.coverage`.
-- Self-hosted font files (preconnect plus `display=swap` instead).
-- Full cross-browser audit; only Chromium is automated so far.
+All carried-forward ideas are consolidated in
+[phase-ideas.md](phase-ideas.md) with stable IDs and their source phases.

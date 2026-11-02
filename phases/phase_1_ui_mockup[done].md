@@ -202,6 +202,9 @@ npm run build
 - Chapter deletion, reordering, and moving between parents are not implemented.
 - The prototype has been checked in Chromium; a full cross-browser and accessibility audit has not been performed.
 
+Future ideas from this list are consolidated in
+[phase-ideas.md](phase-ideas.md); this section records the phase 1 boundary.
+
 ## Follow-up — 2026-10-28
 
 Adding a success criterion now creates its corresponding subchapter immediately. Manual subchapter creation remains independent from the checklist. The original phase was delivered on 2026-10-27; this follow-up extends the chapter workflow.

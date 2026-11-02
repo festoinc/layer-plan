@@ -52,6 +52,12 @@ export interface WorkspaceActions {
   retrySave: () => void;
   flushSave: () => void;
   importWorkspace: (text: string) => { ok: boolean; issues: string[] };
+  exportWorkspace: () => void;
+}
+
+export interface WorkspaceStatusContextValue {
+  status: RepositoryStatus;
+  notices: StorageNotice[];
 }
 
 export interface WorkspaceContextValue extends WorkspaceActions {
@@ -59,10 +65,12 @@ export interface WorkspaceContextValue extends WorkspaceActions {
   status: RepositoryStatus;
   notices: StorageNotice[];
   project: Project;
-  exportWorkspace: () => void;
 }
 
-const WorkspaceContext = createContext<WorkspaceContextValue | null>(null);
+const WorkspaceStateContext = createContext<Workspace | null>(null);
+const WorkspaceActionsContext = createContext<WorkspaceActions | null>(null);
+const WorkspaceStatusContext =
+  createContext<WorkspaceStatusContextValue | null>(null);
 
 function shouldSaveImmediately(action: {
   type?: string;
@@ -88,6 +96,11 @@ export function WorkspaceProvider({
   const [notices, setNotices] = useState(() => initial.notices);
   const lastAction = useRef<WorkspaceAction | null>(null);
   const skipNextSave = useRef(true);
+  const stateRef = useRef(state);
+
+  useEffect(() => {
+    stateRef.current = state;
+  }, [state]);
 
   const dispatch = useCallback((action: WorkspaceAction) => {
     lastAction.current = action;
@@ -124,6 +137,10 @@ export function WorkspaceProvider({
     return () => {
       repository.flush();
     };
+  }, [repository]);
+
+  const exportWorkspace = useCallback(() => {
+    downloadJson(repository.exportWorkspace(stateRef.current));
   }, [repository]);
 
   const actions: WorkspaceActions = useMemo(
@@ -203,39 +220,71 @@ export function WorkspaceProvider({
         }
         return { ok: true, issues };
       },
+      exportWorkspace,
     }),
-    [dispatch, repository],
+    [dispatch, repository, exportWorkspace],
   );
 
-  const exportWorkspace = useCallback(() => {
-    downloadJson(repository.exportWorkspace(state));
-  }, [repository, state]);
+  const statusValue = useMemo<WorkspaceStatusContextValue>(
+    () => ({ status, notices }),
+    [status, notices],
+  );
 
-  const value = useMemo<WorkspaceContextValue>(
+  return (
+    <WorkspaceActionsContext.Provider value={actions}>
+      <WorkspaceStatusContext.Provider value={statusValue}>
+        <WorkspaceStateContext.Provider value={state}>
+          {children}
+        </WorkspaceStateContext.Provider>
+      </WorkspaceStatusContext.Provider>
+    </WorkspaceActionsContext.Provider>
+  );
+}
+
+export function useWorkspaceState(): Workspace {
+  const context = useContext(WorkspaceStateContext);
+  if (!context) {
+    throw new Error(
+      "useWorkspaceState must be used inside a WorkspaceProvider.",
+    );
+  }
+  return context;
+}
+
+export function useWorkspaceActions(): WorkspaceActions {
+  const context = useContext(WorkspaceActionsContext);
+  if (!context) {
+    throw new Error(
+      "useWorkspaceActions must be used inside a WorkspaceProvider.",
+    );
+  }
+  return context;
+}
+
+export function useWorkspaceStatus(): WorkspaceStatusContextValue {
+  const context = useContext(WorkspaceStatusContext);
+  if (!context) {
+    throw new Error(
+      "useWorkspaceStatus must be used inside a WorkspaceProvider.",
+    );
+  }
+  return context;
+}
+
+export function useWorkspace(): WorkspaceContextValue {
+  const state = useWorkspaceState();
+  const { status, notices } = useWorkspaceStatus();
+  const actions = useWorkspaceActions();
+  return useMemo(
     () => ({
       state,
       status,
       notices,
       project: state.project,
       ...actions,
-      exportWorkspace,
     }),
-    [state, status, notices, actions, exportWorkspace],
+    [state, status, notices, actions],
   );
-
-  return (
-    <WorkspaceContext.Provider value={value}>
-      {children}
-    </WorkspaceContext.Provider>
-  );
-}
-
-export function useWorkspace(): WorkspaceContextValue {
-  const context = useContext(WorkspaceContext);
-  if (!context) {
-    throw new Error("useWorkspace must be used inside a WorkspaceProvider.");
-  }
-  return context;
 }
 
 export { STORAGE_STATUS };
