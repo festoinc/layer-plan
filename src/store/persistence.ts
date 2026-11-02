@@ -1,11 +1,9 @@
 import {
   SCHEMA_VERSION,
   createId,
-  createSampleWorkspace,
   createWorkspace,
   normalizeActivity,
   normalizeDocument,
-  normalizeWorkspace,
   serializeActivity,
   serializeDocument,
   serializeUi,
@@ -14,12 +12,31 @@ import {
 import { getDefaultId } from "../domain/chapters";
 
 export const STORAGE_KEYS = {
-  document: "layers:doc:v3",
-  activity: "layers:activity:v3",
-  ui: "layers:ui:v3",
+  index: "layers:projects:v4",
   backupPrefix: "layers:backup:",
-  legacy: ["layers-chapters-v2", "layers-chapters-v1"],
+  projectPrefix: "layers:project:",
+  legacy: [
+    "layers:doc:v3",
+    "layers:activity:v3",
+    "layers:ui:v3",
+    "layers-chapters-v2",
+    "layers-chapters-v1",
+  ],
 };
+
+export interface ProjectStorageKeys {
+  document: string;
+  activity: string;
+  ui: string;
+}
+
+export function projectKeys(projectId: string): ProjectStorageKeys {
+  return {
+    document: `${STORAGE_KEYS.projectPrefix}${projectId}:doc:v4`,
+    activity: `${STORAGE_KEYS.projectPrefix}${projectId}:activity:v4`,
+    ui: `${STORAGE_KEYS.projectPrefix}${projectId}:ui:v4`,
+  };
+}
 
 export type ReadResult =
   | { status: "ok"; raw: string; value: any }
@@ -36,16 +53,51 @@ export const STORAGE_STATUS = {
 export type StorageStatusState =
   (typeof STORAGE_STATUS)[keyof typeof STORAGE_STATUS];
 
-const ALL_KEYS = [
-  STORAGE_KEYS.document,
-  STORAGE_KEYS.activity,
-  STORAGE_KEYS.ui,
-];
+export interface StorageNotice {
+  level: "info" | "warning";
+  message: string;
+  backupKey?: string;
+}
 
-/**
- * Minimal in-memory Storage implementation used when localStorage is blocked
- * (private mode, sandboxed frames) and by the unit tests.
- */
+export interface RepositoryStatus {
+  state: StorageStatusState;
+  message: string;
+}
+
+export interface ChangedSlices {
+  document: boolean;
+  activity: boolean;
+  ui: boolean;
+}
+
+export interface ProjectRepository {
+  projectId: string;
+  load: () => { workspace: Workspace; notices: StorageNotice[] };
+  save: (workspace: Workspace, options?: { immediate?: boolean }) => void;
+  flush: () => void;
+  status: () => RepositoryStatus;
+  onStatusChange: (listener: (status: RepositoryStatus) => void) => () => void;
+  subscribe: (
+    listener: (payload: {
+      workspace?: Workspace;
+      notices?: StorageNotice[];
+    }) => void,
+  ) => () => void;
+  handleStorageEvent: (event: { key?: string | null }) => void;
+  hasPending: () => boolean;
+  dispose: () => void;
+}
+
+export interface CreateProjectRepositoryOptions {
+  projectId: string;
+  storage?: Storage;
+  debounceMs?: number;
+  windowObject?: (Window & typeof globalThis) | null;
+  now?: () => string;
+  newId?: () => string;
+  onFlush?: (workspace: Workspace, changed: ChangedSlices) => void;
+}
+
 export function createMemoryStorage(): Storage {
   const values = new Map<string, string>();
   return {
@@ -70,7 +122,7 @@ export function createMemoryStorage(): Storage {
   };
 }
 
-function resolveStorage(storage?: Storage): {
+export function resolveStorage(storage?: Storage): {
   storage: Storage;
   available: boolean;
 } {
@@ -88,51 +140,82 @@ function resolveStorage(storage?: Storage): {
   }
 }
 
-export interface StorageNotice {
-  level: "info" | "warning";
-  message: string;
-  backupKey?: string;
+export function readJson(storage: Storage, key: string): ReadResult {
+  let raw: string | null;
+  try {
+    raw = storage.getItem(key);
+  } catch (error) {
+    return { status: "corrupt", raw: null, error };
+  }
+  if (raw == null) return { status: "missing", raw: null };
+  try {
+    return { status: "ok", raw, value: JSON.parse(raw) };
+  } catch (error) {
+    return { status: "corrupt", raw, error };
+  }
 }
 
-export interface RepositoryStatus {
-  state: StorageStatusState;
-  message: string;
+export function backupValue(
+  storage: Storage,
+  key: string,
+  raw: string | null,
+  now: () => string,
+): string | null {
+  if (!raw) return null;
+  const backupKey = `${STORAGE_KEYS.backupPrefix}${key
+    .replace(/^layers:/, "")
+    .replace(/:/g, "-")}:${now()}`;
+  try {
+    storage.setItem(backupKey, raw);
+    return backupKey;
+  } catch {
+    return null;
+  }
 }
 
-export interface Repository {
-  load: () => { workspace: Workspace; notices: StorageNotice[] };
-  save: (workspace: Workspace, options?: { immediate?: boolean }) => void;
-  flush: () => void;
-  status: () => RepositoryStatus;
-  onStatusChange: (listener: (status: RepositoryStatus) => void) => () => void;
-  subscribe: (
-    listener: (payload: {
-      workspace?: Workspace;
-      notices?: StorageNotice[];
-    }) => void,
-  ) => () => void;
-  handleStorageEvent: (event: { key?: string | null }) => void;
-  hasPending: () => boolean;
-  exportWorkspace: (workspace: Workspace) => string;
-  parseImport: (text: string) => { workspace: Workspace; issues: string[] };
-  dispose: () => void;
+export function listStorageKeys(storage: Storage): string[] {
+  const keys: string[] = [];
+  try {
+    for (let index = 0; index < storage.length; index += 1) {
+      const key = storage.key(index);
+      if (key) keys.push(key);
+    }
+  } catch {
+    return [];
+  }
+  return keys;
 }
 
-export interface CreateRepositoryOptions {
-  storage?: Storage;
-  debounceMs?: number;
-  windowObject?: (Window & typeof globalThis) | null;
-  now?: () => string;
-  newId?: () => string;
+export function removeStorageKeys(storage: Storage, keys: Iterable<string>) {
+  for (const key of keys) {
+    try {
+      storage.removeItem(key);
+    } catch {
+      // Best effort: a blocked storage cannot be repaired here.
+    }
+  }
 }
 
-export function createRepository(
-  options: CreateRepositoryOptions = {},
-): Repository {
+function describeIssues(issues: string[]): StorageNotice[] {
+  return [
+    {
+      level: "warning",
+      message: `Some saved data was repaired: ${issues
+        .slice(0, 3)
+        .join(" ")}${issues.length > 3 ? ` (+${issues.length - 3} more)` : ""}`,
+    },
+  ];
+}
+
+export function createProjectRepository(
+  options: CreateProjectRepositoryOptions,
+): ProjectRepository {
   const {
+    projectId,
     storage: storageOption,
     debounceMs = 250,
     newId = createId,
+    onFlush,
   } = options;
   const now = options.now ?? (() => new Date().toISOString());
   const windowObject =
@@ -142,6 +225,8 @@ export function createRepository(
         : window
       : options.windowObject;
   const { storage, available } = resolveStorage(storageOption);
+  const keys = projectKeys(projectId);
+  const allKeys = [keys.document, keys.activity, keys.ui];
 
   let pending: Workspace | null = null;
   let lastWritten: Workspace | null = null;
@@ -165,86 +250,59 @@ export function createRepository(
     for (const listener of statusListeners) listener(currentStatus);
   }
 
-  function readJson(key: string): ReadResult {
-    let raw: string | null;
-    try {
-      raw = storage.getItem(key);
-    } catch (error) {
-      return { status: "corrupt", raw: null, error };
-    }
-    if (raw == null) return { status: "missing", raw: null };
-    try {
-      return { status: "ok", raw, value: JSON.parse(raw) };
-    } catch (error) {
-      return { status: "corrupt", raw, error };
-    }
-  }
+  function load(): { workspace: Workspace; notices: StorageNotice[] } {
+    const notices: StorageNotice[] = [];
+    let repaired = false;
+    const document = readJson(storage, keys.document);
+    const activity = readJson(storage, keys.activity);
+    const ui = readJson(storage, keys.ui);
 
-  function backup(key: string, raw: string | null): string | null {
-    if (!raw) return null;
-    const backupKey = `${STORAGE_KEYS.backupPrefix}${key
-      .replace(/^layers:/, "")
-      .replace(/:/g, "-")}:${now()}`;
-    try {
-      storage.setItem(backupKey, raw);
-      return backupKey;
-    } catch {
-      return null;
-    }
-  }
+    let documentPayload: Record<string, any> = {};
+    let chapters = createWorkspace({ projectId }).chapters;
 
-  function readLegacy(): ReadResult & { key: string | null } {
-    for (const key of STORAGE_KEYS.legacy) {
-      const result = readJson(key);
-      if (result.status === "ok") return { ...result, key };
-      if (result.status === "corrupt") return { ...result, key };
-    }
-    return { status: "missing", raw: null, key: null };
-  }
-
-  function workspaceFromPayloads(
-    {
-      document,
-      activity,
-      ui,
-    }: { document: ReadResult; activity: ReadResult; ui: ReadResult },
-    notices: StorageNotice[],
-  ): Workspace {
-    const documentPayload =
-      document.status === "ok" &&
-      document.value &&
-      typeof document.value === "object"
-        ? document.value
-        : {};
-    const { document: chapters, issues } = normalizeDocument(
-      documentPayload.chapters,
-      { newId },
-    );
-    if (issues.length) notices.push(...describeIssues(issues));
-
-    const storedActivity =
-      activity.status === "ok"
-        ? activity.value
-        : activity.status === "corrupt"
-          ? null
-          : documentPayload.events;
-    const { events, issues: activityIssues } = normalizeActivity(
-      storedActivity,
-      {
-        newId,
-        now,
-      },
-    );
-    if (activity.status === "corrupt") {
-      const backupKey = backup(STORAGE_KEYS.activity, activity.raw);
+    if (document.status === "ok" && document.value) {
+      documentPayload =
+        typeof document.value === "object" ? document.value : {};
+      const normalized = normalizeDocument(
+        documentPayload.chapters ?? documentPayload,
+        { newId },
+      );
+      chapters = normalized.document;
+      if (normalized.issues.length) {
+        notices.push(...describeIssues(normalized.issues));
+      }
+    } else if (document.status === "corrupt") {
+      repaired = true;
+      const backupKey = backupValue(storage, keys.document, document.raw, now);
       notices.push({
         level: "warning",
         message:
-          "The saved activity history could not be read, so it was reset. The unreadable copy was kept as a backup.",
+          "This project could not be read. A backup of the unreadable data was kept, and the project was opened with an empty document.",
         backupKey: backupKey ?? undefined,
       });
-    } else if (activityIssues.length) {
-      notices.push(...describeIssues(activityIssues));
+    }
+
+    const activitySource =
+      activity.status === "ok"
+        ? (activity.value?.events ?? activity.value)
+        : activity.status === "corrupt"
+          ? null
+          : documentPayload.events;
+    const normalizedActivity = normalizeActivity(activitySource, {
+      newId,
+      now,
+    });
+    if (activity.status === "corrupt") {
+      repaired = true;
+      const backupKey = backupValue(storage, keys.activity, activity.raw, now);
+      notices.push({
+        level: "warning",
+        message:
+          "The project activity could not be read, so it was reset. The unreadable copy was kept as a backup.",
+        backupKey: backupKey ?? undefined,
+      });
+    } else if (normalizedActivity.issues.length) {
+      notices.push(...describeIssues(normalizedActivity.issues));
     }
 
     const selectedId =
@@ -252,73 +310,12 @@ export function createRepository(
         ? getDefaultId(chapters, ui.value.selectedId)
         : getDefaultId(chapters, documentPayload.selectedId);
 
-    return createWorkspace({
-      project: documentPayload.project,
+    const workspace = createWorkspace({
+      projectId,
       chapters,
-      events,
+      events: normalizedActivity.events,
       selectedId,
     });
-  }
-
-  function describeIssues(issues: string[]): StorageNotice[] {
-    return [
-      {
-        level: "warning",
-        message: `Some saved data was repaired: ${issues
-          .slice(0, 3)
-          .join(
-            " ",
-          )}${issues.length > 3 ? ` (+${issues.length - 3} more)` : ""}`,
-      },
-    ];
-  }
-
-  function load(): { workspace: Workspace; notices: StorageNotice[] } {
-    const notices: StorageNotice[] = [];
-    const document = readJson(STORAGE_KEYS.document);
-    let migrated = false;
-
-    let workspace: Workspace;
-
-    if (document.status === "ok") {
-      const activity = readJson(STORAGE_KEYS.activity);
-      const ui = readJson(STORAGE_KEYS.ui);
-      workspace = workspaceFromPayloads({ document, activity, ui }, notices);
-    } else if (document.status === "corrupt") {
-      const backupKey = backup(STORAGE_KEYS.document, document.raw);
-      notices.push({
-        level: "warning",
-        message:
-          "The saved workspace could not be read. A backup of the unreadable data was kept, and the sample workspace was loaded.",
-        backupKey: backupKey ?? undefined,
-      });
-      workspace = createSampleWorkspace();
-    } else {
-      const legacy = readLegacy();
-      if (legacy.status === "ok") {
-        const normalized = normalizeWorkspace(legacy.value, { newId, now });
-        workspace = normalized.workspace;
-        notices.push({
-          level: "info",
-          message: `Workspace upgraded from the previous storage format (${legacy.key}).`,
-        });
-        if (normalized.issues.length) {
-          notices.push(...describeIssues(normalized.issues));
-        }
-        migrated = true;
-      } else {
-        if (legacy.status === "corrupt") {
-          const backupKey = backup(legacy.key ?? "legacy", legacy.raw);
-          notices.push({
-            level: "warning",
-            message:
-              "The previous saved workspace could not be read. A backup was kept and the sample workspace was loaded.",
-            backupKey: backupKey ?? undefined,
-          });
-        }
-        workspace = createSampleWorkspace();
-      }
-    }
 
     if (!available) {
       setStatus(
@@ -329,7 +326,7 @@ export function createRepository(
 
     pending = null;
     lastWritten = workspace;
-    if (migrated) {
+    if (repaired && available) {
       pending = workspace;
       lastWritten = null;
       flush();
@@ -337,26 +334,35 @@ export function createRepository(
     return { workspace, notices };
   }
 
-  function write(workspace: Workspace) {
+  function write(workspace: Workspace): ChangedSlices {
+    const changed: ChangedSlices = {
+      document: false,
+      activity: false,
+      ui: false,
+    };
     if (!lastWritten || workspace.chapters !== lastWritten.chapters) {
       storage.setItem(
-        STORAGE_KEYS.document,
+        keys.document,
         JSON.stringify(serializeDocument(workspace)),
       );
+      changed.document = true;
     }
     if (!lastWritten || workspace.events !== lastWritten.events) {
       storage.setItem(
-        STORAGE_KEYS.activity,
+        keys.activity,
         JSON.stringify(serializeActivity(workspace)),
       );
+      changed.activity = true;
     }
     if (
       !lastWritten ||
       workspace.selectedId !== lastWritten.selectedId ||
       workspace.chapters !== lastWritten.chapters
     ) {
-      storage.setItem(STORAGE_KEYS.ui, JSON.stringify(serializeUi(workspace)));
+      storage.setItem(keys.ui, JSON.stringify(serializeUi(workspace)));
+      changed.ui = true;
     }
+    return changed;
   }
 
   function flush() {
@@ -367,10 +373,18 @@ export function createRepository(
     }
     const snapshot = pending;
     try {
-      write(snapshot);
+      const changed = write(snapshot);
       lastWritten = snapshot;
       pending = null;
       if (available) setStatus(STORAGE_STATUS.saved, "All changes saved.");
+      try {
+        onFlush?.(snapshot, changed);
+      } catch {
+        setStatus(
+          STORAGE_STATUS.error,
+          "Changes are saved, but the project list could not be updated.",
+        );
+      }
     } catch (error) {
       pending = snapshot;
       setStatus(
@@ -396,22 +410,9 @@ export function createRepository(
     }, debounceMs);
   }
 
-  function status(): RepositoryStatus {
-    return currentStatus;
-  }
-
-  function onStatusChange(
-    listener: (status: RepositoryStatus) => void,
-  ): () => void {
-    statusListeners.add(listener);
-    return () => {
-      statusListeners.delete(listener);
-    };
-  }
-
   function handleStorageEvent(event: { key?: string | null }) {
     const key = event?.key;
-    if (key && !ALL_KEYS.includes(key)) return;
+    if (key && !allKeys.includes(key)) return;
     if (pending) return;
     const { workspace, notices } = load();
     for (const listener of syncListeners) listener({ workspace, notices });
@@ -448,37 +449,6 @@ export function createRepository(
     visibilitySource.addEventListener("visibilitychange", onVisibility);
   }
 
-  function exportWorkspace(workspace: Workspace): string {
-    return JSON.stringify(
-      {
-        schemaVersion: SCHEMA_VERSION,
-        exportedAt: now(),
-        project: workspace.project,
-        chapters: workspace.chapters,
-        events: workspace.events,
-        selectedId: workspace.selectedId,
-      },
-      null,
-      2,
-    );
-  }
-
-  function parseImport(text: string): {
-    workspace: Workspace;
-    issues: string[];
-  } {
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(text);
-    } catch {
-      return {
-        workspace: createSampleWorkspace(),
-        issues: ["The selected file is not valid JSON."],
-      };
-    }
-    return normalizeWorkspace(parsed, { newId, now });
-  }
-
   function dispose() {
     if (timer) clearTimeout(timer);
     timer = null;
@@ -496,23 +466,25 @@ export function createRepository(
   }
 
   return {
+    projectId,
     load,
     save,
     flush,
-    status,
-    onStatusChange,
+    status: () => currentStatus,
+    onStatusChange: (listener) => {
+      statusListeners.add(listener);
+      return () => statusListeners.delete(listener);
+    },
     subscribe,
     handleStorageEvent,
     hasPending: () => pending !== null,
-    exportWorkspace,
-    parseImport,
     dispose,
   };
 }
 
 export function downloadJson(
   json: string,
-  filename: string = "layers-workspace.json",
+  filename: string = "layers-project.json",
 ): void {
   if (typeof document === "undefined") return;
   const blob = new Blob([json], { type: "application/json" });
@@ -541,3 +513,5 @@ export function readRawBackup(storage?: Storage): string {
     return "{}";
   }
 }
+
+export { SCHEMA_VERSION };

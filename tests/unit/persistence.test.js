@@ -1,9 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
-  STORAGE_KEYS,
   STORAGE_STATUS,
   createMemoryStorage,
-  createRepository,
+  createProjectRepository,
+  projectKeys,
 } from "../../src/store/persistence.js";
 import {
   createChapter,
@@ -13,13 +13,15 @@ import {
 import { createWorkspace } from "../../src/domain/schema.js";
 
 const fixedNow = () => "2026-01-01T00:00:00.000Z";
+const projectId = "project-one";
+const keys = projectKeys(projectId);
 
 function workspaceWith(title = "Chapter") {
   const chapters = insertChapter(
     createEmptyDocument(),
     createChapter({ id: "one", title }),
   );
-  return createWorkspace({ chapters, selectedId: "one" });
+  return createWorkspace({ projectId, chapters, selectedId: "one" });
 }
 
 function recordingStorage() {
@@ -38,7 +40,8 @@ function recordingStorage() {
 }
 
 function repository(storage, options = {}) {
-  return createRepository({
+  return createProjectRepository({
+    projectId,
     storage,
     debounceMs: 250,
     windowObject: null,
@@ -59,16 +62,34 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-describe("persistence", () => {
-  it("starts from the sample workspace without touching storage", () => {
+describe("project persistence", () => {
+  it("starts a missing project with an empty document without writing", () => {
     const { storage, writes } = recordingStorage();
     const repo = repository(storage);
     const { workspace, notices } = repo.load();
 
     expect(notices).toEqual([]);
-    expect(workspace.chapters.rootIds.length).toBeGreaterThan(0);
+    expect(workspace.projectId).toBe(projectId);
+    expect(workspace.chapters.rootIds).toEqual([]);
     expect(writes).toEqual([]);
     expect(repo.status().state).toBe(STORAGE_STATUS.saved);
+  });
+
+  it("loads a saved project and restores its selected chapter", () => {
+    const { storage } = recordingStorage();
+    const first = repository(storage);
+    first.load();
+    first.save(workspaceWith("Persisted"), { immediate: true });
+    first.dispose();
+
+    const second = repository(storage);
+    const { workspace } = second.load();
+    expect(workspace.chapters.byId.one.title).toBe("Persisted");
+    expect(workspace.selectedId).toBe("one");
+    expect(JSON.parse(storage.getItem(keys.document)).schemaVersion).toBe(4);
+    expect(JSON.parse(storage.getItem(keys.document)).projectId).toBe(
+      projectId,
+    );
   });
 
   it("debounces writes and flushes them on demand", () => {
@@ -77,15 +98,15 @@ describe("persistence", () => {
     repo.load();
 
     repo.save(workspaceWith());
-    expect(storage.getItem(STORAGE_KEYS.document)).toBeNull();
+    expect(storage.getItem(keys.document)).toBeNull();
     expect(repo.status().state).toBe(STORAGE_STATUS.pending);
 
     vi.advanceTimersByTime(249);
-    expect(storage.getItem(STORAGE_KEYS.document)).toBeNull();
+    expect(storage.getItem(keys.document)).toBeNull();
     vi.advanceTimersByTime(1);
 
-    const saved = JSON.parse(storage.getItem(STORAGE_KEYS.document));
-    expect(saved.schemaVersion).toBe(3);
+    const saved = JSON.parse(storage.getItem(keys.document));
+    expect(saved.schemaVersion).toBe(4);
     expect(saved.chapters.byId.one.title).toBe("Chapter");
     expect(repo.status().state).toBe(STORAGE_STATUS.saved);
     expect(repo.hasPending()).toBe(false);
@@ -97,8 +118,7 @@ describe("persistence", () => {
     repo.load();
     repo.save(workspaceWith("Immediate"), { immediate: true });
     expect(
-      JSON.parse(storage.getItem(STORAGE_KEYS.document)).chapters.byId.one
-        .title,
+      JSON.parse(storage.getItem(keys.document)).chapters.byId.one.title,
     ).toBe("Immediate");
   });
 
@@ -111,60 +131,75 @@ describe("persistence", () => {
     repo.save(first, { immediate: true });
     writes.length = 0;
 
+    repo.save({ ...first, selectedId: first.selectedId }, { immediate: true });
+    expect(writes).toEqual([]);
+
     repo.save({ ...first, events: [] }, { immediate: true });
-    expect(writes).toEqual([STORAGE_KEYS.activity]);
+    expect(writes).toEqual([keys.activity]);
   });
 
-  it("migrates the phase 1 nested payload into v3 keys", () => {
+  it("reports document flushes to the catalog only when chapters change", () => {
+    const changes = [];
+    const repo = repository(createMemoryStorage(), {
+      onFlush: (_workspace, changed) => changes.push(changed.document),
+    });
+    const base = repo.load().workspace;
+
+    repo.save({ ...base, selectedId: base.selectedId }, { immediate: true });
+    expect(changes).toEqual([false]);
+
+    repo.save(workspaceWith("Changed"), { immediate: true });
+    expect(changes).toEqual([false, true]);
+  });
+
+  it("ignores the phase 1/2 legacy keys", () => {
     const { storage } = recordingStorage();
     storage.setItem(
-      "layers-chapters-v2",
+      "layers:doc:v3",
       JSON.stringify({
-        chapters: [
-          {
-            id: "legacy",
-            title: "Legacy chapter",
-            description: "From v2",
-            criteria: [{ id: "c1", text: "Legacy criterion", checked: true }],
-            children: [],
+        project: { id: "website", name: "Old", account: "W" },
+        chapters: {
+          byId: {
+            old: { id: "old", title: "Old", criteria: [], childIds: [] },
           },
-        ],
-        selectedId: "legacy",
-        events: [{ id: "e1", message: "Old event", time: fixedNow() }],
+          rootIds: ["old"],
+        },
       }),
     );
-
     const repo = repository(storage);
-    const { workspace, notices } = repo.load();
-
-    expect(workspace.chapters.byId.legacy.title).toBe("Legacy chapter");
-    expect(workspace.selectedId).toBe("legacy");
-    expect(workspace.events).toHaveLength(1);
-    expect(notices[0].message).toContain("upgraded");
-    expect(repo.status().state).toBe(STORAGE_STATUS.saved);
-
-    const document = JSON.parse(storage.getItem(STORAGE_KEYS.document));
-    expect(document.chapters.byId.legacy.parentId).toBeNull();
-    expect(
-      JSON.parse(storage.getItem(STORAGE_KEYS.activity)).events,
-    ).toHaveLength(1);
-    expect(JSON.parse(storage.getItem(STORAGE_KEYS.ui)).selectedId).toBe(
-      "legacy",
-    );
-    // The legacy key is preserved for rollback.
-    expect(storage.getItem("layers-chapters-v2")).not.toBeNull();
+    const { workspace } = repo.load();
+    expect(workspace.chapters.rootIds).toEqual([]);
+    expect(storage.getItem("layers:doc:v3")).not.toBeNull();
   });
 
   it("backs up a corrupt document instead of losing it silently", () => {
     const { storage } = recordingStorage();
-    storage.setItem(STORAGE_KEYS.document, "{not json");
+    storage.setItem(keys.document, "{not json");
     const repo = repository(storage);
     const { workspace, notices } = repo.load();
 
     expect(notices[0].level).toBe("warning");
     expect(notices[0].backupKey).toBeTruthy();
     expect(storage.getItem(notices[0].backupKey)).toBe("{not json");
-    expect(workspace.chapters.rootIds.length).toBeGreaterThan(0);
+    expect(workspace.chapters.rootIds).toEqual([]);
+    expect(JSON.parse(storage.getItem(keys.document)).chapters.rootIds).toEqual(
+      [],
+    );
+  });
+
+  it("backs up corrupt activity and keeps the document", () => {
+    const { storage } = recordingStorage();
+    const seed = repository(storage);
+    seed.load();
+    seed.save(workspaceWith("Kept"), { immediate: true });
+    seed.dispose();
+    storage.setItem(keys.activity, "{not json");
+
+    const repo = repository(storage);
+    const { workspace, notices } = repo.load();
+    expect(workspace.chapters.byId.one.title).toBe("Kept");
+    expect(workspace.events).toEqual([]);
+    expect(notices.some((notice) => notice.backupKey)).toBe(true);
   });
 
   it("reports write failures and recovers on retry", () => {
@@ -189,52 +224,35 @@ describe("persistence", () => {
     repo.flush();
     expect(repo.status().state).toBe(STORAGE_STATUS.saved);
     expect(
-      JSON.parse(source.getItem(STORAGE_KEYS.document)).chapters.byId.one.title,
+      JSON.parse(source.getItem(keys.document)).chapters.byId.one.title,
     ).toBe("Unsaved");
   });
 
   it("marks storage unavailable when no storage can be opened", () => {
-    const repo = createRepository({ windowObject: null });
+    const repo = createProjectRepository({ projectId, windowObject: null });
     const { workspace } = repo.load();
-    expect(workspace.chapters.rootIds.length).toBeGreaterThan(0);
+    expect(workspace.chapters.rootIds).toEqual([]);
     expect(repo.status().state).toBe(STORAGE_STATUS.unavailable);
-  });
-
-  it("exports and re-imports a workspace", () => {
-    const repo = repository(createMemoryStorage());
-    const { workspace } = repo.load();
-    const json = repo.exportWorkspace(workspace);
-    const parsed = JSON.parse(json);
-    expect(parsed.schemaVersion).toBe(3);
-    expect(parsed.chapters.byId["password-reset"]).toBeDefined();
-
-    const { workspace: imported, issues } = repo.parseImport(json);
-    expect(issues).toEqual([]);
-    expect(imported.chapters.byId["password-reset"].title).toBe(
-      "Password reset",
-    );
-    expect(repo.parseImport("{").issues[0]).toContain("valid JSON");
   });
 
   it("adopts external writes only when there is nothing pending", () => {
     const storage = createMemoryStorage();
     const repo = repository(storage);
     repo.load();
+    repo.save(workspaceWith("External"), { immediate: true });
+
     const received = [];
     const unsubscribe = repo.subscribe((payload) =>
-      received.push(payload.workspace.selectedId),
+      received.push(payload.workspace?.chapters.byId.one?.title),
     );
-
-    const external = workspaceWith("External");
-    repo.save(external, { immediate: true });
-    expect(repo.handleStorageEvent({ key: STORAGE_KEYS.document }));
-    expect(received.at(-1)).toBe("one");
+    expect(repo.handleStorageEvent({ key: keys.document })).toBeUndefined();
+    expect(received.at(-1)).toBe("External");
 
     repo.save(workspaceWith("Local pending"));
     const before = received.length;
-    repo.handleStorageEvent({ key: STORAGE_KEYS.document });
+    repo.handleStorageEvent({ key: keys.document });
     expect(received.length).toBe(before);
-    expect(repo.handleStorageEvent({ key: "other-app-key" }));
+    repo.handleStorageEvent({ key: "other-app-key" });
     expect(received.length).toBe(before);
     unsubscribe();
   });

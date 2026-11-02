@@ -1,27 +1,21 @@
 import { X } from "lucide-react";
 import { StorageNotice, RepositoryStatus } from "../store/persistence";
-import {
-  useWorkspaceActions,
-  useWorkspaceStatus,
-} from "../store/WorkspaceProvider";
 
 export interface StorageBannerProps {
-  notices?: StorageNotice[];
-  status?: RepositoryStatus;
+  notices: StorageNotice[];
+  status: RepositoryStatus;
   onRetry?: () => void;
   onDismiss?: () => void;
   onExport?: () => void;
 }
 
-export function StorageBanner(props: StorageBannerProps) {
-  const statusContext = useWorkspaceStatus();
-  const actionsContext = useWorkspaceActions();
-
-  const notices = props.notices ?? statusContext.notices;
-  const status = props.status ?? statusContext.status;
-  const onRetry = props.onRetry ?? actionsContext.retrySave;
-  const onDismiss = props.onDismiss ?? actionsContext.dismissNotices;
-  const onExport = props.onExport ?? actionsContext.exportWorkspace;
+export function StorageBanner({
+  notices,
+  status,
+  onRetry,
+  onDismiss,
+  onExport,
+}: StorageBannerProps) {
   const failed = status.state === "error";
   const unavailable = status.state === "unavailable";
 
@@ -40,14 +34,16 @@ export function StorageBanner(props: StorageBannerProps) {
               : status.message}
           </p>
           <div className="storage-banner-actions">
-            {failed && (
+            {failed && onRetry && (
               <button type="button" onClick={onRetry}>
                 Retry saving
               </button>
             )}
-            <button type="button" onClick={onExport}>
-              Download backup
-            </button>
+            {onExport && (
+              <button type="button" onClick={onExport}>
+                Download backup
+              </button>
+            )}
           </div>
         </div>
       )}
@@ -61,12 +57,14 @@ export function StorageBanner(props: StorageBannerProps) {
             {notice.message}
             {notice.backupKey ? ` Backup key: ${notice.backupKey}` : ""}
           </p>
-          <div className="storage-banner-actions">
-            <button type="button" onClick={onDismiss}>
-              <X size={13} />
-              Dismiss
-            </button>
-          </div>
+          {onDismiss && (
+            <div className="storage-banner-actions">
+              <button type="button" onClick={onDismiss}>
+                <X size={13} />
+                Dismiss
+              </button>
+            </div>
+          )}
         </div>
       ))}
     </div>

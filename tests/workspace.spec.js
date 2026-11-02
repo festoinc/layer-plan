@@ -389,7 +389,7 @@ test("new criteria create subchapters while manual subchapters stay outside the 
   await page.getByLabel("New success criterion").press("Enter");
   await expect(page.locator(".criterion")).toHaveCount(5);
   const stored = await page.evaluate(() =>
-    JSON.parse(localStorage.getItem("layers:doc:v3")),
+    JSON.parse(localStorage.getItem("layers:project:website:doc:v4")),
   );
   const parent = stored.chapters.byId["password-reset"];
   const createdCriterion = parent.criteria.at(-1);

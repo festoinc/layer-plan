@@ -1,7 +1,9 @@
 import { readFileSync } from "node:fs";
 import { expect, test } from "@playwright/test";
 
-test("a phase 1 workspace is migrated and announced", async ({ page }) => {
+test("legacy workspace data is cleared and two projects are seeded", async ({
+  page,
+}) => {
   await page.addInitScript(() => {
     localStorage.setItem(
       "layers-chapters-v2",
@@ -21,33 +23,40 @@ test("a phase 1 workspace is migrated and announced", async ({ page }) => {
         events: [],
       }),
     );
+    localStorage.setItem("layers:doc:v3", "{}");
   });
   await page.goto("/");
 
+  await expect(page.locator(".storage-banner")).toContainText(
+    "Multi-project storage initialised",
+  );
   await expect(
     page.getByRole("textbox", { name: "Chapter title", exact: true }),
-  ).toHaveValue("Legacy plan");
-  await expect(page.locator(".storage-banner")).toContainText("upgraded");
+  ).toHaveValue("Password reset");
+
   const keys = await page.evaluate(() => Object.keys(localStorage));
-  expect(keys).toContain("layers:doc:v3");
-  expect(keys).toContain("layers:activity:v3");
-  expect(keys).toContain("layers:ui:v3");
+  expect(keys).not.toContain("layers-chapters-v2");
+  expect(keys).not.toContain("layers:doc:v3");
+  expect(keys).toContain("layers:projects:v4");
+  expect(keys).toContain("layers:project:website:doc:v4");
+  expect(keys).toContain("layers:project:mobile:doc:v4");
 });
 
-test("a corrupt document is backed up instead of disappearing", async ({
+test("a corrupt project document is backed up instead of disappearing", async ({
   page,
 }) => {
-  await page.addInitScript(() => {
-    localStorage.setItem("layers:doc:v3", "{this is not json");
-  });
   await page.goto("/");
+  await page.evaluate(() => {
+    localStorage.setItem("layers:project:website:doc:v4", "{this is not json");
+  });
+  await page.reload();
 
   await expect(page.locator(".storage-banner-error")).toContainText(
-    "could not be read",
+    "This project could not be read",
   );
   const backup = await page.evaluate(() => {
     const key = Object.keys(localStorage).find((name) =>
-      name.startsWith("layers:backup:doc-v3"),
+      name.startsWith("layers:backup:project-website-doc-v4"),
     );
     return key ? localStorage.getItem(key) : null;
   });
@@ -55,7 +64,7 @@ test("a corrupt document is backed up instead of disappearing", async ({
 });
 
 test("the last keystroke survives an immediate reload", async ({ page }) => {
-  await page.goto("/#/chapters/password-reset");
+  await page.goto("/#/projects/website/chapters/password-reset");
   await page
     .getByRole("region", { name: "Description preview", exact: true })
     .dblclick();
@@ -68,34 +77,42 @@ test("the last keystroke survives an immediate reload", async ({ page }) => {
   ).toHaveText("Flushed before unload");
 });
 
-test("export and import round-trip the whole workspace", async ({ page }) => {
-  await page.goto("/");
+test("export and import round-trip a whole project", async ({ page }) => {
+  await page.goto("/#/projects/website/chapters/password-reset");
   await page
     .getByRole("textbox", { name: "Chapter title", exact: true })
     .fill("Exportable title");
   await page.getByRole("textbox", { name: "Chapter title" }).press("Tab");
 
   const downloadPromise = page.waitForEvent("download");
-  await page.getByRole("button", { name: "Export workspace" }).click();
+  await page.getByRole("button", { name: "Export project" }).click();
   const download = await downloadPromise;
   const file = await download.path();
   const exported = JSON.parse(readFileSync(file, "utf8"));
-  expect(exported.schemaVersion).toBe(3);
+  expect(exported.format).toBe("layers-project");
+  expect(exported.project.name).toBe("Website project");
   expect(exported.chapters.byId["password-reset"].title).toBe(
     "Exportable title",
   );
+  expect(exported.activity).toBeDefined();
+  expect(exported.ui.selectedId).toBe("password-reset");
 
   exported.chapters.byId["password-reset"].title = "Imported title";
-  await page.getByLabel("Import workspace file").setInputFiles({
-    name: "workspace.json",
+  await page.getByLabel("Import project file").setInputFiles({
+    name: "project.json",
     mimeType: "application/json",
     buffer: Buffer.from(JSON.stringify(exported)),
   });
   await expect(
     page.getByRole("textbox", { name: "Chapter title", exact: true }),
   ).toHaveValue("Imported title");
+  await expect(page.locator(".project-switcher-trigger")).toContainText(
+    "Website project (imported)",
+  );
 
+  const importedUrl = page.url();
   await page.reload();
+  expect(page.url()).toBe(importedUrl);
   await expect(
     page.getByRole("textbox", { name: "Chapter title", exact: true }),
   ).toHaveValue("Imported title");

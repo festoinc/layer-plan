@@ -10,10 +10,9 @@ import {
   useState,
 } from "react";
 import {
-  downloadJson,
-  createRepository,
+  createProjectRepository,
   STORAGE_STATUS,
-  Repository,
+  ProjectRepository,
   StorageNotice,
   RepositoryStatus,
 } from "./persistence";
@@ -22,7 +21,7 @@ import {
   workspaceReducer,
   WorkspaceAction,
 } from "./workspaceReducer";
-import { createId, Project, Workspace } from "../domain/schema";
+import { createId, Workspace } from "../domain/schema";
 
 export interface WorkspaceActions {
   select: (id: string) => void;
@@ -51,8 +50,6 @@ export interface WorkspaceActions {
   dismissNotices: () => void;
   retrySave: () => void;
   flushSave: () => void;
-  importWorkspace: (text: string) => { ok: boolean; issues: string[] };
-  exportWorkspace: () => void;
 }
 
 export interface WorkspaceStatusContextValue {
@@ -64,7 +61,7 @@ export interface WorkspaceContextValue extends WorkspaceActions {
   state: Workspace;
   status: RepositoryStatus;
   notices: StorageNotice[];
-  project: Project;
+  projectId: string;
 }
 
 const WorkspaceStateContext = createContext<Workspace | null>(null);
@@ -81,26 +78,29 @@ function shouldSaveImmediately(action: {
 }
 
 export interface WorkspaceProviderProps {
-  repository?: Repository;
+  repository?: ProjectRepository;
+  repositoryFactory?: (projectId: string) => ProjectRepository;
+  projectId?: string;
   children: ReactNode;
 }
 
 export function WorkspaceProvider({
   repository: providedRepository,
+  repositoryFactory,
+  projectId,
   children,
 }: WorkspaceProviderProps) {
-  const [repository] = useState(() => providedRepository ?? createRepository());
+  const [repository] = useState(() => {
+    if (providedRepository) return providedRepository;
+    if (repositoryFactory && projectId) return repositoryFactory(projectId);
+    return createProjectRepository({ projectId: projectId ?? "" });
+  });
   const [initial] = useState(() => repository.load());
   const [state, rawDispatch] = useReducer(workspaceReducer, initial.workspace);
   const [status, setStatus] = useState(() => repository.status());
   const [notices, setNotices] = useState(() => initial.notices);
   const lastAction = useRef<WorkspaceAction | null>(null);
   const skipNextSave = useRef(true);
-  const stateRef = useRef(state);
-
-  useEffect(() => {
-    stateRef.current = state;
-  }, [state]);
 
   const dispatch = useCallback((action: WorkspaceAction) => {
     lastAction.current = action;
@@ -136,11 +136,8 @@ export function WorkspaceProvider({
   useEffect(() => {
     return () => {
       repository.flush();
+      repository.dispose();
     };
-  }, [repository]);
-
-  const exportWorkspace = useCallback(() => {
-    downloadJson(repository.exportWorkspace(stateRef.current));
   }, [repository]);
 
   const actions: WorkspaceActions = useMemo(
@@ -200,29 +197,8 @@ export function WorkspaceProvider({
       dismissNotices: () => setNotices([]),
       retrySave: () => repository.flush(),
       flushSave: () => repository.flush(),
-      importWorkspace: (text) => {
-        const { workspace, issues } = repository.parseImport(text);
-        if (!workspace.chapters.rootIds.length) {
-          return {
-            ok: false,
-            issues: issues.length ? issues : ["The file has no chapters."],
-          };
-        }
-        lastAction.current = { type: "replaceWorkspace", workspace };
-        rawDispatch({ type: "replaceWorkspace", workspace });
-        if (issues.length) {
-          setNotices([
-            {
-              level: "info",
-              message: `Imported workspace with repairs: ${issues.slice(0, 3).join(" ")}`,
-            },
-          ]);
-        }
-        return { ok: true, issues };
-      },
-      exportWorkspace,
     }),
-    [dispatch, repository, exportWorkspace],
+    [dispatch, repository],
   );
 
   const statusValue = useMemo<WorkspaceStatusContextValue>(
@@ -280,7 +256,7 @@ export function useWorkspace(): WorkspaceContextValue {
       state,
       status,
       notices,
-      project: state.project,
+      projectId: state.projectId,
       ...actions,
     }),
     [state, status, notices, actions],

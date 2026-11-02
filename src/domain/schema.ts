@@ -7,29 +7,46 @@ import {
   getDefaultId,
 } from "./chapters";
 import { ActivityEntry, MAX_ACTIVITY_ENTRIES } from "./activity";
+import {
+  createId,
+  MAX_PROJECTS,
+  normalizeProject,
+  Project,
+  ProjectSummary,
+} from "./projects";
 
 export type { Chapter, Criterion, ChapterDocument, ActivityEntry };
+export type { Project, ProjectSummary };
+export { createId };
 
-export const SCHEMA_VERSION = 3;
-
-export interface Project {
-  id: string;
-  name: string;
-  account: string;
-}
-
-export const SAMPLE_PROJECT: Project = {
-  id: "website",
-  name: "Website project",
-  account: "W",
-};
+export const SCHEMA_VERSION = 4;
 
 export interface Workspace {
   schemaVersion: number;
-  project: Project;
+  projectId: string;
   chapters: ChapterDocument;
   events: ActivityEntry[];
   selectedId: string | null;
+}
+
+export interface ProjectIndex {
+  schemaVersion: number;
+  activeProjectId: string | null;
+  projectIds: string[];
+  projects: Record<string, ProjectSummary>;
+}
+
+export const PROJECT_EXPORT_FORMAT = "layers-project";
+export const PROJECT_EXPORT_VERSION = 1;
+
+export interface ProjectExport {
+  format: typeof PROJECT_EXPORT_FORMAT;
+  formatVersion: number;
+  exportedAt: string;
+  project: Project;
+  chapters: ChapterDocument;
+  activity: ActivityEntry[];
+  ui: { selectedId: string | null };
 }
 
 const isRecord = (value: unknown): value is Record<string, any> =>
@@ -37,36 +54,129 @@ const isRecord = (value: unknown): value is Record<string, any> =>
 
 const isString = (value: unknown): value is string => typeof value === "string";
 
-export function createId(): string {
-  if (
-    typeof globalThis.crypto !== "undefined" &&
-    typeof globalThis.crypto.randomUUID === "function"
-  ) {
-    return globalThis.crypto.randomUUID();
-  }
-  return `id-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
-}
-
-export function createProject(input: unknown = {}): Project {
-  const source = isRecord(input) ? input : {};
+export function createEmptyProjectIndex(): ProjectIndex {
   return {
-    id: isString(source.id) && source.id ? source.id : SAMPLE_PROJECT.id,
-    name:
-      isString(source.name) && source.name.trim()
-        ? source.name.trim()
-        : SAMPLE_PROJECT.name,
-    account:
-      isString(source.account) && source.account.trim()
-        ? source.account.trim().slice(0, 2)
-        : SAMPLE_PROJECT.account,
+    schemaVersion: SCHEMA_VERSION,
+    activeProjectId: null,
+    projectIds: [],
+    projects: {},
   };
 }
 
-export function createWorkspace(input: Partial<Workspace> = {}): Workspace {
+function normalizeStats(raw: unknown): {
+  chapterCount: number;
+  criterionCount: number;
+  checkedCount: number;
+} {
+  const source = isRecord(raw) ? raw : {};
+  const count = (value: unknown) =>
+    typeof value === "number" && Number.isFinite(value) && value >= 0
+      ? Math.floor(value)
+      : 0;
+  return {
+    chapterCount: count(source.chapterCount),
+    criterionCount: count(source.criterionCount),
+    checkedCount: count(source.checkedCount),
+  };
+}
+
+/**
+ * Repair a project catalog. Missing ids, duplicate entries, stale active ids
+ * and invalid metadata are corrected without touching project documents.
+ */
+export function normalizeProjectIndex(
+  raw: unknown,
+  options: NormalizeOptions = {},
+): { index: ProjectIndex; issues: string[] } {
+  const newId = options.newId ?? createId;
+  const now = options.now ?? (() => new Date().toISOString());
+  const issues: string[] = [];
+
+  if (!isRecord(raw)) {
+    if (raw != null) issues.push("The project catalog was not an object.");
+    return { index: createEmptyProjectIndex(), issues };
+  }
+
+  const rawProjects = isRecord(raw.projects) ? raw.projects : {};
+  if (raw.projects != null && !isRecord(raw.projects)) {
+    issues.push("The project catalog did not contain usable project entries.");
+  }
+
+  const projects: Record<string, ProjectSummary> = {};
+  const discovered: string[] = [];
+  for (const [key, value] of Object.entries(rawProjects)) {
+    const project = normalizeProject(value, { id: key, newId, now });
+    if (projects[project.id]) {
+      issues.push(`Replaced a duplicate project id (${project.id}).`);
+      const replacementId = newId();
+      projects[replacementId] = {
+        ...project,
+        id: replacementId,
+        ...normalizeStats(value),
+      };
+      discovered.push(replacementId);
+      continue;
+    }
+    projects[project.id] = {
+      ...project,
+      ...normalizeStats(value),
+    };
+    discovered.push(project.id);
+  }
+
+  const requestedOrder = Array.isArray(raw.projectIds)
+    ? raw.projectIds.filter(isString)
+    : [];
+  const projectIds: string[] = [];
+  for (const id of requestedOrder) {
+    if (!projects[id]) {
+      issues.push(`Dropped a reference to a missing project (${id}).`);
+      continue;
+    }
+    if (projectIds.includes(id)) continue;
+    projectIds.push(id);
+  }
+  for (const id of discovered) {
+    if (!projectIds.includes(id)) projectIds.push(id);
+  }
+
+  if (projectIds.length > MAX_PROJECTS) {
+    issues.push(
+      `Kept the first ${MAX_PROJECTS} projects from the saved catalog.`,
+    );
+    for (const id of projectIds.slice(MAX_PROJECTS)) delete projects[id];
+    projectIds.length = MAX_PROJECTS;
+  }
+
+  const requestedActive = isString(raw.activeProjectId)
+    ? raw.activeProjectId
+    : null;
+  const activeProjectId =
+    requestedActive && projects[requestedActive]
+      ? requestedActive
+      : (projectIds[0] ?? null);
+  if (requestedActive && !projects[requestedActive]) {
+    issues.push("The active project was missing; selected the first project.");
+  }
+
+  return {
+    index: {
+      schemaVersion: SCHEMA_VERSION,
+      activeProjectId,
+      projectIds,
+      projects,
+    },
+    issues,
+  };
+}
+
+export function createWorkspace(
+  input: Partial<Workspace> & { projectId?: string } = {},
+): Workspace {
   const chapters = input.chapters ?? createEmptyDocument();
   return {
     schemaVersion: SCHEMA_VERSION,
-    project: createProject(input.project),
+    projectId: input.projectId ?? "",
     chapters,
     events: input.events ? [...input.events] : [],
     selectedId: getDefaultId(chapters, input.selectedId),
@@ -409,24 +519,33 @@ export function normalizeActivity(
 }
 
 /**
- * Normalize a complete workspace payload (legacy or new split format).
+ * Normalize a complete project workspace payload.
  */
 export function normalizeWorkspace(
   raw: unknown,
-  options: NormalizeOptions = {},
+  options: NormalizeOptions & { projectId?: string } = {},
 ): { workspace: Workspace; issues: string[] } {
   const input = isRecord(raw) ? raw : {};
   const { document, issues } = normalizeDocument(input, options);
-  const activity = normalizeActivity(input.events, options);
+  const activitySource =
+    input.events ?? (isRecord(input) ? input.activity : undefined);
+  const activity = normalizeActivity(activitySource, options);
   issues.push(...activity.issues);
   const selectedId =
     isString(input.selectedId) && document.byId[input.selectedId]
       ? input.selectedId
       : getDefaultId(document, null);
+  const projectId =
+    options.projectId ??
+    (isString(input.projectId)
+      ? input.projectId
+      : isRecord(input.project) && isString(input.project.id)
+        ? input.project.id
+        : "");
 
   return {
     workspace: createWorkspace({
-      project: input.project,
+      projectId,
       chapters: document,
       events: activity.events,
       selectedId,
@@ -435,36 +554,124 @@ export function normalizeWorkspace(
   };
 }
 
-export function createSampleWorkspace(): Workspace {
+export function createSampleWorkspace(projectId = "website"): Workspace {
   const { document } = normalizeDocument(initialChapters);
   return createWorkspace({
+    projectId,
     chapters: document,
     selectedId: "password-reset",
   });
 }
 
+export interface ImportedProject {
+  project: Project;
+  workspace: Workspace;
+  issues: string[];
+}
+
+/**
+ * Accept a `layers-project` export, a phase 1/2 workspace export, a bare
+ * normalized document or a nested phase 1 chapter array.
+ */
+export function normalizeProjectExport(
+  raw: unknown,
+  options: NormalizeOptions = {},
+): ImportedProject {
+  const newId = options.newId ?? createId;
+  const now = options.now ?? (() => new Date().toISOString());
+  const input = isRecord(raw) ? raw : {};
+
+  let chaptersRaw: unknown = input.chapters;
+  let activityRaw: unknown = input.activity ?? input.events;
+  let projectRaw: unknown = input.project;
+  let selectedRaw: unknown = input.selectedId;
+
+  if (Array.isArray(raw)) {
+    chaptersRaw = raw;
+    activityRaw = undefined;
+    projectRaw = undefined;
+  } else if (isRecord(raw)) {
+    if (raw.format === PROJECT_EXPORT_FORMAT) {
+      chaptersRaw = raw.chapters;
+      activityRaw = raw.activity ?? raw.events;
+      selectedRaw = isRecord(raw.ui) ? raw.ui.selectedId : raw.selectedId;
+    } else if ("chapters" in raw) {
+      chaptersRaw = raw.chapters;
+      activityRaw = raw.events ?? raw.activity;
+      selectedRaw =
+        raw.selectedId ?? (isRecord(raw.ui) ? raw.ui.selectedId : null);
+    } else if ("byId" in raw && "rootIds" in raw) {
+      chaptersRaw = raw;
+    }
+  }
+
+  const issues: string[] = [];
+  const { document, issues: documentIssues } = normalizeDocument(chaptersRaw, {
+    newId,
+  });
+  issues.push(...documentIssues);
+  const activity = normalizeActivity(activityRaw, { newId, now });
+  issues.push(...activity.issues);
+
+  const project = normalizeProject(projectRaw, { newId, now });
+  const workspace = createWorkspace({
+    projectId: project.id,
+    chapters: document,
+    events: activity.events,
+    selectedId: isString(selectedRaw) ? selectedRaw : null,
+  });
+
+  return { project, workspace, issues };
+}
+
+export function serializeProjectExport(
+  project: Project,
+  workspace: Workspace,
+  exportedAt: string,
+): ProjectExport {
+  return {
+    format: PROJECT_EXPORT_FORMAT,
+    formatVersion: PROJECT_EXPORT_VERSION,
+    exportedAt,
+    project,
+    chapters: workspace.chapters,
+    activity: workspace.events,
+    ui: { selectedId: workspace.selectedId },
+  };
+}
+
 export function serializeDocument(workspace: Workspace): {
   schemaVersion: number;
-  project: Project;
+  projectId: string;
   chapters: ChapterDocument;
 } {
   return {
     schemaVersion: SCHEMA_VERSION,
-    project: workspace.project,
+    projectId: workspace.projectId,
     chapters: workspace.chapters,
   };
 }
 
 export function serializeActivity(workspace: Workspace): {
   schemaVersion: number;
+  projectId: string;
   events: ActivityEntry[];
 } {
-  return { schemaVersion: SCHEMA_VERSION, events: workspace.events };
+  return {
+    schemaVersion: SCHEMA_VERSION,
+    projectId: workspace.projectId,
+    events: workspace.events,
+  };
 }
 
 export function serializeUi(workspace: Workspace): {
   schemaVersion: number;
+  projectId: string;
   selectedId: string | null;
 } {
-  return { schemaVersion: SCHEMA_VERSION, selectedId: workspace.selectedId };
+  return {
+    schemaVersion: SCHEMA_VERSION,
+    projectId: workspace.projectId,
+    selectedId: workspace.selectedId,
+  };
 }

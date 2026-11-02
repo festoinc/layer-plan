@@ -1,6 +1,6 @@
 # Phase 3 — Multiple projects
 
-Status: planned  
+Status: delivered  
 Date: 2026-11-03
 
 ## Goal
@@ -728,7 +728,56 @@ audit stays in [phase-ideas.md](phase-ideas.md).
 | Duplicate project activity is confusing | Duplicate starts fresh history with a single “Duplicated from …” entry; documented |
 | Existing tests hard-code v3 keys and flat routes | Plan explicitly updates the storage, routing, persistence, workspace and smoke suites |
 
-## 15. Out of scope
+## 15. Delivery notes
+
+Implemented as planned, with the following concrete details:
+
+- `SCHEMA_VERSION` is `4`; the catalog key is `layers:projects:v4` and project
+  payloads use `layers:project:<id>:doc|activity|ui:v4`.
+- The first load clears the phase 1/2 keys and orphan project keys, keeps
+  `layers:backup:*`, and seeds **Website project** (`website`) and **Mobile app**
+  (`mobile`).
+- `src/domain/projects.ts` owns project metadata, initials, colours, the 9,999
+  cap and document summarisation. `src/domain/schema.ts` owns workspace/index
+  normalization and the `layers-project` export format.
+- `src/store/catalogRepository.ts` owns the catalog; `src/store/persistence.ts`
+  is the per-project document repository; `src/store/ProjectsProvider.tsx` exposes
+  the catalog; `src/store/WorkspaceProvider.tsx` mounts one project repository per
+  active project and disposes it on unmount.
+- `src/app/WorkspaceShell.tsx` keeps the editor shell and canonicalises
+  project-scoped URLs. Legacy hashes redirect to the active project.
+- The sidebar gained a project switcher, a Projects navigation row and
+  project-scoped export/import. The lazy-loaded projects page, project cards,
+  create/edit dialog and delete dialog reuse the existing visual tokens.
+- New projects start with one `Overview` chapter. Duplicates copy chapters,
+  criteria, checked states and selection but start a fresh activity history.
+  Imports always create a new project and use an `(imported)` name suffix on
+  collision.
+- Tests were expanded to 79 unit tests across 7 files and 26 Chromium browser
+  tests, including project switching, lifecycle, isolation, cross-tab catalog
+  updates, legacy reset, corrupt project recovery, project export/import,
+  project-scoped routing and axe checks on the projects page, switcher and
+  dialogs.
+
+### Verification
+
+Run on 2026-11-03:
+
+```sh
+npm run lint          # clean
+npm run format:check  # clean
+npm run typecheck     # clean
+npm run test:unit     # 79 passed (7 files)
+npm run build         # succeeded
+npm run test:e2e      # 26 passed (Chromium)
+npm run test:prod     # 1 passed (production preview)
+```
+
+Production build (gzip): app 22.1 kB, React 69.0 kB, Markdown vendor 50.6 kB,
+icons 1.9 kB, projects page 2.0 kB (lazy), activity 0.7 kB (lazy), coverage
+0.4 kB (lazy), CSS 6.8 kB.
+
+## 16. Out of scope
 
 Moved to [phase-ideas.md](phase-ideas.md):
 

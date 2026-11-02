@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useSyncExternalStore } from "react";
 
 export const ROUTE_VIEWS = {
+  projects: "projects" as const,
   specifications: "specifications" as const,
   coverage: "coverage" as const,
   activity: "activity" as const,
@@ -10,12 +11,15 @@ export type RouteView = (typeof ROUTE_VIEWS)[keyof typeof ROUTE_VIEWS];
 
 export interface ParsedRoute {
   view: RouteView;
+  projectId: string | null;
   chapterId: string | null;
+  legacy: boolean;
   valid: boolean;
 }
 
 export interface RouteTarget {
   view?: RouteView | string;
+  projectId?: string | null;
   chapterId?: string | null;
 }
 
@@ -43,47 +47,167 @@ function getSnapshot(): string {
   return typeof window === "undefined" ? "" : window.location.hash;
 }
 
+function decode(value: string | undefined): string | null {
+  if (!value) return null;
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return null;
+  }
+}
+
 export function parseRoute(hash: string): ParsedRoute {
   const path = String(hash ?? "")
     .replace(/^#/, "")
     .replace(/^\//, "")
     .replace(/\/$/, "");
 
-  if (!path)
-    return { view: ROUTE_VIEWS.specifications, chapterId: null, valid: false };
-  if (path === ROUTE_VIEWS.coverage) {
-    return { view: ROUTE_VIEWS.coverage, chapterId: null, valid: true };
-  }
-  if (path === ROUTE_VIEWS.activity) {
-    return { view: ROUTE_VIEWS.activity, chapterId: null, valid: true };
+  if (!path) {
+    return {
+      view: ROUTE_VIEWS.specifications,
+      projectId: null,
+      chapterId: null,
+      legacy: true,
+      valid: false,
+    };
   }
 
-  const chapterMatch = path.match(/^chapters\/(.+)$/);
-  if (chapterMatch) {
-    try {
+  const segments = path.split("/").filter(Boolean);
+
+  if (segments[0] === "projects") {
+    if (segments.length === 1) {
       return {
-        view: ROUTE_VIEWS.specifications,
-        chapterId: decodeURIComponent(chapterMatch[1]),
+        view: ROUTE_VIEWS.projects,
+        projectId: null,
+        chapterId: null,
+        legacy: false,
         valid: true,
       };
-    } catch {
+    }
+
+    const projectId = decode(segments[1]);
+    if (!projectId) {
       return {
-        view: ROUTE_VIEWS.specifications,
+        view: ROUTE_VIEWS.projects,
+        projectId: null,
         chapterId: null,
+        legacy: false,
         valid: false,
       };
     }
+
+    if (segments.length === 2) {
+      return {
+        view: ROUTE_VIEWS.specifications,
+        projectId,
+        chapterId: null,
+        legacy: false,
+        valid: true,
+      };
+    }
+
+    const section = segments[2];
+    if (section === "chapters") {
+      if (segments.length > 4) {
+        return {
+          view: ROUTE_VIEWS.specifications,
+          projectId,
+          chapterId: null,
+          legacy: false,
+          valid: false,
+        };
+      }
+      return {
+        view: ROUTE_VIEWS.specifications,
+        projectId,
+        chapterId: decode(segments[3]),
+        legacy: false,
+        valid: true,
+      };
+    }
+    if (section === ROUTE_VIEWS.coverage && segments.length === 3) {
+      return {
+        view: ROUTE_VIEWS.coverage,
+        projectId,
+        chapterId: null,
+        legacy: false,
+        valid: true,
+      };
+    }
+    if (section === ROUTE_VIEWS.activity && segments.length === 3) {
+      return {
+        view: ROUTE_VIEWS.activity,
+        projectId,
+        chapterId: null,
+        legacy: false,
+        valid: true,
+      };
+    }
+    return {
+      view: ROUTE_VIEWS.specifications,
+      projectId,
+      chapterId: null,
+      legacy: false,
+      valid: false,
+    };
   }
 
-  return { view: ROUTE_VIEWS.specifications, chapterId: null, valid: false };
+  if (path === ROUTE_VIEWS.coverage) {
+    return {
+      view: ROUTE_VIEWS.coverage,
+      projectId: null,
+      chapterId: null,
+      legacy: true,
+      valid: true,
+    };
+  }
+  if (path === ROUTE_VIEWS.activity) {
+    return {
+      view: ROUTE_VIEWS.activity,
+      projectId: null,
+      chapterId: null,
+      legacy: true,
+      valid: true,
+    };
+  }
+
+  const chapterMatch = path.match(/^chapters(?:\/(.+))?$/);
+  if (chapterMatch) {
+    return {
+      view: ROUTE_VIEWS.specifications,
+      projectId: null,
+      chapterId: decode(chapterMatch[1]),
+      legacy: true,
+      valid: true,
+    };
+  }
+
+  return {
+    view: ROUTE_VIEWS.specifications,
+    projectId: null,
+    chapterId: null,
+    legacy: true,
+    valid: false,
+  };
 }
 
 export function routeToHash(route: RouteTarget): string {
-  if (route.view === ROUTE_VIEWS.coverage) return "#/coverage";
-  if (route.view === ROUTE_VIEWS.activity) return "#/activity";
+  if (route.view === ROUTE_VIEWS.projects) return "#/projects";
+
+  if (!route.projectId) {
+    if (route.view === ROUTE_VIEWS.coverage) return "#/coverage";
+    if (route.view === ROUTE_VIEWS.activity) return "#/activity";
+    return route.chapterId
+      ? `#/chapters/${encodeURIComponent(route.chapterId)}`
+      : "#/chapters";
+  }
+
+  const base = `#/projects/${encodeURIComponent(route.projectId)}`;
+  if (route.view === ROUTE_VIEWS.coverage) return `${base}/coverage`;
+  if (route.view === ROUTE_VIEWS.activity) return `${base}/activity`;
   return route.chapterId
-    ? `#/chapters/${encodeURIComponent(route.chapterId)}`
-    : "#/chapters";
+    ? `${base}/chapters/${encodeURIComponent(route.chapterId)}`
+    : `${base}/chapters`;
 }
 
 export interface RouteContextValue extends ParsedRoute {

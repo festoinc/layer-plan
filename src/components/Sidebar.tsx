@@ -4,24 +4,28 @@ import {
   Clock3,
   FileText,
   Layers,
+  LayoutGrid,
   LucideIcon,
   Plus,
   X,
 } from "lucide-react";
 import { ChapterTree } from "./ChapterTree";
+import { ProjectSwitcher } from "./ProjectSwitcher";
 import { TreeNode } from "../hooks/useChapterTree";
-import { Project } from "../domain/schema";
+import { MAX_PROJECTS, ProjectSummary } from "../domain/projects";
 import { RepositoryStatus } from "../store/persistence";
 import { useWorkspaceStatus } from "../store/WorkspaceProvider";
 
 const VIEWS: [string, string, LucideIcon][] = [
+  ["projects", "Projects", LayoutGrid],
   ["specifications", "Specifications", FileText],
   ["coverage", "Test coverage", ChartNoAxesColumnIncreasing],
   ["activity", "Activity", Clock3],
 ];
 
 export interface SidebarProps {
-  project: Project;
+  project: ProjectSummary;
+  projects: ProjectSummary[];
   view: string;
   nodes: TreeNode[];
   selectedId: string | null;
@@ -39,12 +43,16 @@ export interface SidebarProps {
   onChapterTitleChange: (value: string) => void;
   onCreateChapter: (event: FormEvent<HTMLFormElement>) => void;
   onCancelChapter: () => void;
-  onExport: () => void;
-  onImport: (text: string) => { ok: boolean; issues: string[] };
+  onSwitchProject: (id: string) => void;
+  onOpenProjects: () => void;
+  onNewProject: () => void;
+  onExportProject: () => void;
+  onImportProject: (text: string) => { ok: boolean; issues: string[] };
 }
 
 export function Sidebar({
   project,
+  projects,
   view,
   nodes,
   selectedId,
@@ -62,8 +70,11 @@ export function Sidebar({
   onChapterTitleChange,
   onCreateChapter,
   onCancelChapter,
-  onExport,
-  onImport,
+  onSwitchProject,
+  onOpenProjects,
+  onNewProject,
+  onExportProject,
+  onImportProject,
 }: SidebarProps) {
   const fileInput = useRef<HTMLInputElement | null>(null);
   const [importError, setImportError] = useState("");
@@ -75,7 +86,7 @@ export function Sidebar({
     event.target.value = "";
     if (!file) return;
     try {
-      const result = onImport(await file.text());
+      const result = onImportProject(await file.text());
       setImportError(result.ok ? "" : result.issues.join(" "));
     } catch {
       setImportError("The selected file could not be read.");
@@ -106,13 +117,14 @@ export function Sidebar({
           <X size={19} />
         </button>
       </div>
-      <div className="project-label">
-        <span className="project-icon">{project.account}</span>
-        <div>
-          <strong>{project.name}</strong>
-          <span>Project specification</span>
-        </div>
-      </div>
+      <ProjectSwitcher
+        key={project.id}
+        project={project}
+        projects={projects}
+        onSelect={onSwitchProject}
+        onOpenProjects={onOpenProjects}
+        onNewProject={onNewProject}
+      />
       <nav className="workspace-navigation" aria-label="Workspace">
         {VIEWS.map(([key, name, Icon]) => (
           <button
@@ -155,18 +167,22 @@ export function Sidebar({
         New chapter
       </button>
       <div className="workspace-tools">
-        <button type="button" onClick={onExport}>
-          Export workspace
+        <button type="button" onClick={onExportProject}>
+          Export project
         </button>
-        <button type="button" onClick={() => fileInput.current?.click()}>
-          Import workspace
+        <button
+          type="button"
+          disabled={projects.length >= MAX_PROJECTS}
+          onClick={() => fileInput.current?.click()}
+        >
+          Import project
         </button>
         <input
           ref={fileInput}
           className="visually-hidden"
           type="file"
           accept="application/json,.json"
-          aria-label="Import workspace file"
+          aria-label="Import project file"
           onChange={handleImport}
         />
       </div>

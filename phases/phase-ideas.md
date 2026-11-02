@@ -11,7 +11,7 @@ re-reading the delivery notes.
 How to use this file:
 
 - Keep the stable `ID` when referring to an idea in a new phase plan.
-- Move an idea to **Promoted** when it gets a phase; keep the history line.
+- Remove an idea once its phase is delivered.
 - Add new ideas only with a source and a short reason for deferral.
 
 ## Product capabilities
@@ -143,8 +143,3 @@ chapter editor.
 **Next step:** prototype only if a project dashboard becomes a real need; the
 phase 3 projects page is the first step in that direction.
 
-## Promoted
-
-| ID | Idea | Promoted to | Date |
-| --- | --- | --- | --- |
-| — | Multiple local projects with full lifecycle, project-scoped storage, routes and export/import | Phase 3 | 2026-11-03 |

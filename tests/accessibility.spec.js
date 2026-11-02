@@ -78,3 +78,24 @@ test("skip link, chapter selection and the mobile drawer manage focus", async ({
   ).toBeFocused();
   await expect(page.locator(".sidebar")).not.toHaveClass(/open/);
 });
+
+test("projects page, switcher and dialogs are accessible", async ({ page }) => {
+  await page.goto("/#/projects");
+  await expectNoViolations(page, "projects");
+
+  await page.locator(".project-switcher-trigger").click();
+  await expectNoViolations(page, "project switcher");
+  await page.keyboard.press("Escape");
+
+  await page.getByRole("button", { name: "New project", exact: true }).click();
+  await expect(page.getByRole("dialog")).toBeVisible();
+  await expectNoViolations(page, "new project dialog");
+  await page.keyboard.press("Escape");
+
+  await page
+    .getByRole("button", { name: "Actions for Website project", exact: true })
+    .click();
+  await page.getByRole("menuitem", { name: "Delete" }).click();
+  await expect(page.getByRole("alertdialog")).toBeVisible();
+  await expectNoViolations(page, "delete project dialog");
+});
