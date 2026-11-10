@@ -135,6 +135,86 @@ describe("workspace reducer", () => {
     expect(state.chapters.byId.parent.criteria).toEqual([]);
   });
 
+  it("updates chapter verification mode and text", () => {
+    let state = workspaceReducer(baseState(), {
+      type: "setChapterVerificationMode",
+      chapterId: "parent",
+      mode: "auto",
+      activityId: "a1",
+      time,
+    });
+    expect(state.chapters.byId.parent.verification.mode).toBe("auto");
+    expect(state.events[0].message).toBe("Set Auto-test verification: Parent");
+
+    const events = state.events;
+    state = workspaceReducer(state, {
+      type: "setChapterVerificationText",
+      chapterId: "parent",
+      field: "auto",
+      value: "npm test parent",
+    });
+    expect(state.chapters.byId.parent.verification.auto.command).toBe(
+      "npm test parent",
+    );
+    expect(state.events).toBe(events);
+
+    state = workspaceReducer(state, {
+      type: "setChapterVerificationText",
+      chapterId: "parent",
+      field: "human",
+      value: "Manual check",
+    });
+    expect(state.chapters.byId.parent.verification.human.instructions).toBe(
+      "Manual check",
+    );
+  });
+
+  it("deletes a chapter subtree and its linked parent criterion", () => {
+    let state = baseState();
+    state = workspaceReducer(state, {
+      type: "addCriterion",
+      chapterId: "parent",
+      text: "Enter password",
+      criterionId: "c2",
+      subchapterId: "s1",
+      activityId: "a1",
+      subchapterActivityId: "a2",
+      time,
+    });
+    state = workspaceReducer(state, {
+      type: "addCriterion",
+      chapterId: "s1",
+      text: "Check 6 digits",
+      criterionId: "c3",
+      subchapterId: "s2",
+      activityId: "a3",
+      subchapterActivityId: "a4",
+      time,
+    });
+    expect(state.chapters.byId.parent.criteria.map((item) => item.id)).toEqual([
+      "c1",
+      "c2",
+    ]);
+
+    state = workspaceReducer(state, {
+      type: "deleteChapter",
+      id: "s1",
+      activityId: "a5",
+      time,
+    });
+    expect(state.chapters.byId.s1).toBeUndefined();
+    expect(state.chapters.byId.s2).toBeUndefined();
+    expect(state.chapters.byId.parent.criteria.map((item) => item.id)).toEqual([
+      "c1",
+    ]);
+    expect(state.selectedId).toBe("parent");
+    expect(state.events[0]).toMatchObject({
+      message: "Deleted chapter: Enter password",
+      chapterId: null,
+      chapterName: "Enter password",
+    });
+  });
+
   it("caps activity at one hundred entries", () => {
     let state = baseState();
     for (let index = 0; index < 120; index += 1) {

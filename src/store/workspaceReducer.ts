@@ -2,6 +2,7 @@ import { appendActivity, createActivityEntry } from "../domain/activity";
 import {
   Chapter,
   createChapter,
+  deleteSubtree,
   getChapter,
   getDefaultId,
   insertChapter,
@@ -16,6 +17,11 @@ import {
   toggleCriterion as toggleCriterionInDocument,
 } from "../domain/criteria";
 import { createId, Workspace } from "../domain/schema";
+import {
+  VerificationMode,
+  VerificationTextField,
+  verificationModeLabel,
+} from "../domain/verification";
 
 export type { Workspace, Chapter };
 
@@ -26,8 +32,10 @@ export type { Workspace, Chapter };
  */
 export const IMMEDIATE_ACTIONS = new Set<string>([
   "createChapter",
+  "deleteChapter",
   "addCriterion",
   "setCriterionText",
+  "setChapterVerificationMode",
   "toggleCriterion",
   "removeCriterion",
   "logActivity",
@@ -49,7 +57,8 @@ interface ActivityInput {
 }
 
 function withActivity(state: Workspace, input: ActivityInput): Workspace {
-  const chapterId = input.chapterId ?? state.selectedId;
+  const chapterId =
+    input.chapterId === undefined ? state.selectedId : input.chapterId;
   const chapter = chapterOf(state, chapterId);
   const entry = createActivityEntry({
     id: input.id ?? createId(),
@@ -79,6 +88,12 @@ export type WorkspaceAction =
       value: string | boolean;
     }
   | {
+      type: "deleteChapter";
+      id: string;
+      activityId?: string;
+      time?: string;
+    }
+  | {
       type: "logActivity";
       message: string;
       chapterId?: string | null;
@@ -102,6 +117,19 @@ export type WorkspaceAction =
       chapterId: string;
       criterionId: string;
       text: string;
+    }
+  | {
+      type: "setChapterVerificationMode";
+      chapterId: string;
+      mode: VerificationMode;
+      activityId?: string;
+      time?: string;
+    }
+  | {
+      type: "setChapterVerificationText";
+      chapterId: string;
+      field: VerificationTextField;
+      value: string;
     }
   | {
       type: "toggleCriterion";
@@ -152,6 +180,24 @@ export function workspaceReducer(
         chapterName: chapter.title,
         time: action.time,
       });
+    }
+
+    case "deleteChapter": {
+      const current = chapterOf(state, action.id);
+      if (!current) return state;
+      const { document, removedIds } = deleteSubtree(state.chapters, action.id);
+      if (!removedIds.length) return state;
+      const selectedId = getDefaultId(document, current.parentId);
+      return withActivity(
+        { ...state, chapters: document, selectedId },
+        {
+          id: action.activityId,
+          message: `Deleted chapter: ${current.title}`,
+          chapterId: null,
+          chapterName: current.title,
+          time: action.time,
+        },
+      );
     }
 
     case "setChapterField": {
@@ -239,6 +285,64 @@ export function workspaceReducer(
             text,
           },
         ),
+      };
+    }
+
+    case "setChapterVerificationMode": {
+      const current = chapterOf(state, action.chapterId);
+      if (!current || current.verification.mode === action.mode) return state;
+      const chapters = patchChapter(state.chapters, action.chapterId, {
+        verification: { ...current.verification, mode: action.mode },
+      });
+      if (chapters === state.chapters) return state;
+      return withActivity(
+        { ...state, chapters },
+        {
+          id: action.activityId,
+          message: `Set ${verificationModeLabel(action.mode)} verification: ${current.title}`,
+          chapterId: action.chapterId,
+          chapterName: current.title,
+          time: action.time,
+        },
+      );
+    }
+
+    case "setChapterVerificationText": {
+      const current = chapterOf(state, action.chapterId);
+      if (!current) return state;
+      const currentValue =
+        action.field === "auto"
+          ? current.verification.auto.command
+          : action.field === "human"
+            ? current.verification.human.instructions
+            : current.verification.ai.instructions;
+      if (currentValue === action.value) return state;
+      const verification =
+        action.field === "auto"
+          ? {
+              ...current.verification,
+              auto: { ...current.verification.auto, command: action.value },
+            }
+          : action.field === "human"
+            ? {
+                ...current.verification,
+                human: {
+                  ...current.verification.human,
+                  instructions: action.value,
+                },
+              }
+            : {
+                ...current.verification,
+                ai: {
+                  ...current.verification.ai,
+                  instructions: action.value,
+                },
+              };
+      return {
+        ...state,
+        chapters: patchChapter(state.chapters, action.chapterId, {
+          verification,
+        }),
       };
     }
 

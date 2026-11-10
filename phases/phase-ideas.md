@@ -68,17 +68,17 @@ controls.
 **Next step:** add a chapter actions menu and drag handles; reuse the existing
 focus and confirmation patterns.
 
-### P-06 — Real test coverage
+### P-06 — Report-based test coverage
 
 **Source:** phase 1 boundaries, phase 2 out of scope.  
-**What:** replace the placeholder page with real coverage: persist
-`Criterion.coverage = { status: "covered" | "partial" | "missing", tests:
-[{ id, name, file, lastRun? }] }`, link criteria to automated tests, and compute
-project coverage.  
-**Why deferred:** the model is documented in phase 2 but not persisted; needs a
-test-report ingestion format.  
-**Next step:** choose the report format (JUnit XML, JSON) and add a schema
-migration for `Criterion.coverage`.
+**Status:** partially addressed by phase 4, which delivered declaration-based
+coverage from Auto-test commands and project test guidelines.
+**What remains:** execute Auto-test commands, ingest test reports, persist
+last-run status/results and link individual report cases to criteria.
+**Why deferred:** phase 4 intentionally stores declarations without running
+tests or recording results.
+**Next step:** choose the report format (JUnit XML, JSON), define result
+retention, and add a schema migration for the result fields.
 
 ### P-07 — Code block syntax highlighting
 

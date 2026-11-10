@@ -21,6 +21,7 @@ import { Workspace } from "../domain/schema";
 export interface ProjectsContextValue {
   projects: ProjectSummary[];
   activeProjectId: string | null;
+  getProjectGuidelines: (id: string) => string;
   notices: StorageNotice[];
   status: RepositoryStatus;
   createProject: (input: ProjectInput) => CatalogResult<ProjectSummary>;
@@ -130,6 +131,7 @@ export function ProjectsProvider({
         refresh();
       },
       createProjectRepository: repository.createProjectRepository,
+      getProjectGuidelines: (id: string) => repository.getProjectGuidelines(id),
       dismissNotices: () => setNotices([]),
       retryCatalog: () => {
         repository.retry();

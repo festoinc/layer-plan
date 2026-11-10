@@ -119,8 +119,9 @@ describe("chapter document", () => {
     expect(next.byId.a1).toBeUndefined();
     expect(next.byId.a1x).toBeUndefined();
     expect(next.byId.a.childIds).toEqual(["a2"]);
-    expect(next.byId.b.criteria[0]).not.toHaveProperty("chapterId");
-    expect(next.byId.b.criteria[1].chapterId).toBe("a2");
+    expect(next.byId.b.criteria).toEqual([
+      { id: "c2", text: "kept", checked: false, chapterId: "a2" },
+    ]);
   });
 
   it("moves chapters and rejects cycles", () => {

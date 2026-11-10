@@ -190,7 +190,7 @@ test("an empty catalog shows the standalone projects page and can create", async
 }) => {
   await page.addInitScript(() => {
     localStorage.setItem(
-      "layers:projects:v4",
+      "layers:projects:v5",
       JSON.stringify({
         schemaVersion: 4,
         activeProjectId: null,

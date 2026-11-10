@@ -24,6 +24,11 @@ test("specifications, activity and coverage pages are accessible", async ({
   await page.goto("/");
   await expectNoViolations(page, "specifications");
 
+  await page.getByRole("button", { name: /^Delete chapter:/ }).click();
+  await expect(page.getByRole("alertdialog")).toBeVisible();
+  await expectNoViolations(page, "delete chapter dialog");
+  await page.keyboard.press("Escape");
+
   await page.getByRole("button", { name: "Activity", exact: true }).click();
   await expect(
     page.getByRole("heading", { name: "No activity yet" }),

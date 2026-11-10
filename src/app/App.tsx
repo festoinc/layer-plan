@@ -72,6 +72,14 @@ function StandaloneProjects() {
 
   const closeProjectDialog = useCallback(() => setProjectDialog(null), []);
   const closeDeleteDialog = useCallback(() => setDeleteTarget(null), []);
+  const openCreateProject = useCallback(
+    () => setProjectDialog({ mode: "create" }),
+    [],
+  );
+  const openProjectSettings = useCallback(
+    (item: ProjectSummary) => setProjectDialog({ mode: "edit", project: item }),
+    [],
+  );
 
   const openProject = useCallback(
     (id: string) => {
@@ -122,10 +130,8 @@ function StandaloneProjects() {
         projects={projects}
         activeProjectId={activeProjectId}
         onOpenProject={openProject}
-        onNewProject={() => setProjectDialog({ mode: "create" })}
-        onEditProject={(item) =>
-          setProjectDialog({ mode: "edit", project: item })
-        }
+        onNewProject={openCreateProject}
+        onEditProject={openProjectSettings}
         onDuplicateProject={(item) => {
           const result = duplicateProject(item.id);
           if (result.ok) openProject(result.value.id);

@@ -140,7 +140,7 @@ test("chapter tree can collapse, chapter creation can cancel, and mobile layout 
   });
 });
 
-test("workspace tabs show the coverage placeholder and persistent activity", async ({
+test("workspace tabs show test coverage and persistent activity", async ({
   page,
 }) => {
   await page.goto("/");
@@ -150,7 +150,12 @@ test("workspace tabs show the coverage placeholder and persistent activity", asy
   await expect(
     page.getByRole("heading", { name: "Test coverage", exact: true }),
   ).toBeVisible();
-  await expect(page.locator(".development-badge")).toHaveText("In development");
+  await expect(
+    page.getByRole("heading", { name: "Test guidelines" }),
+  ).toBeVisible();
+  await expect(page.locator(".coverage-summary")).toContainText(
+    "eligible chapters covered",
+  );
   await page.getByRole("button", { name: "Activity", exact: true }).click();
   await expect(
     page.getByRole("heading", { name: "No activity yet" }),
@@ -203,7 +208,7 @@ test("workspace tabs show the coverage placeholder and persistent activity", asy
   await page
     .getByRole("button", { name: "Test coverage", exact: true })
     .click();
-  await expect(page.locator(".development-badge")).toBeVisible();
+  await expect(page.locator(".coverage-summary")).toBeVisible();
   await expect(page.locator(".sidebar")).not.toHaveClass(/open/);
 });
 
@@ -389,7 +394,7 @@ test("new criteria create subchapters while manual subchapters stay outside the 
   await page.getByLabel("New success criterion").press("Enter");
   await expect(page.locator(".criterion")).toHaveCount(5);
   const stored = await page.evaluate(() =>
-    JSON.parse(localStorage.getItem("layers:project:website:doc:v4")),
+    JSON.parse(localStorage.getItem("layers:project:website:doc:v5")),
   );
   const parent = stored.chapters.byId["password-reset"];
   const createdCriterion = parent.criteria.at(-1);

@@ -34,6 +34,8 @@ describe("project catalog", () => {
     const storage = createMemoryStorage();
     storage.setItem("layers:doc:v3", "{}");
     storage.setItem("layers-chapters-v2", "[]");
+    storage.setItem("layers:projects:v4", "{}");
+    storage.setItem("layers:project:website:doc:v4", "{}");
     const projects = catalog(storage);
     const { index, notices } = projects.load();
 
@@ -43,9 +45,13 @@ describe("project catalog", () => {
       "Website project",
       "Mobile app",
     ]);
-    expect(notices[0].message).toContain("Multi-project storage");
+    expect(notices[0].message).toContain("Project storage reset");
     expect(storage.getItem("layers:doc:v3")).toBeNull();
     expect(storage.getItem("layers-chapters-v2")).toBeNull();
+    expect(storage.getItem("layers:projects:v4")).toBeNull();
+    expect(storage.getItem("layers:project:website:doc:v4")).toBeNull();
+    expect(projects.getProjectGuidelines("website")).toContain("npm test");
+    expect(storage.getItem(projectKeys("website").settings)).toBeTruthy();
     expect(storage.getItem(STORAGE_KEYS.index)).toBeTruthy();
     expect(storage.getItem(projectKeys("website").document)).toBeTruthy();
     expect(storage.getItem(projectKeys("mobile").document)).toBeTruthy();
@@ -60,6 +66,7 @@ describe("project catalog", () => {
       name: "  Internal tools  ",
       initials: "it",
       color: "amber",
+      testGuidelines: "Run the internal suite.",
     });
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -76,6 +83,9 @@ describe("project catalog", () => {
     expect(Object.values(document.chapters.byId)[0].title).toBe("Overview");
     const activity = readJson(storage, projectKeys(project.id).activity);
     expect(activity.events[0].message).toBe("Created project");
+    expect(projects.getProjectGuidelines(project.id)).toBe(
+      "Run the internal suite.",
+    );
   });
 
   it("updates metadata and records the change in the project activity", () => {
@@ -88,6 +98,7 @@ describe("project catalog", () => {
       initials: "MS",
       color: "sky",
       description: "Public pages",
+      testGuidelines: "Run the marketing checks.",
     });
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -98,6 +109,9 @@ describe("project catalog", () => {
 
     const activity = readJson(storage, projectKeys("website").activity);
     expect(activity.events[0].message).toContain("Marketing site");
+    expect(projects.getProjectGuidelines("website")).toBe(
+      "Run the marketing checks.",
+    );
 
     const invalid = projects.updateProject("website", { name: "   " });
     expect(invalid.ok).toBe(false);
@@ -127,6 +141,9 @@ describe("project catalog", () => {
     const activity = readJson(storage, projectKeys(result.value.id).activity);
     expect(activity.events).toHaveLength(1);
     expect(activity.events[0].message).toContain("Duplicated from");
+    expect(projects.getProjectGuidelines(result.value.id)).toBe(
+      projects.getProjectGuidelines("website"),
+    );
   });
 
   it("deletes the active project, chooses the next one and removes its keys", () => {
@@ -169,7 +186,9 @@ describe("project catalog", () => {
     expect(json).toBeTruthy();
     const parsed = JSON.parse(json);
     expect(parsed.format).toBe("layers-project");
+    expect(parsed.formatVersion).toBe(3);
     expect(parsed.project.name).toBe("Website project");
+    expect(parsed.testGuidelines).toContain("npm test");
     expect(parsed.chapters.byId["password-reset"]).toBeDefined();
     expect(parsed.ui.selectedId).toBe("password-reset");
 
@@ -218,6 +237,7 @@ describe("project catalog", () => {
     if (!result.ok) return;
     expect(result.value.name).toBe("Legacy website (imported)");
     expect(result.value.initials).toBe("LW");
+    expect(projects.getProjectGuidelines(result.value.id)).toBe("");
     const document = readJson(storage, projectKeys(result.value.id).document);
     expect(document.chapters.byId.one.title).toBe("Legacy chapter");
     const activity = readJson(storage, projectKeys(result.value.id).activity);

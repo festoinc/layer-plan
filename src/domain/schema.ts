@@ -14,12 +14,16 @@ import {
   Project,
   ProjectSummary,
 } from "./projects";
+import {
+  hasVerificationContent,
+  normalizeVerification,
+} from "./verificationTypes";
 
 export type { Chapter, Criterion, ChapterDocument, ActivityEntry };
 export type { Project, ProjectSummary };
 export { createId };
 
-export const SCHEMA_VERSION = 4;
+export const SCHEMA_VERSION = 6;
 
 export interface Workspace {
   schemaVersion: number;
@@ -36,14 +40,52 @@ export interface ProjectIndex {
   projects: Record<string, ProjectSummary>;
 }
 
+export const MAX_TEST_GUIDELINES = 8000;
+
+export interface ProjectSettings {
+  schemaVersion: number;
+  projectId: string;
+  testGuidelines: string;
+}
+
+export function normalizeTestGuidelines(value: unknown): string {
+  return isString(value)
+    ? value.replace(/\r\n/g, "\n").trim().slice(0, MAX_TEST_GUIDELINES)
+    : "";
+}
+
+export function createProjectSettings(
+  projectId: string,
+  testGuidelines = "",
+): ProjectSettings {
+  return {
+    schemaVersion: SCHEMA_VERSION,
+    projectId,
+    testGuidelines: normalizeTestGuidelines(testGuidelines),
+  };
+}
+
+export function serializeProjectSettings(settings: ProjectSettings): {
+  schemaVersion: number;
+  projectId: string;
+  testGuidelines: string;
+} {
+  return {
+    schemaVersion: SCHEMA_VERSION,
+    projectId: settings.projectId,
+    testGuidelines: settings.testGuidelines,
+  };
+}
+
 export const PROJECT_EXPORT_FORMAT = "layers-project";
-export const PROJECT_EXPORT_VERSION = 1;
+export const PROJECT_EXPORT_VERSION = 3;
 
 export interface ProjectExport {
   format: typeof PROJECT_EXPORT_FORMAT;
   formatVersion: number;
   exportedAt: string;
   project: Project;
+  testGuidelines: string;
   chapters: ChapterDocument;
   activity: ActivityEntry[];
   ui: { selectedId: string | null };
@@ -209,6 +251,8 @@ function coerceChapter(
   if (!title) title = "Untitled chapter";
 
   const criteria = normalizeCriteria(raw.criteria, { newId, issues });
+  const verificationSource =
+    raw.verification ?? legacyCriterionVerification(raw.criteria);
 
   return {
     id,
@@ -216,9 +260,24 @@ function coerceChapter(
     title,
     description: isString(raw.description) ? raw.description : "",
     finalLevel: raw.finalLevel === true,
+    verification: normalizeVerification(verificationSource),
     criteria,
     childIds: [],
   };
+}
+
+/**
+ * Phase 4 stored verification on each criterion. Phase 5 moves it to the
+ * chapter; keep the first non-empty rule so old v5 data upgrades in place.
+ */
+function legacyCriterionVerification(rawCriteria: unknown): unknown {
+  if (!Array.isArray(rawCriteria)) return undefined;
+  for (const item of rawCriteria) {
+    if (!isRecord(item) || !isRecord(item.verification)) continue;
+    const normalized = normalizeVerification(item.verification);
+    if (hasVerificationContent(normalized)) return item.verification;
+  }
+  return undefined;
 }
 
 function normalizeCriteria(
@@ -565,6 +624,7 @@ export function createSampleWorkspace(projectId = "website"): Workspace {
 
 export interface ImportedProject {
   project: Project;
+  testGuidelines: string;
   workspace: Workspace;
   issues: string[];
 }
@@ -585,6 +645,9 @@ export function normalizeProjectExport(
   let activityRaw: unknown = input.activity ?? input.events;
   let projectRaw: unknown = input.project;
   let selectedRaw: unknown = input.selectedId;
+  const testGuidelinesRaw: unknown =
+    input.testGuidelines ??
+    (isRecord(input.project) ? input.project.testGuidelines : undefined);
 
   if (Array.isArray(raw)) {
     chaptersRaw = raw;
@@ -621,12 +684,18 @@ export function normalizeProjectExport(
     selectedId: isString(selectedRaw) ? selectedRaw : null,
   });
 
-  return { project, workspace, issues };
+  return {
+    project,
+    testGuidelines: normalizeTestGuidelines(testGuidelinesRaw),
+    workspace,
+    issues,
+  };
 }
 
 export function serializeProjectExport(
   project: Project,
   workspace: Workspace,
+  testGuidelines: string,
   exportedAt: string,
 ): ProjectExport {
   return {
@@ -634,6 +703,7 @@ export function serializeProjectExport(
     formatVersion: PROJECT_EXPORT_VERSION,
     exportedAt,
     project,
+    testGuidelines: normalizeTestGuidelines(testGuidelines),
     chapters: workspace.chapters,
     activity: workspace.events,
     ui: { selectedId: workspace.selectedId },

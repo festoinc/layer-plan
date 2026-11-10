@@ -28,7 +28,7 @@ test("legacy workspace data is cleared and two projects are seeded", async ({
   await page.goto("/");
 
   await expect(page.locator(".storage-banner")).toContainText(
-    "Multi-project storage initialised",
+    "Project storage reset",
   );
   await expect(
     page.getByRole("textbox", { name: "Chapter title", exact: true }),
@@ -37,9 +37,9 @@ test("legacy workspace data is cleared and two projects are seeded", async ({
   const keys = await page.evaluate(() => Object.keys(localStorage));
   expect(keys).not.toContain("layers-chapters-v2");
   expect(keys).not.toContain("layers:doc:v3");
-  expect(keys).toContain("layers:projects:v4");
-  expect(keys).toContain("layers:project:website:doc:v4");
-  expect(keys).toContain("layers:project:mobile:doc:v4");
+  expect(keys).toContain("layers:projects:v5");
+  expect(keys).toContain("layers:project:website:doc:v5");
+  expect(keys).toContain("layers:project:mobile:doc:v5");
 });
 
 test("a corrupt project document is backed up instead of disappearing", async ({
@@ -47,7 +47,7 @@ test("a corrupt project document is backed up instead of disappearing", async ({
 }) => {
   await page.goto("/");
   await page.evaluate(() => {
-    localStorage.setItem("layers:project:website:doc:v4", "{this is not json");
+    localStorage.setItem("layers:project:website:doc:v5", "{this is not json");
   });
   await page.reload();
 
@@ -56,7 +56,7 @@ test("a corrupt project document is backed up instead of disappearing", async ({
   );
   const backup = await page.evaluate(() => {
     const key = Object.keys(localStorage).find((name) =>
-      name.startsWith("layers:backup:project-website-doc-v4"),
+      name.startsWith("layers:backup:project-website-doc-v5"),
     );
     return key ? localStorage.getItem(key) : null;
   });
@@ -90,7 +90,10 @@ test("export and import round-trip a whole project", async ({ page }) => {
   const file = await download.path();
   const exported = JSON.parse(readFileSync(file, "utf8"));
   expect(exported.format).toBe("layers-project");
+  expect(exported.formatVersion).toBe(3);
   expect(exported.project.name).toBe("Website project");
+  expect(exported.testGuidelines).toContain("npm test");
+  expect(exported.chapters.byId["login"].verification.mode).toBe("auto");
   expect(exported.chapters.byId["password-reset"].title).toBe(
     "Exportable title",
   );
@@ -109,6 +112,18 @@ test("export and import round-trip a whole project", async ({ page }) => {
   await expect(page.locator(".project-switcher-trigger")).toContainText(
     "Website project (imported)",
   );
+  await page
+    .getByRole("button", { name: "Test coverage", exact: true })
+    .click();
+  await expect(
+    page.getByLabel("Shared instructions for human and AI testers"),
+  ).toHaveValue(/Run npm test/);
+  await page
+    .getByRole("button", { name: "Specifications", exact: true })
+    .click();
+  await expect(
+    page.getByRole("textbox", { name: "Chapter title", exact: true }),
+  ).toHaveValue("Imported title");
 
   const importedUrl = page.url();
   await page.reload();

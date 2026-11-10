@@ -1,3 +1,8 @@
+import {
+  createDefaultVerification,
+  type VerificationRule,
+} from "./verificationTypes";
+
 /**
  * Normalized chapter document operations.
  *
@@ -19,6 +24,7 @@ export interface Chapter {
   title: string;
   description: string;
   finalLevel: boolean;
+  verification: VerificationRule;
   criteria: Criterion[];
   childIds: string[];
 }
@@ -41,6 +47,7 @@ export function createChapter(
     title: input.title ?? "Untitled chapter",
     description: input.description ?? "",
     finalLevel: Boolean(input.finalLevel),
+    verification: input.verification ?? createDefaultVerification(),
     criteria: input.criteria ? [...input.criteria] : [],
     childIds: input.childIds ? [...input.childIds] : [],
   };
@@ -194,7 +201,8 @@ export function collectSubtreeIds(
 
 /**
  * Delete a chapter and its descendants. Criteria elsewhere that linked to a
- * removed chapter keep their text but lose the dangling link.
+ * removed chapter are removed with it, so removing a criterion-created
+ * subchapter also removes its parent checklist item.
  */
 export function deleteSubtree(
   document: ChapterDocument,
@@ -208,16 +216,13 @@ export function deleteSubtree(
   const byId: Record<string, Chapter> = {};
   for (const [key, value] of Object.entries(document.byId)) {
     if (removed.has(key)) continue;
-    const criteria = value.criteria.map((criterion) => {
-      if (!criterion.chapterId || !removed.has(criterion.chapterId)) {
-        return criterion;
-      }
-      const { chapterId: _removedId, ...rest } = criterion;
-      return rest;
-    });
-    byId[key] = criteria.some((item, index) => item !== value.criteria[index])
-      ? { ...value, criteria }
-      : value;
+    const criteria = value.criteria.filter(
+      (criterion) => !criterion.chapterId || !removed.has(criterion.chapterId),
+    );
+    byId[key] =
+      criteria.length !== value.criteria.length
+        ? { ...value, criteria }
+        : value;
   }
 
   const parentId = chapter.parentId;

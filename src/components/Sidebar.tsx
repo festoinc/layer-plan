@@ -135,11 +135,6 @@ export function Sidebar({
           >
             <Icon size={16} />
             {name}
-            {name === "Test coverage" && (
-              <span className="soon-badge" aria-hidden="true">
-                Soon
-              </span>
-            )}
           </button>
         ))}
       </nav>

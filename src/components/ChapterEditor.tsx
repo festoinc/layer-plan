@@ -6,11 +6,19 @@ import {
   useRef,
   useState,
 } from "react";
-import { ChevronRight, Plus, X } from "lucide-react";
+import { ChevronRight, Plus, Trash2, X } from "lucide-react";
 import { AutoTextarea, EditableMarkdown } from "../Markdown";
 import { Chapter } from "../domain/chapters";
 import { criterionProgress } from "../domain/criteria";
 import { useWorkspaceActions } from "../store/WorkspaceProvider";
+import { VerificationRules } from "./VerificationRules";
+import { DeleteChapterDialog } from "./DeleteChapterDialog";
+
+export interface ChapterDeleteInfo {
+  descendantCount: number;
+  parentTitle?: string;
+  linkedCriterionText?: string;
+}
 
 export interface ChapterEditorProps {
   chapter: Chapter;
@@ -19,6 +27,8 @@ export interface ChapterEditorProps {
   onAutoFocused: () => void;
   onSelectChapter: (id: string) => void;
   onRevealChildren: (id: string) => void;
+  deleteInfo: ChapterDeleteInfo;
+  onDeleteChapter: () => void;
 }
 
 export function ChapterEditor({
@@ -28,6 +38,8 @@ export function ChapterEditor({
   onAutoFocused,
   onSelectChapter,
   onRevealChildren,
+  deleteInfo,
+  onDeleteChapter,
 }: ChapterEditorProps) {
   const {
     setChapterField,
@@ -40,7 +52,9 @@ export function ChapterEditor({
   } = useWorkspaceActions();
   const titleRef = useRef<HTMLInputElement | null>(null);
   const [newCriterion, setNewCriterion] = useState("");
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const progress = criterionProgress(chapter);
+  const showVerification = chapter.parentId !== null;
 
   useEffect(() => {
     if (!autoFocusTitle) return;
@@ -98,6 +112,15 @@ export function ChapterEditor({
           ))}
         </nav>
         <div className="document-options">
+          <button
+            type="button"
+            className="icon-button delete-chapter-button"
+            aria-label={`Delete chapter: ${chapter.title || "Untitled chapter"}`}
+            title="Delete chapter"
+            onClick={() => setConfirmDelete(true)}
+          >
+            <Trash2 size={16} />
+          </button>
           <label
             className="final-level"
             title="Keep new criteria in this document without automatically creating subdocuments"
@@ -153,10 +176,11 @@ export function ChapterEditor({
           rows={3}
         />
       </section>
+      {showVerification && <VerificationRules chapter={chapter} />}
       <section className="criteria-section" aria-labelledby="criteria-heading">
         <div className="criteria-heading">
           <span className="section-number" aria-hidden="true">
-            02
+            {showVerification ? "03" : "02"}
           </span>
           <h2 id="criteria-heading">Success criteria</h2>
           {progress.total > 0 && (
@@ -240,6 +264,19 @@ export function ChapterEditor({
           )}
         </form>
       </section>
+      {confirmDelete && (
+        <DeleteChapterDialog
+          title={chapter.title || "Untitled chapter"}
+          descendantCount={deleteInfo.descendantCount}
+          parentTitle={deleteInfo.parentTitle}
+          linkedCriterionText={deleteInfo.linkedCriterionText}
+          onClose={() => setConfirmDelete(false)}
+          onDelete={() => {
+            setConfirmDelete(false);
+            onDeleteChapter();
+          }}
+        />
+      )}
     </article>
   );
 }

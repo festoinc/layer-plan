@@ -1,15 +1,19 @@
 import { describe, expect, it } from "vitest";
 import {
+  MAX_TEST_GUIDELINES,
   SCHEMA_VERSION,
   createEmptyProjectIndex,
+  createProjectSettings,
   createSampleWorkspace,
   createWorkspace,
   normalizeActivity,
   normalizeDocument,
   normalizeProjectExport,
   normalizeProjectIndex,
+  normalizeTestGuidelines,
   normalizeWorkspace,
   serializeProjectExport,
+  serializeProjectSettings,
 } from "../../src/domain/schema.js";
 import {
   MAX_PROJECTS,
@@ -321,15 +325,30 @@ describe("projects", () => {
       { name: "Source" },
       { id: "source", newId: ids(), now: fixedNow },
     );
-    const exported = serializeProjectExport(project, workspace, fixedNow());
+    const exported = serializeProjectExport(
+      project,
+      workspace,
+      "Run the tests",
+      fixedNow(),
+    );
     expect(exported.format).toBe("layers-project");
+    expect(exported.formatVersion).toBe(3);
+    expect(exported.testGuidelines).toBe("Run the tests");
 
     const imported = normalizeProjectExport(exported, {
       newId: ids(),
       now: fixedNow,
     });
     expect(imported.project.name).toBe("Source");
+    expect(imported.testGuidelines).toBe("Run the tests");
     expect(imported.workspace.chapters.byId.one.title).toBe("One");
+    expect(imported.workspace.chapters.byId.one.verification).toMatchObject({
+      mode: "human",
+      auto: { command: "" },
+    });
+    expect(imported.workspace.chapters.byId.one.criteria[0]).not.toHaveProperty(
+      "verification",
+    );
     expect(imported.workspace.selectedId).toBe("one");
     expect(imported.issues).toEqual([]);
 
@@ -352,5 +371,77 @@ describe("projects", () => {
     expect(legacy.project.initials).toBe("W");
     expect(legacy.workspace.events).toHaveLength(1);
     expect(legacy.workspace.chapters.byId.one.title).toBe("Legacy");
+    expect(legacy.testGuidelines).toBe("");
+    expect(legacy.workspace.chapters.byId.one.verification.mode).toBe("human");
+  });
+
+  it("moves legacy criterion verification onto the chapter", () => {
+    const { document } = normalizeDocument(
+      {
+        byId: {
+          root: {
+            id: "root",
+            title: "Root",
+            criteria: [],
+            childIds: ["child"],
+          },
+          child: {
+            id: "child",
+            title: "Child",
+            criteria: [
+              {
+                id: "c1",
+                text: "First",
+                checked: true,
+                verification: {
+                  mode: "auto",
+                  auto: { command: "npm test child" },
+                  human: { instructions: "" },
+                  ai: { instructions: "" },
+                },
+              },
+              {
+                id: "c2",
+                text: "Second",
+                checked: false,
+                verification: {
+                  mode: "human",
+                  auto: { command: "" },
+                  human: { instructions: "Another rule" },
+                  ai: { instructions: "" },
+                },
+              },
+            ],
+            childIds: [],
+          },
+        },
+        rootIds: ["root"],
+      },
+      { newId: ids(), now: fixedNow },
+    );
+    expect(document.byId.child.verification).toMatchObject({
+      mode: "auto",
+      auto: { command: "npm test child" },
+    });
+    expect(document.byId.child.criteria[0]).not.toHaveProperty("verification");
+    expect(document.byId.child.criteria[1]).not.toHaveProperty("verification");
+  });
+
+  it("normalizes project settings and clamps guidelines", () => {
+    expect(normalizeTestGuidelines("  spaced  ")).toBe("spaced");
+    expect(
+      normalizeTestGuidelines("x".repeat(MAX_TEST_GUIDELINES + 5)),
+    ).toHaveLength(MAX_TEST_GUIDELINES);
+    const settings = createProjectSettings("project-one", "  Run npm test  ");
+    expect(settings).toEqual({
+      schemaVersion: SCHEMA_VERSION,
+      projectId: "project-one",
+      testGuidelines: "Run npm test",
+    });
+    expect(serializeProjectSettings(settings)).toMatchObject({
+      schemaVersion: SCHEMA_VERSION,
+      projectId: "project-one",
+      testGuidelines: "Run npm test",
+    });
   });
 });

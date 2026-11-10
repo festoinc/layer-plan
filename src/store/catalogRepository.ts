@@ -17,16 +17,19 @@ import {
 import {
   createEmptyProjectIndex,
   createId,
+  createProjectSettings,
   createWorkspace,
   normalizeActivity,
   normalizeDocument,
   normalizeProjectExport,
   normalizeProjectIndex,
+  normalizeTestGuidelines,
   ProjectIndex,
   SCHEMA_VERSION,
   serializeActivity,
   serializeDocument,
   serializeProjectExport,
+  serializeProjectSettings,
   serializeUi,
   Workspace,
 } from "../domain/schema";
@@ -57,6 +60,7 @@ export interface CatalogRepository {
   load: () => { index: ProjectIndex; notices: StorageNotice[] };
   listProjects: () => ProjectSummary[];
   getProject: (id: string) => ProjectSummary | null;
+  getProjectGuidelines: (id: string) => string;
   getActiveProjectId: () => string | null;
   setActiveProject: (id: string) => boolean;
   createProject: (input: ProjectInput) => CatalogResult<ProjectSummary>;
@@ -162,7 +166,37 @@ export function createCatalogRepository(
     }
   }
 
-  function writeProjectPayload(id: string, workspace: Workspace): boolean {
+  function writeProjectSettings(id: string, guidelines: string): boolean {
+    try {
+      storage.setItem(
+        projectKeys(id).settings,
+        JSON.stringify(
+          serializeProjectSettings(createProjectSettings(id, guidelines)),
+        ),
+      );
+      return true;
+    } catch (error) {
+      setStatus(
+        STORAGE_STATUS.error,
+        error instanceof Error
+          ? `The project settings could not be saved: ${error.message}`
+          : "The project settings could not be saved.",
+      );
+      return false;
+    }
+  }
+
+  function getProjectGuidelines(id: string): string {
+    const result = readJson(storage, projectKeys(id).settings);
+    if (result.status !== "ok") return "";
+    return normalizeTestGuidelines(result.value?.testGuidelines);
+  }
+
+  function writeProjectPayload(
+    id: string,
+    workspace: Workspace,
+    testGuidelines = "",
+  ): boolean {
     const keys = projectKeys(id);
     try {
       storage.setItem(
@@ -174,6 +208,12 @@ export function createCatalogRepository(
         JSON.stringify(serializeActivity(workspace)),
       );
       storage.setItem(keys.ui, JSON.stringify(serializeUi(workspace)));
+      storage.setItem(
+        keys.settings,
+        JSON.stringify(
+          serializeProjectSettings(createProjectSettings(id, testGuidelines)),
+        ),
+      );
       return true;
     } catch (error) {
       setStatus(
@@ -188,7 +228,7 @@ export function createCatalogRepository(
 
   function removeProjectPayload(id: string) {
     const keys = projectKeys(id);
-    for (const key of [keys.document, keys.activity, keys.ui]) {
+    for (const key of [keys.document, keys.activity, keys.ui, keys.settings]) {
       try {
         storage.removeItem(key);
       } catch {
@@ -258,7 +298,7 @@ export function createCatalogRepository(
         events: [],
         selectedId: sample.selectedId,
       });
-      writeProjectPayload(project.id, workspace);
+      writeProjectPayload(project.id, workspace, sample.testGuidelines);
       next.projects[project.id] = summarizeProject(project, document);
       next.projectIds.push(project.id);
     }
@@ -268,7 +308,7 @@ export function createCatalogRepository(
     notices.push({
       level: "info",
       message:
-        "Multi-project storage initialised. Previous single-project data was cleared.",
+        "Project storage reset. Previous projects were replaced with the new sample projects.",
     });
   }
 
@@ -376,7 +416,7 @@ export function createCatalogRepository(
       selectedId: chapter.id,
     });
 
-    if (!writeProjectPayload(id, workspace)) {
+    if (!writeProjectPayload(id, workspace, input.testGuidelines ?? "")) {
       return { ok: false, issues: ["The project could not be saved."] };
     }
 
@@ -408,6 +448,16 @@ export function createCatalogRepository(
       return { ok: false, issues: ["A project name is required."] };
     }
 
+    const previousGuidelines = getProjectGuidelines(id);
+    const nextGuidelines =
+      patch.testGuidelines === undefined
+        ? previousGuidelines
+        : normalizeTestGuidelines(patch.testGuidelines);
+    const guidelinesChanged = nextGuidelines !== previousGuidelines;
+    if (guidelinesChanged && !writeProjectSettings(id, nextGuidelines)) {
+      return { ok: false, issues: ["The test guidelines could not be saved."] };
+    }
+
     const project = normalizeProject(
       { ...existing, ...patch, id, updatedAt: now() },
       { id, newId, now },
@@ -424,7 +474,9 @@ export function createCatalogRepository(
     const message =
       existing.name !== project.name
         ? `Renamed project to "${project.name}"`
-        : "Updated project settings";
+        : guidelinesChanged
+          ? "Updated test guidelines"
+          : "Updated project settings";
     const activityWritten = writeProjectActivity(id, message, project.name);
     notify();
     return {
@@ -493,7 +545,7 @@ export function createCatalogRepository(
       selectedId: workspace.selectedId,
     });
 
-    if (!writeProjectPayload(newProjectId, copy)) {
+    if (!writeProjectPayload(newProjectId, copy, getProjectGuidelines(id))) {
       return { ok: false, issues: ["The duplicate could not be saved."] };
     }
 
@@ -594,7 +646,7 @@ export function createCatalogRepository(
       selectedId: imported.workspace.selectedId,
     });
 
-    if (!writeProjectPayload(id, workspace)) {
+    if (!writeProjectPayload(id, workspace, imported.testGuidelines)) {
       return {
         ok: false,
         issues: ["The imported project could not be saved."],
@@ -621,7 +673,7 @@ export function createCatalogRepository(
     if (!project) return null;
     const source = workspace ?? readProjectWorkspace(id);
     return JSON.stringify(
-      serializeProjectExport(project, source, now()),
+      serializeProjectExport(project, source, getProjectGuidelines(id), now()),
       null,
       2,
     );
@@ -710,6 +762,7 @@ export function createCatalogRepository(
     load,
     listProjects,
     getProject,
+    getProjectGuidelines,
     getActiveProjectId: () => index.activeProjectId,
     setActiveProject,
     createProject,

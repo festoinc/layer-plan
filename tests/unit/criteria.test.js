@@ -67,7 +67,12 @@ describe("criteria", () => {
     );
 
     expect(next.byId.parent.criteria).toEqual([
-      { id: "c1", text: "Do the thing", checked: false, chapterId: "s1" },
+      {
+        id: "c1",
+        text: "Do the thing",
+        checked: false,
+        chapterId: "s1",
+      },
     ]);
     expect(next.byId.s1.parentId).toBe("parent");
     expect(next.byId.s1.description).toBe("Do the thing");

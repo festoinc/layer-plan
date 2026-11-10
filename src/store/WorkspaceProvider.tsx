@@ -22,6 +22,10 @@ import {
   WorkspaceAction,
 } from "./workspaceReducer";
 import { createId, Workspace } from "../domain/schema";
+import {
+  VerificationMode,
+  VerificationTextField,
+} from "../domain/verification";
 
 export interface WorkspaceActions {
   select: (id: string) => void;
@@ -30,6 +34,7 @@ export interface WorkspaceActions {
     parentId?: string | null;
     title: string;
   }) => string;
+  deleteChapter: (id: string) => void;
   setChapterField: (
     id: string,
     field: "title" | "description" | "finalLevel" | string,
@@ -40,6 +45,15 @@ export interface WorkspaceActions {
     chapterId: string,
     criterionId: string,
     text: string,
+  ) => void;
+  setChapterVerificationMode: (
+    chapterId: string,
+    mode: VerificationMode,
+  ) => void;
+  setChapterVerificationText: (
+    chapterId: string,
+    field: VerificationTextField,
+    value: string,
   ) => void;
   toggleCriterion: (chapterId: string, criterionId: string) => void;
   removeCriterion: (chapterId: string, criterionId: string) => void;
@@ -154,6 +168,13 @@ export function WorkspaceProvider({
         });
         return id;
       },
+      deleteChapter: (id) =>
+        dispatch({
+          type: "deleteChapter",
+          id,
+          activityId: createId(),
+          time: new Date().toISOString(),
+        }),
       setChapterField: (id, field, value) =>
         dispatch({ type: "setChapterField", id, field, value }),
       addCriterion: (chapterId, text) =>
@@ -169,6 +190,21 @@ export function WorkspaceProvider({
         }),
       setCriterionText: (chapterId, criterionId, text) =>
         dispatch({ type: "setCriterionText", chapterId, criterionId, text }),
+      setChapterVerificationMode: (chapterId, mode) =>
+        dispatch({
+          type: "setChapterVerificationMode",
+          chapterId,
+          mode,
+          activityId: createId(),
+          time: new Date().toISOString(),
+        }),
+      setChapterVerificationText: (chapterId, field, value) =>
+        dispatch({
+          type: "setChapterVerificationText",
+          chapterId,
+          field,
+          value,
+        }),
       toggleCriterion: (chapterId, criterionId) =>
         dispatch({
           type: "toggleCriterion",

@@ -14,7 +14,7 @@ import { Sidebar } from "../components/Sidebar";
 import { SkipLink } from "../components/SkipLink";
 import { StorageBanner } from "../components/StorageBanner";
 import { Topbar } from "../components/Topbar";
-import { getDefaultId, getPath } from "../domain/chapters";
+import { collectSubtreeIds, getDefaultId, getPath } from "../domain/chapters";
 import { ProjectInput, ProjectPatch, ProjectSummary } from "../domain/projects";
 import { useChapterTree } from "../hooks/useChapterTree";
 import { useFocusTrap } from "../hooks/useFocusTrap";
@@ -44,6 +44,7 @@ export function WorkspaceShell({ projectId }: WorkspaceShellProps) {
   const {
     select,
     createChapter,
+    deleteChapter,
     flushSave,
     retrySave,
     dismissNotices: dismissWorkspaceNotices,
@@ -95,6 +96,20 @@ export function WorkspaceShell({ projectId }: WorkspaceShellProps) {
     () => (activeId ? getPath(state.chapters, activeId) : []),
     [state.chapters, activeId],
   );
+  const deleteInfo = useMemo(() => {
+    if (!chapter) return { descendantCount: 0 };
+    const parent = chapter.parentId
+      ? state.chapters.byId[chapter.parentId]
+      : null;
+    const linked = parent?.criteria.find(
+      (criterion) => criterion.chapterId === chapter.id,
+    );
+    return {
+      descendantCount: collectSubtreeIds(state.chapters, chapter.id).length,
+      parentTitle: parent?.title,
+      linkedCriterionText: linked?.text,
+    };
+  }, [chapter, state.chapters]);
   const view = route.view;
 
   const closeNav = useCallback(() => setNavOpen(false), []);
@@ -224,8 +239,34 @@ export function WorkspaceShell({ projectId }: WorkspaceShellProps) {
   }, []);
 
   const clearFocusRequest = useCallback(() => setFocusRequest(null), []);
+  const deleteCurrentChapter = useCallback(() => {
+    if (!chapter) return;
+    const parentId =
+      chapter.parentId && state.chapters.byId[chapter.parentId]
+        ? chapter.parentId
+        : null;
+    const target =
+      parentId ??
+      state.chapters.rootIds.find((id) => id !== chapter.id) ??
+      null;
+    deleteChapter(chapter.id);
+    setNavOpen(false);
+    route.navigate({
+      view: ROUTE_VIEWS.specifications,
+      projectId,
+      chapterId: target,
+    });
+  }, [chapter, deleteChapter, projectId, route, state.chapters]);
   const closeProjectDialog = useCallback(() => setProjectDialog(null), []);
   const closeDeleteDialog = useCallback(() => setDeleteTarget(null), []);
+  const openCreateProject = useCallback(
+    () => setProjectDialog({ mode: "create" }),
+    [],
+  );
+  const openProjectSettings = useCallback(
+    (item: ProjectSummary) => setProjectDialog({ mode: "edit", project: item }),
+    [],
+  );
 
   const openProject = useCallback(
     (id: string) => {
@@ -384,7 +425,7 @@ export function WorkspaceShell({ projectId }: WorkspaceShellProps) {
         onCancelChapter={cancelChapter}
         onSwitchProject={switchProject}
         onOpenProjects={openProjects}
-        onNewProject={() => setProjectDialog({ mode: "create" })}
+        onNewProject={openCreateProject}
         onExportProject={() => exportProjectById(projectId)}
         onImportProject={importProjectText}
       />
@@ -413,10 +454,8 @@ export function WorkspaceShell({ projectId }: WorkspaceShellProps) {
                 projects={projects}
                 activeProjectId={activeProjectId}
                 onOpenProject={openProject}
-                onNewProject={() => setProjectDialog({ mode: "create" })}
-                onEditProject={(item) =>
-                  setProjectDialog({ mode: "edit", project: item })
-                }
+                onNewProject={openCreateProject}
+                onEditProject={openProjectSettings}
                 onDuplicateProject={(item) => duplicateProjectById(item.id)}
                 onExportProject={(item) => exportProjectById(item.id)}
                 onDeleteProject={(item) => setDeleteTarget(item)}
@@ -434,6 +473,8 @@ export function WorkspaceShell({ projectId }: WorkspaceShellProps) {
                 onAutoFocused={clearFocusRequest}
                 onSelectChapter={selectChapter}
                 onRevealChildren={revealChildren}
+                deleteInfo={deleteInfo}
+                onDeleteChapter={deleteCurrentChapter}
               />
             ) : (
               <section className="chapter-editor overview-page empty-workspace">
@@ -452,7 +493,7 @@ export function WorkspaceShell({ projectId }: WorkspaceShellProps) {
             ))}
           {view === ROUTE_VIEWS.coverage && (
             <Suspense fallback={<p className="page-loading">Loading…</p>}>
-              <TestCoverageView />
+              <TestCoverageView onSelectChapter={selectChapter} />
             </Suspense>
           )}
           {view === ROUTE_VIEWS.activity && (

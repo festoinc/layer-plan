@@ -44,6 +44,7 @@ export interface ProjectInput {
   initials?: string;
   color?: ProjectColor;
   description?: string;
+  testGuidelines?: string;
 }
 
 export interface ProjectPatch {
@@ -51,6 +52,7 @@ export interface ProjectPatch {
   initials?: string;
   color?: ProjectColor;
   description?: string;
+  testGuidelines?: string;
 }
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>

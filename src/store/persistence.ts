@@ -12,10 +12,11 @@ import {
 import { getDefaultId } from "../domain/chapters";
 
 export const STORAGE_KEYS = {
-  index: "layers:projects:v4",
+  index: "layers:projects:v5",
   backupPrefix: "layers:backup:",
   projectPrefix: "layers:project:",
   legacy: [
+    "layers:projects:v4",
     "layers:doc:v3",
     "layers:activity:v3",
     "layers:ui:v3",
@@ -28,13 +29,15 @@ export interface ProjectStorageKeys {
   document: string;
   activity: string;
   ui: string;
+  settings: string;
 }
 
 export function projectKeys(projectId: string): ProjectStorageKeys {
   return {
-    document: `${STORAGE_KEYS.projectPrefix}${projectId}:doc:v4`,
-    activity: `${STORAGE_KEYS.projectPrefix}${projectId}:activity:v4`,
-    ui: `${STORAGE_KEYS.projectPrefix}${projectId}:ui:v4`,
+    document: `${STORAGE_KEYS.projectPrefix}${projectId}:doc:v5`,
+    activity: `${STORAGE_KEYS.projectPrefix}${projectId}:activity:v5`,
+    ui: `${STORAGE_KEYS.projectPrefix}${projectId}:ui:v5`,
+    settings: `${STORAGE_KEYS.projectPrefix}${projectId}:settings:v5`,
   };
 }
 

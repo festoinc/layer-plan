@@ -86,7 +86,7 @@ describe("project persistence", () => {
     const { workspace } = second.load();
     expect(workspace.chapters.byId.one.title).toBe("Persisted");
     expect(workspace.selectedId).toBe("one");
-    expect(JSON.parse(storage.getItem(keys.document)).schemaVersion).toBe(4);
+    expect(JSON.parse(storage.getItem(keys.document)).schemaVersion).toBe(6);
     expect(JSON.parse(storage.getItem(keys.document)).projectId).toBe(
       projectId,
     );
@@ -106,7 +106,7 @@ describe("project persistence", () => {
     vi.advanceTimersByTime(1);
 
     const saved = JSON.parse(storage.getItem(keys.document));
-    expect(saved.schemaVersion).toBe(4);
+    expect(saved.schemaVersion).toBe(6);
     expect(saved.chapters.byId.one.title).toBe("Chapter");
     expect(repo.status().state).toBe(STORAGE_STATUS.saved);
     expect(repo.hasPending()).toBe(false);

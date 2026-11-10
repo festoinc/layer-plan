@@ -1,4 +1,5 @@
 import type { ProjectColor } from "./domain/projects";
+import type { VerificationRule } from "./domain/verification";
 
 export interface InitialCriterion {
   id: string;
@@ -10,6 +11,7 @@ export interface InitialChapter {
   id: string;
   title: string;
   description: string;
+  verification?: VerificationRule;
   criteria: InitialCriterion[];
   children?: InitialChapter[];
 }
@@ -24,7 +26,18 @@ export interface SampleProject {
   };
   chapters: InitialChapter[];
   selectedId: string;
+  testGuidelines: string;
 }
+
+const verification = (
+  mode: VerificationRule["mode"],
+  content: string,
+): VerificationRule => ({
+  mode,
+  auto: { command: mode === "auto" ? content : "" },
+  human: { instructions: mode === "human" ? content : "" },
+  ai: { instructions: mode === "ai" ? content : "" },
+});
 
 const criterion = (
   id: string,
@@ -48,6 +61,7 @@ export const initialChapters: InitialChapter[] = [
         title: "Login form",
         description:
           "Provide a simple login form with a login field and a password field.",
+        verification: verification("auto", "npm test login:test-ok"),
         criteria: [
           criterion("login-1", "Login can be entered", true),
           criterion("login-2", "Password can be entered"),
@@ -64,6 +78,10 @@ export const initialChapters: InitialChapter[] = [
         title: "Password reset",
         description:
           "Allow users to securely reset their password by email.\n\nA user enters their email address and receives a **unique link** to choose a new password.\n\n> Reset links expire after `30 minutes`.",
+        verification: verification(
+          "human",
+          "Request a reset with the shared test account and confirm the email arrives with one unique link.",
+        ),
         criteria: [
           criterion(
             "reset-1",
@@ -83,6 +101,7 @@ export const initialChapters: InitialChapter[] = [
             title: "Reset email template",
             description:
               "Send a clear password reset email that explains why it was sent and gives the user one action to take.",
+            verification: verification("auto", "npm test email:button"),
             criteria: [
               criterion(
                 "email-1",
@@ -103,6 +122,7 @@ export const initialChapters: InitialChapter[] = [
                 title: "SMTP requirements",
                 description:
                   "Use a configured SMTP service to deliver password reset emails reliably.",
+                verification: verification("auto", "npm test smtp:tls"),
                 criteria: [
                   criterion("smtp-1", "SMTP connections use TLS"),
                   criterion("smtp-2", "Emails use a verified sender address"),
@@ -144,6 +164,7 @@ export const initialMobileChapters: InitialChapter[] = [
         title: "Welcome screens",
         description:
           "Explain the core value in three short screens with a clear way to continue.",
+        verification: verification("auto", "npm test mobile:welcome"),
         criteria: [
           criterion(
             "mobile-welcome-1",
@@ -158,6 +179,10 @@ export const initialMobileChapters: InitialChapter[] = [
         title: "Permission prompts",
         description:
           "Ask for notifications and location only when the feature needs them.",
+        verification: verification(
+          "ai",
+          "Walk through the permission prompts and report whether the copy explains the benefit before the system dialog.",
+        ),
         criteria: [
           criterion(
             "mobile-permissions-1",
@@ -185,6 +210,7 @@ export const initialMobileChapters: InitialChapter[] = [
         title: "Opt-in flow",
         description:
           "Request the system permission after the user enables a notification category.",
+        verification: verification("auto", "npm test mobile:opt-in"),
         criteria: [
           criterion(
             "mobile-opt-in-1",
@@ -198,6 +224,7 @@ export const initialMobileChapters: InitialChapter[] = [
         title: "Delivery rules",
         description:
           "Group low-priority messages and avoid duplicate delivery across devices.",
+        verification: verification("auto", "npm test mobile:delivery"),
         criteria: [
           criterion("mobile-delivery-1", "Duplicate messages are collapsed"),
           criterion("mobile-delivery-2", "Delivery failures are retried"),
@@ -220,6 +247,10 @@ export const initialMobileChapters: InitialChapter[] = [
         title: "Cache policy",
         description:
           "Cache the project list and recently opened chapters, with an expiry and a manual refresh.",
+        verification: verification(
+          "human",
+          "Read the cache documentation and confirm the expiry matches the configured value.",
+        ),
         criteria: [
           criterion("mobile-cache-1", "The cache has a documented expiry"),
           criterion("mobile-cache-2", "Pull to refresh bypasses the cache"),
@@ -230,6 +261,10 @@ export const initialMobileChapters: InitialChapter[] = [
         title: "Sync conflicts",
         description:
           "When local and remote edits conflict, keep both values available for review.",
+        verification: verification(
+          "ai",
+          "Create conflicting local and remote edits and verify the review screen appears before any overwrite.",
+        ),
         criteria: [
           criterion("mobile-sync-1", "Conflicts are shown before overwriting"),
           criterion("mobile-sync-2", "The user can keep the local version"),
@@ -250,6 +285,8 @@ export const sampleProjects: SampleProject[] = [
     },
     chapters: initialChapters,
     selectedId: "password-reset",
+    testGuidelines:
+      "Run npm test before verifying the website. Use the shared test account test@example.com and never use production data. Human reviewers should record the browser and viewport. AI reviewers should report the command output, the expected result and any screenshots.",
   },
   {
     project: {
@@ -261,5 +298,7 @@ export const sampleProjects: SampleProject[] = [
     },
     chapters: initialMobileChapters,
     selectedId: "mobile-onboarding",
+    testGuidelines:
+      "Run npm test mobile before verifying the app. Use an emulator with a clean install and a test account. Human reviewers should check both online and offline states. AI reviewers should include device size, permission state and reproduction steps in the report.",
   },
 ];
