@@ -333,6 +333,8 @@ describe("projects", () => {
     );
     expect(exported.format).toBe("layers-project");
     expect(exported.formatVersion).toBe(3);
+    expect(exported.instructions).toContain("# Layers project export");
+    expect(exported.instructions).toContain("chapters.rootIds");
     expect(exported.testGuidelines).toBe("Run the tests");
 
     const imported = normalizeProjectExport(exported, {

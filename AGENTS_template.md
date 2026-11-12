@@ -319,7 +319,9 @@ curl -sS -o "/tmp/layers-$PROJECT_ID.json" \
   "http://127.0.0.1:3001/api/v1/projects/$PROJECT_ID/export"
 ```
 
-Import always creates a new project. It never overwrites or merges:
+Every exported file contains a top-level `instructions` string that explains
+the format and how to read it. Read that field first. Import always creates a
+new project; it never overwrites or merges:
 
 ```sh
 curl -sS -X POST http://127.0.0.1:3001/api/v1/projects/import \

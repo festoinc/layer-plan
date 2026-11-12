@@ -203,6 +203,8 @@ describe("document API", () => {
     const payload = json(exported);
     expect(payload.format).toBe("layers-project");
     expect(payload.formatVersion).toBe(3);
+    expect(payload.instructions).toContain("# Layers project export");
+    expect(payload.instructions).toContain("POST /api/v1/projects/import");
 
     payload.chapters.byId["password-reset"].title = "Imported reset";
     const imported = await api.app.inject({

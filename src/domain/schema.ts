@@ -80,10 +80,60 @@ export function serializeProjectSettings(settings: ProjectSettings): {
 export const PROJECT_EXPORT_FORMAT = "layers-project";
 export const PROJECT_EXPORT_VERSION = 3;
 
+export const PROJECT_EXPORT_INSTRUCTIONS = [
+  "# Layers project export",
+  "",
+  "This file is a complete export of one Layers project. It is not a generic",
+  "document dump and it is safe to read programmatically.",
+  "",
+  "## Top-level fields",
+  "",
+  '- format: always "layers-project".',
+  "- formatVersion: the export format version.",
+  "- exportedAt: ISO timestamp for this export.",
+  "- instructions: this guide, repeated in every export for AI agents.",
+  "- project: project id, name, initials, colour, description and timestamps.",
+  "- testGuidelines: shared instructions for human and AI testers.",
+  "- chapters: the normalized chapter tree (see below).",
+  "- activity: newest-first project activity, capped at 100 entries.",
+  "- ui.selectedId: the chapter that was selected when the project was exported.",
+  "",
+  "## Reading chapters",
+  "",
+  "- chapters.byId maps chapter ids to chapter records.",
+  "- chapters.rootIds lists top-level chapters in display order.",
+  "- Each chapter has id, parentId, title, description, finalLevel,",
+  "  verification, criteria and childIds.",
+  "- criteria are checklist items with id, text and checked. A criterion may",
+  "  also have chapterId when it created a subchapter.",
+  "- Markdown is used in descriptions and criterion text.",
+  "",
+  "## Verification rules",
+  "",
+  '- Each chapter has one verification rule with mode "auto", "human" or',
+  '  "ai".',
+  "- auto.command is one command for automated verification.",
+  "- human.instructions and ai.instructions are plain text.",
+  "- Only non-root chapters are verification-eligible. Coverage counts only",
+  "  auto chapters with a non-empty command.",
+  "",
+  "## Importing",
+  "",
+  "Send this JSON document to POST /api/v1/projects/import. An import always",
+  "creates a new project and never overwrites or merges into an existing one.",
+  'Name collisions receive an "(imported)" suffix.',
+  "",
+  "For live changes, read the project document from",
+  "GET /api/v1/projects/<projectId>/document and write it back with",
+  "PUT /api/v1/projects/<projectId>/document using If-Match. Do not edit the",
+  "SQLite database directly.",
+].join("\n");
+
 export interface ProjectExport {
   format: typeof PROJECT_EXPORT_FORMAT;
   formatVersion: number;
   exportedAt: string;
+  instructions: string;
   project: Project;
   testGuidelines: string;
   chapters: ChapterDocument;
@@ -702,6 +752,7 @@ export function serializeProjectExport(
     format: PROJECT_EXPORT_FORMAT,
     formatVersion: PROJECT_EXPORT_VERSION,
     exportedAt,
+    instructions: PROJECT_EXPORT_INSTRUCTIONS,
     project,
     testGuidelines: normalizeTestGuidelines(testGuidelines),
     chapters: workspace.chapters,

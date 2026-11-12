@@ -156,3 +156,11 @@ chapter editor.
 **Next step:** prototype only if a project dashboard becomes a real need; the
 phase 3 projects page is the first step in that direction.
 
+### P-13 — commits
+add fields where we can save commit id to every document so we can then review what were implemented and where 
+
+### P-14 — Doker
+create doker image where whole app will run db is attached volume to persist restat 
+
+### P-15 — MCP
+make docker api be avalible though mcp

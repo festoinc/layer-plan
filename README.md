@@ -161,9 +161,10 @@ to its document and activity. `npm run db:reset` deletes the database, reapplies
 migrations and seeds the sample projects when `LAYERS_SEED_SAMPLES` is enabled.
 
 Project **Export project** downloads a `layers-project` version 3 JSON file;
-**Import project** uploads one through the API. Imports always create a new
-project, never overwrite, and get an `(imported)` suffix on name collisions.
-Older v1/v2 files remain importable.
+the file includes an embedded `instructions` field explaining the format for
+AI agents and other consumers. **Import project** uploads one through the API.
+Imports always create a new project, never overwrite, and get an `(imported)`
+suffix on name collisions. Older v1/v2 files remain importable.
 
 ### API
 

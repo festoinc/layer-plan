@@ -56,6 +56,8 @@ test("export and import round-trip a whole project through the API", async ({
   const exported = JSON.parse(readFileSync(file, "utf8"));
   expect(exported.format).toBe("layers-project");
   expect(exported.formatVersion).toBe(3);
+  expect(exported.instructions).toContain("# Layers project export");
+  expect(exported.instructions).toContain("Reading chapters");
   expect(exported.project.name).toBe("Website project");
   expect(exported.testGuidelines).toContain("npm test");
   expect(exported.chapters.byId["login"].verification.mode).toBe("auto");

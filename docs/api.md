@@ -119,7 +119,9 @@ curl -X POST http://127.0.0.1:3001/api/v1/projects/import \
   --data @layers-website.json
 ```
 
-Imports always create a new project and never overwrite an existing one.
+The export includes a top-level `instructions` string that explains the file
+format and how to read it. Read that field before interpreting the rest of the
+file. Imports always create a new project and never overwrite an existing one.
 
 ## Revision rules
 

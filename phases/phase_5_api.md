@@ -1232,6 +1232,9 @@ Implemented on 2026-11-11.
 - `projectExportFilename` remains a small client helper in
   `ProjectsProvider`; the server has its own filename helper for the export
   `Content-Disposition`.
+- Project exports include a top-level `instructions` string that explains the
+  file format, document model, verification rules and import endpoint for AI
+  agents and other consumers.
 - Test helpers live in `tests/api/helpers.ts`, not `server/test/helpers.ts`.
   API tests use in-memory SQLite; Playwright uses a dedicated
   `test-results/e2e.sqlite` database, one worker and the guarded reset endpoint.
