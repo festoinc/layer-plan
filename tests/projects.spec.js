@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./fixtures";
 
 test("projects switch independently and remember their selected chapter", async ({
   page,
@@ -187,18 +187,18 @@ test("project deep links resolve and unknown projects return to the list", async
 
 test("an empty catalog shows the standalone projects page and can create", async ({
   page,
+  request,
 }) => {
-  await page.addInitScript(() => {
-    localStorage.setItem(
-      "layers:projects:v5",
-      JSON.stringify({
-        schemaVersion: 4,
-        activeProjectId: null,
-        projectIds: [],
-        projects: {},
-      }),
-    );
-  });
+  const api = "http://127.0.0.1:3001/api/v1";
+  const catalog = await (await request.get(`${api}/projects`)).json();
+  for (const project of catalog.projects) {
+    const detail = await (
+      await request.get(`${api}/projects/${project.id}`)
+    ).json();
+    await request.delete(`${api}/projects/${project.id}`, {
+      headers: { "If-Match": `"${detail.metadataRevision}"` },
+    });
+  }
   await page.goto("/");
 
   await expect(page).toHaveURL(/#\/projects$/);
@@ -229,6 +229,7 @@ test("the project list updates across tabs", async ({ page, context }) => {
   await dialog.getByLabel("Project name").fill("Shared project");
   await dialog.getByRole("button", { name: "Create project" }).click();
 
+  await other.reload();
   await expect(
     other.locator(".project-card").filter({ hasText: "Shared project" }),
   ).toBeVisible();

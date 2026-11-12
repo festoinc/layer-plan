@@ -13,7 +13,9 @@ export interface ProjectDialogProps {
   mode: "create" | "edit";
   project?: ProjectSummary;
   onClose: () => void;
-  onSubmit: (values: ProjectInput) => { ok: boolean; issues: string[] };
+  onSubmit: (
+    values: ProjectInput,
+  ) => Promise<{ ok: boolean; issues: string[] }>;
 }
 
 export function ProjectDialog({
@@ -28,6 +30,7 @@ export function ProjectDialog({
   const [description, setDescription] = useState(project?.description ?? "");
   const [initialsTouched, setInitialsTouched] = useState(Boolean(project));
   const [error, setError] = useState("");
+  const [pending, setPending] = useState(false);
   const dialogRef = useRef<HTMLDivElement | null>(null);
   const titleId = useId();
   const descriptionId = useId();
@@ -50,24 +53,30 @@ export function ProjectDialog({
     );
   }
 
-  function submit(event: FormEvent<HTMLFormElement>) {
+  async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const trimmed = name.trim();
     if (!trimmed) {
       setError("A project name is required.");
       return;
     }
-    const result = onSubmit({
-      name: trimmed,
-      initials: initials || deriveInitials(trimmed),
-      color,
-      description: description.trim(),
-    });
-    if (!result.ok) {
-      setError(result.issues.join(" ") || "The project could not be saved.");
-      return;
+    setPending(true);
+    setError("");
+    try {
+      const result = await onSubmit({
+        name: trimmed,
+        initials: initials || deriveInitials(trimmed),
+        color,
+        description: description.trim(),
+      });
+      if (!result.ok) {
+        setError(result.issues.join(" ") || "The project could not be saved.");
+        return;
+      }
+      onClose();
+    } finally {
+      setPending(false);
     }
-    onClose();
   }
 
   return (
@@ -168,11 +177,16 @@ export function ProjectDialog({
               type="button"
               className="secondary-button"
               onClick={onClose}
+              disabled={pending}
             >
               Cancel
             </button>
-            <button type="submit" className="primary-button">
-              {mode === "create" ? "Create project" : "Save changes"}
+            <button type="submit" className="primary-button" disabled={pending}>
+              {pending
+                ? "Saving…"
+                : mode === "create"
+                  ? "Create project"
+                  : "Save changes"}
             </button>
           </div>
         </form>

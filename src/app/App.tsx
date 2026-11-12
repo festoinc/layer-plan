@@ -10,7 +10,7 @@ import { WorkspaceShell } from "./WorkspaceShell";
 
 export function App() {
   const projectsContext = useProjects();
-  const { projects, activeProjectId, createProjectRepository } =
+  const { projects, activeProjectId, loading, error, retryCatalog } =
     projectsContext;
   const route = useRoute();
 
@@ -24,6 +24,7 @@ export function App() {
     : (activeProjectId ?? projects[0]?.id ?? null);
 
   useEffect(() => {
+    if (loading) return;
     if (!projects.length) {
       if (route.view !== ROUTE_VIEWS.projects) {
         route.replace({ view: ROUTE_VIEWS.projects });
@@ -33,7 +34,36 @@ export function App() {
     if (unknownProject) {
       route.replace({ view: ROUTE_VIEWS.projects });
     }
-  }, [projects.length, route, unknownProject]);
+  }, [loading, projects.length, route, unknownProject]);
+
+  if (loading) {
+    return (
+      <p className="page-loading" role="status">
+        Loading projects…
+      </p>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="development-state api-load-error" role="alert">
+        <h1>The local API is not available</h1>
+        <p>{error}</p>
+        <p>
+          Start the API with <code>npm run dev</code> or check the API
+          documentation.
+        </p>
+        <div className="error-actions">
+          <button type="button" onClick={retryCatalog}>
+            Retry
+          </button>
+          <a href="/api/v1/docs" target="_blank" rel="noreferrer">
+            Open API docs
+          </a>
+        </div>
+      </div>
+    );
+  }
 
   if (!projects.length) {
     return <StandaloneProjects />;
@@ -42,11 +72,7 @@ export function App() {
   if (unknownProject || !effectiveProjectId) return null;
 
   return (
-    <WorkspaceProvider
-      key={effectiveProjectId}
-      projectId={effectiveProjectId}
-      repositoryFactory={createProjectRepository}
-    >
+    <WorkspaceProvider key={effectiveProjectId} projectId={effectiveProjectId}>
       <WorkspaceShell projectId={effectiveProjectId} />
     </WorkspaceProvider>
   );
@@ -93,30 +119,30 @@ function StandaloneProjects() {
   );
 
   const submitProjectDialog = useCallback(
-    (values: ProjectInput) => {
+    async (values: ProjectInput) => {
       if (projectDialog?.mode === "edit") {
-        const result = updateProject(
+        const result = await updateProject(
           projectDialog.project.id,
           values as ProjectPatch,
         );
         return { ok: result.ok, issues: result.issues };
       }
-      const result = createProject(values);
+      const result = await createProject(values);
       if (result.ok) openProject(result.value.id);
       return { ok: result.ok, issues: result.issues };
     },
     [createProject, openProject, projectDialog, updateProject],
   );
 
-  const submitDelete = useCallback(() => {
+  const submitDelete = useCallback(async () => {
     if (!deleteTarget) return;
-    const result = deleteProject(deleteTarget.id);
+    const result = await deleteProject(deleteTarget.id);
     if (result.ok) setDeleteTarget(null);
   }, [deleteProject, deleteTarget]);
 
   const importProjectText = useCallback(
-    (text: string) => {
-      const result = importProject(text);
+    async (text: string) => {
+      const result = await importProject(text);
       if (result.ok) openProject(result.value.id);
       return { ok: result.ok, issues: result.issues };
     },
@@ -133,10 +159,11 @@ function StandaloneProjects() {
         onNewProject={openCreateProject}
         onEditProject={openProjectSettings}
         onDuplicateProject={(item) => {
-          const result = duplicateProject(item.id);
-          if (result.ok) openProject(result.value.id);
+          void duplicateProject(item.id).then((result) => {
+            if (result.ok) openProject(result.value.id);
+          });
         }}
-        onExportProject={(item) => exportProject(item.id)}
+        onExportProject={(item) => void exportProject(item.id)}
         onDeleteProject={(item) => setDeleteTarget(item)}
         onImportProject={importProjectText}
       />
@@ -159,7 +186,7 @@ function StandaloneProjects() {
         <DeleteProjectDialog
           project={deleteTarget}
           onClose={closeDeleteDialog}
-          onExport={() => exportProject(deleteTarget.id)}
+          onExport={() => void exportProject(deleteTarget.id)}
           onDelete={submitDelete}
         />
       )}

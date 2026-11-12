@@ -3,6 +3,11 @@ import react from "@vitejs/plugin-react";
 
 export default defineConfig({
   plugins: [react()],
+  server: {
+    proxy: {
+      "/api": "http://127.0.0.1:3001",
+    },
+  },
   build: {
     target: "es2022",
     sourcemap: true,
@@ -21,13 +26,19 @@ export default defineConfig({
   },
   test: {
     environment: "node",
-    include: ["tests/unit/**/*.test.js"],
+    include: [
+      "tests/unit/**/*.test.{js,ts}",
+      "tests/api/**/*.test.ts",
+      "tests/contract/**/*.test.ts",
+    ],
     coverage: {
       reporter: ["text", "lcov"],
       include: [
-        "src/domain/**/*.js",
-        "src/store/persistence.js",
-        "src/store/workspaceReducer.js",
+        "src/domain/**/*.ts",
+        "src/api/**/*.ts",
+        "src/store/workspaceReducer.ts",
+        "server/db/**/*.ts",
+        "server/api/**/*.ts",
       ],
     },
   },

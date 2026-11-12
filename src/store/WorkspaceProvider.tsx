@@ -9,23 +9,25 @@ import {
   useRef,
   useState,
 } from "react";
+import { errorMessage, isRevisionConflict } from "../api/client";
+import type {
+  ApiNotice,
+  DocumentResponse,
+  WorkspaceStatus,
+} from "../api/types";
+import { getActivity, getDocument, saveDocument } from "../api/workspace";
+import type { ActivityEntry } from "../domain/activity";
+import type { ChapterDocument } from "../domain/chapters";
+import { createId, createWorkspace, Workspace } from "../domain/schema";
 import {
-  createProjectRepository,
-  STORAGE_STATUS,
-  ProjectRepository,
-  StorageNotice,
-  RepositoryStatus,
-} from "./persistence";
+  VerificationMode,
+  VerificationTextField,
+} from "../domain/verification";
 import {
   IMMEDIATE_ACTIONS,
   workspaceReducer,
   WorkspaceAction,
 } from "./workspaceReducer";
-import { createId, Workspace } from "../domain/schema";
-import {
-  VerificationMode,
-  VerificationTextField,
-} from "../domain/verification";
 
 export interface WorkspaceActions {
   select: (id: string) => void;
@@ -62,19 +64,21 @@ export interface WorkspaceActions {
     options?: { chapterId?: string | null; chapterName?: string },
   ) => void;
   dismissNotices: () => void;
-  retrySave: () => void;
-  flushSave: () => void;
+  retrySave: () => Promise<void>;
+  flushSave: () => Promise<void>;
+  reloadFromServer: () => Promise<void>;
+  overwriteServer: () => Promise<void>;
 }
 
 export interface WorkspaceStatusContextValue {
-  status: RepositoryStatus;
-  notices: StorageNotice[];
+  status: WorkspaceStatus;
+  notices: ApiNotice[];
 }
 
 export interface WorkspaceContextValue extends WorkspaceActions {
   state: Workspace;
-  status: RepositoryStatus;
-  notices: StorageNotice[];
+  status: WorkspaceStatus;
+  notices: ApiNotice[];
   projectId: string;
 }
 
@@ -92,67 +96,344 @@ function shouldSaveImmediately(action: {
 }
 
 export interface WorkspaceProviderProps {
-  repository?: ProjectRepository;
-  repositoryFactory?: (projectId: string) => ProjectRepository;
-  projectId?: string;
+  projectId: string;
   children: ReactNode;
 }
 
 export function WorkspaceProvider({
-  repository: providedRepository,
-  repositoryFactory,
   projectId,
   children,
 }: WorkspaceProviderProps) {
-  const [repository] = useState(() => {
-    if (providedRepository) return providedRepository;
-    if (repositoryFactory && projectId) return repositoryFactory(projectId);
-    return createProjectRepository({ projectId: projectId ?? "" });
+  const [state, rawDispatch] = useReducer(
+    workspaceReducer,
+    createWorkspace({ projectId }),
+  );
+  const [loaded, setLoaded] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [status, setStatus] = useState<WorkspaceStatus>({
+    state: "loading",
+    message: "Loading project…",
   });
-  const [initial] = useState(() => repository.load());
-  const [state, rawDispatch] = useReducer(workspaceReducer, initial.workspace);
-  const [status, setStatus] = useState(() => repository.status());
-  const [notices, setNotices] = useState(() => initial.notices);
+  const [notices, setNotices] = useState<ApiNotice[]>([]);
+
+  const stateRef = useRef(state);
+  const revisionRef = useRef(0);
+  const acknowledgedEvents = useRef<Set<string>>(new Set());
+  const lastSavedRef = useRef<{
+    chapters: ChapterDocument;
+    selectedId: string | null;
+  } | null>(null);
+  const pendingRef = useRef<Workspace | null>(null);
+  const inFlightRef = useRef<Promise<void> | null>(null);
+  const conflictRef = useRef(false);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastAction = useRef<WorkspaceAction | null>(null);
   const skipNextSave = useRef(true);
+  const mounted = useRef(true);
+
+  useEffect(() => {
+    stateRef.current = state;
+  }, [state]);
 
   const dispatch = useCallback((action: WorkspaceAction) => {
     lastAction.current = action;
     rawDispatch(action);
   }, []);
 
-  useEffect(() => {
-    const unsubscribe = repository.onStatusChange((next) => setStatus(next));
-    return unsubscribe;
-  }, [repository]);
+  const addNotice = useCallback((notice: ApiNotice) => {
+    setNotices((previous) => [notice, ...previous]);
+  }, []);
 
-  useEffect(() => {
-    const unsubscribe = repository.subscribe(({ workspace, notices: next }) => {
-      if (workspace) {
-        lastAction.current = { type: "replaceWorkspace", workspace };
-        rawDispatch({ type: "replaceWorkspace", workspace });
+  const load = useCallback(async () => {
+    setLoaded(false);
+    setLoadError(null);
+    setStatus({ state: "loading", message: "Loading project…" });
+    try {
+      const document = await getDocument(projectId);
+      let events: ActivityEntry[] = [];
+      try {
+        events = await getActivity(projectId);
+      } catch {
+        setNotices([
+          {
+            level: "warning",
+            message:
+              "The document loaded, but activity could not be loaded from the local API.",
+          },
+        ]);
       }
-      if (next?.length) setNotices(next);
-    });
-    return unsubscribe;
-  }, [repository]);
+      revisionRef.current = document.revision;
+      acknowledgedEvents.current = new Set(events.map((event) => event.id));
+      lastSavedRef.current = {
+        chapters: document.chapters,
+        selectedId: document.selectedId,
+      };
+      conflictRef.current = false;
+      pendingRef.current = null;
+      const workspace = createWorkspace({
+        projectId,
+        chapters: document.chapters,
+        events,
+        selectedId: document.selectedId,
+      });
+      lastAction.current = { type: "replaceWorkspace", workspace };
+      rawDispatch({ type: "replaceWorkspace", workspace });
+      skipNextSave.current = true;
+      setLoaded(true);
+      setStatus({
+        state: "saved",
+        message: "Saved to the local API.",
+      });
+    } catch (caught) {
+      setLoadError(errorMessage(caught));
+      setStatus({ state: "error", message: errorMessage(caught) });
+    }
+  }, [projectId]);
 
   useEffect(() => {
+    mounted.current = true;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void load();
+    return () => {
+      mounted.current = false;
+      if (timerRef.current) clearTimeout(timerRef.current);
+      pendingRef.current = null;
+    };
+  }, [load]);
+
+  const runSave = useCallback(
+    async (snapshot: Workspace, keepalive = false) => {
+      const newActivity = snapshot.events
+        .filter((event) => !acknowledgedEvents.current.has(event.id))
+        .map((event) => ({
+          id: event.id,
+          message: event.message,
+          chapterId: event.chapterId,
+          chapterName: event.chapterName,
+        }));
+
+      const response = await saveDocument(
+        projectId,
+        revisionRef.current,
+        {
+          chapters: snapshot.chapters,
+          selectedId: snapshot.selectedId,
+          activity: newActivity.length ? newActivity : undefined,
+        },
+        { keepalive },
+      );
+
+      revisionRef.current = response.revision;
+      lastSavedRef.current = {
+        chapters: snapshot.chapters,
+        selectedId: snapshot.selectedId,
+      };
+      acknowledgedEvents.current = new Set(
+        response.activity.map((event) => event.id),
+      );
+
+      const current = stateRef.current;
+      const snapshotIds = new Set(snapshot.events.map((event) => event.id));
+      const responseIds = new Set(response.activity.map((event) => event.id));
+      const newer = current.events.filter(
+        (event) => !snapshotIds.has(event.id) && !responseIds.has(event.id),
+      );
+      const merged = [...newer, ...response.activity].slice(0, 100);
+      lastAction.current = { type: "replaceActivity", events: merged };
+      rawDispatch({ type: "replaceActivity", events: merged });
+    },
+    [projectId],
+  );
+
+  const flush = useCallback(
+    async (options: { keepalive?: boolean } = {}) => {
+      if (!loaded || conflictRef.current) return;
+      if (timerRef.current) {
+        clearTimeout(timerRef.current);
+        timerRef.current = null;
+      }
+      if (inFlightRef.current) await inFlightRef.current;
+
+      while (pendingRef.current && !conflictRef.current) {
+        const snapshot = pendingRef.current;
+        pendingRef.current = null;
+        setStatus({ state: "pending", message: "Saving changes…" });
+
+        const task = (async () => {
+          try {
+            await runSave(snapshot, options.keepalive);
+          } finally {
+            inFlightRef.current = null;
+          }
+        })();
+        inFlightRef.current = task;
+
+        try {
+          await task;
+        } catch (caught) {
+          if (isRevisionConflict(caught)) {
+            conflictRef.current = true;
+            pendingRef.current = null;
+            setStatus({
+              state: "conflict",
+              message:
+                "This project changed in another tab or client. Reload the latest version or overwrite it.",
+            });
+          } else {
+            pendingRef.current = stateRef.current;
+            setStatus({ state: "error", message: errorMessage(caught) });
+          }
+          return;
+        }
+      }
+
+      if (!pendingRef.current && !conflictRef.current && mounted.current) {
+        setStatus({ state: "saved", message: "Saved to the local API." });
+      }
+    },
+    [loaded, runSave],
+  );
+
+  const scheduleSave = useCallback(
+    (workspace: Workspace, immediate: boolean) => {
+      if (conflictRef.current) return;
+      pendingRef.current = workspace;
+      if (timerRef.current) clearTimeout(timerRef.current);
+      if (immediate) {
+        timerRef.current = null;
+        void flush();
+        return;
+      }
+      setStatus({ state: "pending", message: "Saving changes…" });
+      timerRef.current = setTimeout(() => {
+        timerRef.current = null;
+        void flush();
+      }, 250);
+    },
+    [flush],
+  );
+
+  useEffect(() => {
+    if (!loaded) return;
     if (skipNextSave.current) {
       skipNextSave.current = false;
       return;
     }
-    repository.save(state, {
-      immediate: shouldSaveImmediately(lastAction.current ?? {}),
-    });
-  }, [state, repository]);
+    const saved = lastSavedRef.current;
+    const documentChanged =
+      !saved ||
+      state.chapters !== saved.chapters ||
+      state.selectedId !== saved.selectedId;
+    const hasNewActivity = state.events.some(
+      (event) => !acknowledgedEvents.current.has(event.id),
+    );
+    if (!documentChanged && !hasNewActivity) return;
+    if (lastAction.current?.type === "replaceActivity") {
+      scheduleSave(state, false);
+      return;
+    }
+    scheduleSave(state, shouldSaveImmediately(lastAction.current ?? {}));
+  }, [state, loaded, scheduleSave]);
+
+  const applyServerWorkspace = useCallback(
+    (document: DocumentResponse, events: ActivityEntry[]) => {
+      revisionRef.current = document.revision;
+      acknowledgedEvents.current = new Set(events.map((event) => event.id));
+      lastSavedRef.current = {
+        chapters: document.chapters,
+        selectedId: document.selectedId,
+      };
+      const workspace = createWorkspace({
+        projectId,
+        chapters: document.chapters,
+        events,
+        selectedId: document.selectedId,
+      });
+      lastAction.current = { type: "replaceWorkspace", workspace };
+      rawDispatch({ type: "replaceWorkspace", workspace });
+      skipNextSave.current = true;
+    },
+    [projectId],
+  );
+
+  const reloadFromServer = useCallback(async () => {
+    try {
+      const document = await getDocument(projectId);
+      const events = await getActivity(projectId).catch(
+        () => stateRef.current.events,
+      );
+      conflictRef.current = false;
+      pendingRef.current = null;
+      if (timerRef.current) clearTimeout(timerRef.current);
+      timerRef.current = null;
+      applyServerWorkspace(document, events);
+      setStatus({
+        state: "saved",
+        message: "Loaded the latest version from the local API.",
+      });
+    } catch (caught) {
+      setStatus({ state: "error", message: errorMessage(caught) });
+    }
+  }, [applyServerWorkspace, projectId]);
+
+  const overwriteServer = useCallback(async () => {
+    try {
+      const latest = await getDocument(projectId);
+      revisionRef.current = latest.revision;
+      conflictRef.current = false;
+      pendingRef.current = stateRef.current;
+      await flush();
+    } catch (caught) {
+      setStatus({ state: "error", message: errorMessage(caught) });
+    }
+  }, [flush, projectId]);
 
   useEffect(() => {
-    return () => {
-      repository.flush();
-      repository.dispose();
+    if (!loaded) return;
+    const refreshIfIdle = async () => {
+      if (conflictRef.current || pendingRef.current || inFlightRef.current) {
+        return;
+      }
+      try {
+        const document = await getDocument(projectId);
+        if (document.revision === revisionRef.current) return;
+        const events = await getActivity(projectId).catch(
+          () => stateRef.current.events,
+        );
+        applyServerWorkspace(document, events);
+        addNotice({
+          level: "info",
+          message: "Loaded a newer version of this project from the local API.",
+        });
+      } catch {
+        // Keep the current workspace; the next save reports connection errors.
+      }
     };
-  }, [repository]);
+    const onFocus = () => void refreshIfIdle();
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") void refreshIfIdle();
+    };
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, [addNotice, applyServerWorkspace, loaded, projectId]);
+
+  useEffect(() => {
+    const onHide = () => {
+      if (pendingRef.current && !conflictRef.current) {
+        void flush({ keepalive: true });
+      }
+    };
+    window.addEventListener("pagehide", onHide);
+    window.addEventListener("beforeunload", onHide);
+    return () => {
+      window.removeEventListener("pagehide", onHide);
+      window.removeEventListener("beforeunload", onHide);
+    };
+  }, [flush]);
 
   const actions: WorkspaceActions = useMemo(
     () => ({
@@ -231,16 +512,42 @@ export function WorkspaceProvider({
           time: new Date().toISOString(),
         }),
       dismissNotices: () => setNotices([]),
-      retrySave: () => repository.flush(),
-      flushSave: () => repository.flush(),
+      retrySave: () => flush(),
+      flushSave: () => flush(),
+      reloadFromServer,
+      overwriteServer,
     }),
-    [dispatch, repository],
+    [dispatch, flush, overwriteServer, reloadFromServer],
   );
 
   const statusValue = useMemo<WorkspaceStatusContextValue>(
     () => ({ status, notices }),
     [status, notices],
   );
+
+  if (!loaded) {
+    if (loadError) {
+      return (
+        <div className="development-state api-load-error" role="alert">
+          <h1>The project could not be loaded</h1>
+          <p>{loadError}</p>
+          <div className="error-actions">
+            <button type="button" onClick={() => void load()}>
+              Retry
+            </button>
+            <a href="/api/v1/docs" target="_blank" rel="noreferrer">
+              Open API docs
+            </a>
+          </div>
+        </div>
+      );
+    }
+    return (
+      <p className="page-loading" role="status">
+        Loading project…
+      </p>
+    );
+  }
 
   return (
     <WorkspaceActionsContext.Provider value={actions}>
@@ -298,5 +605,3 @@ export function useWorkspace(): WorkspaceContextValue {
     [state, status, notices, actions],
   );
 }
-
-export { STORAGE_STATUS };

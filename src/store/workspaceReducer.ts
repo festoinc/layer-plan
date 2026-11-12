@@ -1,4 +1,8 @@
-import { appendActivity, createActivityEntry } from "../domain/activity";
+import {
+  appendActivity,
+  createActivityEntry,
+  type ActivityEntry,
+} from "../domain/activity";
 import {
   Chapter,
   createChapter,
@@ -144,6 +148,10 @@ export type WorkspaceAction =
       criterionId: string;
       activityId?: string;
       time?: string;
+    }
+  | {
+      type: "replaceActivity";
+      events: ActivityEntry[];
     }
   | {
       type: "replaceWorkspace";
@@ -389,6 +397,10 @@ export function workspaceReducer(
           time: action.time,
         },
       );
+    }
+
+    case "replaceActivity": {
+      return { ...state, events: action.events.slice(0, 100) };
     }
 
     case "replaceWorkspace": {

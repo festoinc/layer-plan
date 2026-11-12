@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./fixtures";
 
 test("verification rules appear only on nested chapters and persist modes", async ({
   page,
@@ -95,7 +95,13 @@ test("test coverage counts only automated chapters and edits guidelines inline",
     "Shared instructions for human and AI testers",
   );
   await guidelines.fill("Updated guidelines for human and AI testers.");
+  const saved = page.waitForResponse(
+    (response) =>
+      response.request().method() === "PATCH" &&
+      response.url().includes("/api/v1/projects/website"),
+  );
   await guidelines.press("Tab");
+  await saved;
   await page.reload();
   await expect(
     page.getByLabel("Shared instructions for human and AI testers"),
@@ -122,7 +128,13 @@ test("a project with only root chapters has an empty coverage state", async ({
     "Shared instructions for human and AI testers",
   );
   await guidelines.fill("Run the empty coverage checks.");
+  const saved = page.waitForResponse(
+    (response) =>
+      response.request().method() === "PATCH" &&
+      response.url().includes("/api/v1/projects/"),
+  );
   await guidelines.press("Tab");
+  await saved;
   await page.reload();
   await expect(
     page.getByLabel("Shared instructions for human and AI testers"),

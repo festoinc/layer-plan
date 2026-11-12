@@ -3,6 +3,7 @@ import {
   Suspense,
   useCallback,
   useEffect,
+  useId,
   useMemo,
   useRef,
   useState,
@@ -47,6 +48,8 @@ export function WorkspaceShell({ projectId }: WorkspaceShellProps) {
     deleteChapter,
     flushSave,
     retrySave,
+    reloadFromServer,
+    overwriteServer,
     dismissNotices: dismissWorkspaceNotices,
   } = useWorkspaceActions();
   const { status: workspaceStatus, notices: workspaceNotices } =
@@ -83,7 +86,12 @@ export function WorkspaceShell({ projectId }: WorkspaceShellProps) {
     { mode: "create" } | { mode: "edit"; project: ProjectSummary } | null
   >(null);
   const [deleteTarget, setDeleteTarget] = useState<ProjectSummary | null>(null);
+  const [confirmOverwrite, setConfirmOverwrite] = useState(false);
+  const [overwritePending, setOverwritePending] = useState(false);
   const sidebarRef = useRef<HTMLElement | null>(null);
+  const overwriteDialogRef = useRef<HTMLDivElement | null>(null);
+  const overwriteTitleId = useId();
+  const overwriteDescriptionId = useId();
 
   const activeId = useMemo(() => {
     const requested = route.chapterId;
@@ -114,9 +122,12 @@ export function WorkspaceShell({ projectId }: WorkspaceShellProps) {
 
   const closeNav = useCallback(() => setNavOpen(false), []);
   useFocusTrap(navOpen, sidebarRef, closeNav);
+  useFocusTrap(confirmOverwrite, overwriteDialogRef, () =>
+    setConfirmOverwrite(false),
+  );
 
   useEffect(() => {
-    if (activeProjectId !== projectId) setActiveProject(projectId);
+    if (activeProjectId !== projectId) void setActiveProject(projectId);
   }, [activeProjectId, projectId, setActiveProject]);
 
   // Keep the URL canonical: unknown ids, legacy hashes and empty chapter
@@ -259,6 +270,15 @@ export function WorkspaceShell({ projectId }: WorkspaceShellProps) {
   }, [chapter, deleteChapter, projectId, route, state.chapters]);
   const closeProjectDialog = useCallback(() => setProjectDialog(null), []);
   const closeDeleteDialog = useCallback(() => setDeleteTarget(null), []);
+  const confirmOverwriteDocument = useCallback(async () => {
+    setOverwritePending(true);
+    try {
+      await overwriteServer();
+      setConfirmOverwrite(false);
+    } finally {
+      setOverwritePending(false);
+    }
+  }, [overwriteServer]);
   const openCreateProject = useCallback(
     () => setProjectDialog({ mode: "create" }),
     [],
@@ -282,7 +302,7 @@ export function WorkspaceShell({ projectId }: WorkspaceShellProps) {
 
   const switchProject = useCallback(
     (id: string) => {
-      setActiveProject(id);
+      void setActiveProject(id);
       setNavOpen(false);
       const nextView =
         view === ROUTE_VIEWS.projects || view === ROUTE_VIEWS.specifications
@@ -304,21 +324,21 @@ export function WorkspaceShell({ projectId }: WorkspaceShellProps) {
 
   const exportProjectById = useCallback(
     (id: string) => {
-      exportProject(id, id === projectId ? state : undefined);
+      void exportProject(id);
     },
-    [exportProject, projectId, state],
+    [exportProject],
   );
 
   const submitProjectDialog = useCallback(
-    (values: ProjectInput) => {
+    async (values: ProjectInput) => {
       if (projectDialog?.mode === "edit") {
-        const result = updateProject(
+        const result = await updateProject(
           projectDialog.project.id,
           values as ProjectPatch,
         );
         return { ok: result.ok, issues: result.issues };
       }
-      const result = createProject(values);
+      const result = await createProject(values);
       if (result.ok) {
         route.navigate({
           view: ROUTE_VIEWS.specifications,
@@ -331,10 +351,10 @@ export function WorkspaceShell({ projectId }: WorkspaceShellProps) {
     [createProject, projectDialog, route, updateProject],
   );
 
-  const submitDelete = useCallback(() => {
+  const submitDelete = useCallback(async () => {
     if (!deleteTarget) return;
-    if (deleteTarget.id === projectId) flushSave();
-    const result = deleteProject(deleteTarget.id);
+    if (deleteTarget.id === projectId) await flushSave();
+    const result = await deleteProject(deleteTarget.id);
     if (!result.ok) return;
     setDeleteTarget(null);
     if (deleteTarget.id === projectId) {
@@ -352,8 +372,8 @@ export function WorkspaceShell({ projectId }: WorkspaceShellProps) {
   }, [deleteProject, deleteTarget, flushSave, projectId, route]);
 
   const duplicateProjectById = useCallback(
-    (id: string) => {
-      const result = duplicateProject(id);
+    async (id: string) => {
+      const result = await duplicateProject(id);
       if (result.ok) {
         route.navigate({
           view: ROUTE_VIEWS.specifications,
@@ -366,8 +386,8 @@ export function WorkspaceShell({ projectId }: WorkspaceShellProps) {
   );
 
   const importProjectText = useCallback(
-    (text: string) => {
-      const result = importProject(text);
+    async (text: string) => {
+      const result = await importProject(text);
       if (result.ok) {
         route.navigate({
           view: ROUTE_VIEWS.specifications,
@@ -387,7 +407,7 @@ export function WorkspaceShell({ projectId }: WorkspaceShellProps) {
 
   const catalogError =
     workspaceStatus.state !== "error" &&
-    workspaceStatus.state !== "unavailable" &&
+    workspaceStatus.state !== "conflict" &&
     catalogStatus.state === "error";
   const bannerStatus = catalogError ? catalogStatus : workspaceStatus;
   const bannerNotices = [...catalogNotices, ...workspaceNotices];
@@ -444,6 +464,8 @@ export function WorkspaceShell({ projectId }: WorkspaceShellProps) {
           notices={bannerNotices}
           status={bannerStatus}
           onRetry={catalogError ? retryCatalog : retrySave}
+          onReload={reloadFromServer}
+          onOverwrite={() => setConfirmOverwrite(true)}
           onDismiss={dismissAllNotices}
           onExport={() => exportProjectById(projectId)}
         />
@@ -456,7 +478,9 @@ export function WorkspaceShell({ projectId }: WorkspaceShellProps) {
                 onOpenProject={openProject}
                 onNewProject={openCreateProject}
                 onEditProject={openProjectSettings}
-                onDuplicateProject={(item) => duplicateProjectById(item.id)}
+                onDuplicateProject={(item) =>
+                  void duplicateProjectById(item.id)
+                }
                 onExportProject={(item) => exportProjectById(item.id)}
                 onDeleteProject={(item) => setDeleteTarget(item)}
                 onImportProject={importProjectText}
@@ -526,6 +550,53 @@ export function WorkspaceShell({ projectId }: WorkspaceShellProps) {
           onExport={() => exportProjectById(deleteTarget.id)}
           onDelete={submitDelete}
         />
+      )}
+      {confirmOverwrite && (
+        <div
+          className="modal-backdrop"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) {
+              setConfirmOverwrite(false);
+            }
+          }}
+        >
+          <div
+            className="modal delete-project-dialog"
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby={overwriteTitleId}
+            aria-describedby={overwriteDescriptionId}
+            ref={overwriteDialogRef}
+          >
+            <div className="modal-header">
+              <div>
+                <h2 id={overwriteTitleId}>Overwrite the server document?</h2>
+                <p id={overwriteDescriptionId}>
+                  Your local version will replace the latest document saved by
+                  another tab or client. This cannot be undone.
+                </p>
+              </div>
+            </div>
+            <div className="modal-actions">
+              <button
+                type="button"
+                className="secondary-button"
+                disabled={overwritePending}
+                onClick={() => setConfirmOverwrite(false)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="danger-button"
+                disabled={overwritePending}
+                onClick={() => void confirmOverwriteDocument()}
+              >
+                {overwritePending ? "Overwriting…" : "Overwrite document"}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

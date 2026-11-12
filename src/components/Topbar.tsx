@@ -1,12 +1,12 @@
 import { ChevronRight, CircleCheck, Menu } from "lucide-react";
-import { RepositoryStatus } from "../store/persistence";
+import type { WorkspaceStatus } from "../api/types";
 import { useWorkspaceStatus } from "../store/WorkspaceProvider";
 
 export interface TopbarProps {
   projectName: string;
   view: string;
   rootTitle: string;
-  status?: RepositoryStatus;
+  status?: WorkspaceStatus;
   onOpenNav: () => void;
 }
 
@@ -24,7 +24,11 @@ export function Topbar({
     ? "All changes saved"
     : status.state === "pending"
       ? "Saving changes…"
-      : "Changes are not saved";
+      : status.state === "conflict"
+        ? "Save conflict"
+        : status.state === "loading"
+          ? "Loading project…"
+          : "Changes are not saved";
 
   return (
     <header className="topbar">

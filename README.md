@@ -2,15 +2,67 @@
 
 A local workspace for project specifications. Create projects, and inside each
 project create chapters and nested subchapters. Each chapter has an editable
-Markdown description and a success-criteria checklist. Everything is stored
-locally in the browser; there is no backend.
+Markdown description, verification rules and a success-criteria checklist.
+
+Everything is stored in a local Fastify API backed by SQLite. There is no
+authentication, no cloud service and no browser `localStorage` persistence. The
+React UI is one client of the API; local AI agents can use the same HTTP
+contract.
 
 ## Run
+
+Node 22 or newer is required.
 
 ```sh
 npm install
 npm run dev
 ```
+
+`npm run dev` starts the API at `http://127.0.0.1:3001` and the Vite UI at
+`http://127.0.0.1:5173`. The SQLite database defaults to `data/layers.sqlite`
+and is migrated automatically. The first run seeds the **Website project** and
+**Mobile app** samples.
+
+To run the built UI and API together from one process:
+
+```sh
+npm run build
+npm start
+```
+
+Open `http://127.0.0.1:3001`.
+
+Useful database and API commands:
+
+```sh
+npm run db:migrate   # apply pending migrations
+npm run db:reset     # delete and reseed the local database
+npm run api:spec     # write server/api/openapi.json
+npm run api:types    # regenerate types from the OpenAPI document
+npm run api:lint     # lint the OpenAPI document
+```
+
+The interactive API reference is at
+`http://127.0.0.1:3001/api/v1/docs`. The normative contract is
+[`server/api/openapi.yaml`](server/api/openapi.yaml); short agent-oriented curl
+examples are in [`docs/api.md`](docs/api.md).
+
+### Environment
+
+| Variable              | Default              | Meaning                                 |
+| --------------------- | -------------------- | --------------------------------------- |
+| `HOST`                | `127.0.0.1`          | API bind address                        |
+| `PORT`                | `3001`               | API port                                |
+| `LAYERS_DB_PATH`      | `data/layers.sqlite` | SQLite database file                    |
+| `LAYERS_SEED_SAMPLES` | `1`                  | Seed samples when the database is empty |
+| `LAYERS_TEST_MODE`    | `0`                  | Enable the test-only reset endpoint     |
+| `LAYERS_ALLOW_REMOTE` | `0`                  | Allow a non-loopback bind               |
+| `VITE_API_URL`        | `/api/v1`            | Browser API base URL                    |
+
+The server refuses a non-loopback bind unless `LAYERS_ALLOW_REMOTE=1`. The API
+has no authentication, so loopback is the security boundary.
+
+## Usage
 
 The sidebar project switcher opens the project menu. **All projects** opens the
 projects page where you can create, rename, duplicate, export, import and delete
@@ -27,7 +79,8 @@ Enter/F2. Press Escape or Ctrl/Cmd+Enter to finish editing.
 Adding a success criterion also creates a subchapter under the current chapter
 unless **Final level** is checked. Its title comes from the first line of the
 criterion. Manually created subchapters do not add checklist items. Press Enter
-to add a criterion and Shift+Enter for a new line. Changes save automatically.
+to add a criterion and Shift+Enter for a new line. Changes save automatically to
+the local API.
 
 ### Verification and coverage
 
@@ -54,66 +107,86 @@ its parent that created it.
 ## Architecture
 
 ```text
+server/          Fastify API, SQLite store, migrations, seed, OpenAPI routes
 src/domain/      Pure models: projects, chapters, criteria, verification, schema
-src/store/       Catalog and project repositories, React providers, reducer
+src/api/         Fetch client and typed project/document/activity calls
+src/store/       React providers for the project catalog and active workspace
 src/hooks/       Hash router, memoized chapter tree, focus trap
 src/components/  Sidebar, project switcher/page/dialogs, tree, editor, banners
 src/app/         App shell, per-project workspace shell, error boundaries
 src/Markdown.tsx Markdown preview/editor primitives
-src/data.ts      Two sample projects
+src/data.ts      Sample projects used by the API seed
+docs/api.md      Short API/agent guide
+AGENTS_template.md  Instructions for AI agents using the API
 ```
 
-- **Project catalog plus per-project documents.** A compact index stores project
-  metadata and chapter/criteria counts. Each project has its own normalized
-  chapter document `{ byId, rootIds }`, activity history, selected chapter and
-  per-chapter verification rules, so editing one project never rewrites another.
-- **One reducer per project document.** `src/store/workspaceReducer.ts` owns
-  chapters, criteria, activity and selection for the active project. Ephemeral UI
-  state (open branch, create form, mobile drawer, project dialogs) stays in
-  components.
-- **Repository seams.** `src/store/persistence.ts` is the project document
-  repository; `src/store/catalogRepository.ts` owns the project index and project
-  lifecycle. Components never touch `localStorage`, so an HTTP repository can
-  replace these later.
-- **Validation and reset.** `src/domain/schema.ts` repairs saved project data
-  (missing fields, duplicate ids, dangling links, cycles, orphans, verification
-  rules) and validates the catalog. Phase 4 intentionally starts a fresh v5
-  database: the first load clears phase 1–3 project keys and seeds refreshed
-  **Website project** and **Mobile app** samples with verification examples and
-  test guidelines. Unreadable payloads are copied to a backup key before
-  recovery.
+- **API is the source of truth.** The React app loads projects, documents,
+  activity and guidelines over HTTP. There is no mock repository and no
+  `localStorage` fallback.
+- **Separate revisions for metadata and documents.** Project settings use a
+  metadata revision; document writes use a document revision. Both use
+  `If-Match` and return quoted integer ETags. A stale write returns
+  `412 revision_conflict`.
+- **Document-oriented writes.** The document resource contains the existing
+  normalized `{ byId, rootIds }` chapters plus the selected chapter. A document
+  write may also carry new activity entries so one client action is persisted
+  atomically.
+- **SQLite behind a store interface.** `server/db/store.ts` owns all SQL. Routes
+  depend on `ProjectStore`, so a future phase can add a Postgres adapter without
+  changing the API or React client. No Postgres driver is present now.
+- **Shared domain rules.** The server reuses `src/domain` for normalization,
+  project summaries, verification modes and coverage calculations. UI and API
+  cannot diverge on those rules.
+- **One command for the stack.** `npm run dev` starts Fastify, migrations and
+  Vite. `npm start` serves the built UI and API from the same origin.
+- **Optimistic conflict handling.** If another tab or agent changed a document,
+  the client stops autosaving and offers **Reload latest** or **Overwrite
+  server**. The latter is explicit and destructive.
 
-### Storage
+### Database
 
-| Key                               | Contents                                       |
-| --------------------------------- | ---------------------------------------------- |
-| `layers:projects:v5`              | Project index: metadata, order, active id      |
-| `layers:project:<id>:doc:v5`      | Normalized chapters, criteria and verification |
-| `layers:project:<id>:activity:v5` | Newest-first activity history (max 100)        |
-| `layers:project:<id>:ui:v5`       | Selected chapter for one project               |
-| `layers:project:<id>:settings:v5` | Shared project test guidelines                 |
-| `layers:backup:*`                 | Automatic backups of unreadable payloads       |
+The database is created automatically. Migrations live in
+`server/db/migrations/`.
 
-The v5 key namespace carries `schemaVersion` 6 payloads. Older criterion-level
-verification rules are normalized onto their chapter when loaded.
+| Table               | Contents                                                      |
+| ------------------- | ------------------------------------------------------------- |
+| `projects`          | Metadata, guidelines, stats, metadata revision and timestamps |
+| `project_documents` | Normalized chapters, selected chapter and document revision   |
+| `activity_entries`  | Append-only activity, newest first, capped at 100 per project |
+| `app_state`         | Active project selection                                      |
+| `schema_migrations` | Applied database migrations                                   |
 
-Phase 1–3 keys (`layers:projects:v4`, `layers:project:*:v4`, `layers:doc:v3`,
-`layers:activity:v3`, `layers:ui:v3`, `layers-chapters-v2`,
-`layers-chapters-v1`) and orphan project keys are removed on the first phase 4
-load. Backups are kept. This reset is intentional; export anything you need from
-the old format before upgrading.
+WAL mode, foreign keys and a busy timeout are enabled. Project deletion cascades
+to its document and activity. `npm run db:reset` deletes the database, reapplies
+migrations and seeds the sample projects when `LAYERS_SEED_SAMPLES` is enabled.
 
-Writes are debounced by 250 ms, structural edits are written immediately, and
-pending changes are flushed on blur, `pagehide`, `visibilitychange` and unload.
-Project index writes use read-merge-write so edits to different projects do not
-overwrite each other. Corrupt project data is backed up and reset per project;
-corrupt catalog data is backed up and reseeded. **Export project** and **Import
-project** move a complete project (metadata, chapters, criteria, verification
-rules, test guidelines, activity and selection) as `layers-project` v3 JSON.
-Importing always creates a new project; a name collision gets an `(imported)`
-suffix. Existing v1/v2 files still import: older criterion-level verification
-rules move to the chapter and missing guidelines start empty. A second tab
-adopts external writes unless it has unsaved changes in the same project.
+Project **Export project** downloads a `layers-project` version 3 JSON file;
+**Import project** uploads one through the API. Imports always create a new
+project, never overwrite, and get an `(imported)` suffix on name collisions.
+Older v1/v2 files remain importable.
+
+### API
+
+| Method   | Path                             | Purpose                       |
+| -------- | -------------------------------- | ----------------------------- |
+| `GET`    | `/api/v1/health`                 | API and database check        |
+| `GET`    | `/api/v1/projects`               | Catalog and active project    |
+| `POST`   | `/api/v1/projects`               | Create a project              |
+| `GET`    | `/api/v1/projects/:id`           | Project detail and guidelines |
+| `PATCH`  | `/api/v1/projects/:id`           | Update metadata/guidelines    |
+| `DELETE` | `/api/v1/projects/:id`           | Delete a project              |
+| `POST`   | `/api/v1/projects/:id/duplicate` | Duplicate a project           |
+| `POST`   | `/api/v1/projects/:id/activate`  | Set the active project        |
+| `GET`    | `/api/v1/projects/:id/document`  | Read the document             |
+| `PUT`    | `/api/v1/projects/:id/document`  | Replace the document          |
+| `GET`    | `/api/v1/projects/:id/activity`  | Read activity                 |
+| `POST`   | `/api/v1/projects/:id/activity`  | Append activity               |
+| `GET`    | `/api/v1/projects/:id/coverage`  | Derived verification coverage |
+| `GET`    | `/api/v1/projects/:id/export`    | Download a project file       |
+| `POST`   | `/api/v1/projects/import`        | Import a project file         |
+
+See [`docs/api.md`](docs/api.md) for revision rules and examples. Error responses
+use `{ "error": { "code", "message", "details" } }`.
 
 ### Routes
 
@@ -124,9 +197,9 @@ Hash routing keeps every project and chapter linkable and survives reload:
 - `#/projects/<projectId>/coverage` — automated test coverage
 - `#/projects/<projectId>/activity` — project activity
 
-Old `#/chapters/<id>`, `#/coverage` and `#/activity` links redirect to the active
-project. Unknown project ids return to the project list; unknown chapter ids fall
-back to the first chapter and the URL is rewritten.
+Unknown project ids return to the project list; unknown chapter ids fall back to
+the first chapter and the URL is rewritten. The active project is stored by the
+API.
 
 ## Verify
 
@@ -135,25 +208,49 @@ npm run lint
 npm run format:check
 npm run typecheck
 npm run test:unit
+npm run test:api
+npm run test:contract
+npm run api:lint
 npm run build
-npm run test:e2e          # Chromium, development server
-npm run test:prod         # build + smoke test against the preview server
+npm run test:e2e
+npm run test:prod
 ```
 
-`npm test` runs the unit suite and the browser suite. The browser suite covers
-the phase 1–3 scenarios plus chapter verification modes, coverage counting,
-inline project test guidelines, project switching, project lifecycle, project isolation,
-project export/import, project-scoped routing, v5 storage reset and recovery,
-cross-tab sync, write failures, accessibility (axe) and focus management. A
-production-build smoke test is available with `npm run test:prod`.
+`npm test` runs the unit, API, contract and browser suites. The browser suite
+starts the API and UI through `npm run dev:e2e`, uses a dedicated SQLite file and
+resets it before each test. The production smoke test builds the UI and server,
+resets a temporary database and runs Chromium against `npm start`.
+
+The browser suite covers the phase 1–4 scenarios plus API-backed persistence,
+optimistic conflict handling, retry after API failure, export/import through the
+API, project lifecycle, project isolation, project-scoped routing, activity,
+verification modes, coverage counting, accessibility (axe) and focus
+management.
 
 ## Runtime boundaries
 
-- No server, database, authentication, collaboration, or permissions.
-- Test coverage is declaration-based: commands are stored and counted, but they
-  are not executed and no results or report ingestion are recorded.
+- No authentication, accounts, permissions or collaboration. The API is
+  loopback-only and single-user.
+- No remote deployment, TLS, Postgres support or database selection yet. All SQL
+  stays behind `server/db` so that work can be added later.
+- No offline mode. The app requires the local API.
+- No WebSocket/SSE live updates. A tab refreshes on focus and uses optimistic
+  conflict handling for concurrent writes.
+- Test coverage is declaration-based: commands are stored and counted, but not
+  executed, and no test reports or results are recorded.
 - Chapter deletion is available with confirmation and subtree cleanup. Reordering
   and drag-and-drop remain tested domain operations without UI.
 - Import never overwrites or merges into an existing project.
-- Data is per browser and origin. Export a project JSON file to move or back it
-  up.
+- Activity history is capped at 100 entries and is not yet a durable audit log.
+
+## Tests and tooling
+
+- **Vitest** — domain unit tests, API client unit tests, Fastify integration
+  tests with in-memory SQLite, and OpenAPI contract tests.
+- **Playwright** — Chromium UI tests against the real API and SQLite, with one
+  worker and a test-only database reset endpoint.
+- **TypeScript** — client and server type checking through separate configs.
+- **ESLint + Prettier** — lint and formatting checks.
+- **OpenAPI** — Redocly lint, generated types and a served Scalar reference.
+- **CI** — `.github/workflows/ci.yml` runs the full quality gate on pushes and
+  pull requests.

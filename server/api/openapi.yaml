@@ -1,0 +1,756 @@
+openapi: 3.1.0
+info:
+  title: Layers local API
+  version: 1.0.0
+  description: |
+    Local, unauthenticated API for Layers project specifications.
+    The server binds to loopback by default and is intended for the React
+    application and local AI agents.
+  license:
+    name: Private local project
+    url: https://example.com/private-license
+servers:
+  - url: http://127.0.0.1:3001/api/v1
+security: []
+tags:
+  - name: health
+    description: API and database health.
+  - name: projects
+    description: Project catalog, metadata and lifecycle.
+  - name: document
+    description: Normalized project documents and optimistic concurrency.
+  - name: activity
+    description: Append-only project activity.
+  - name: coverage
+    description: Declaration-based verification coverage.
+  - name: files
+    description: Project export and import files.
+paths:
+  /health:
+    get:
+      tags: [health]
+      summary: Check the API and database
+      responses:
+        "200":
+          description: API and database are available
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status, version, database]
+                properties:
+                  status:
+                    type: string
+                    const: ok
+                  version:
+                    type: string
+                  database:
+                    type: string
+                    const: ok
+        "503":
+          $ref: "#/components/responses/Error"
+  /openapi.json:
+    get:
+      tags: [health]
+      summary: Return this OpenAPI document as JSON
+      responses:
+        "200":
+          description: OpenAPI document
+          content:
+            application/json:
+              schema:
+                type: object
+  /projects:
+    get:
+      tags: [projects]
+      summary: List projects and the active project
+      responses:
+        "200":
+          description: Project catalog
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectList"
+    post:
+      tags: [projects]
+      summary: Create a project
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateProject"
+      responses:
+        "201":
+          description: Created project
+          headers:
+            ETag:
+              $ref: "#/components/headers/ETag"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectDetail"
+        "409":
+          $ref: "#/components/responses/Error"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+  /projects/{projectId}:
+    parameters:
+      - $ref: "#/components/parameters/ProjectId"
+    get:
+      tags: [projects]
+      summary: Read project metadata, guidelines and revisions
+      responses:
+        "200":
+          description: Project detail
+          headers:
+            ETag:
+              $ref: "#/components/headers/ETag"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectDetail"
+        "404":
+          $ref: "#/components/responses/Error"
+    patch:
+      tags: [projects]
+      summary: Update metadata or test guidelines
+      parameters:
+        - $ref: "#/components/parameters/IfMatch"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateProject"
+      responses:
+        "200":
+          description: Updated project
+          headers:
+            ETag:
+              $ref: "#/components/headers/ETag"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectDetail"
+        "412":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+    delete:
+      tags: [projects]
+      summary: Delete a project
+      parameters:
+        - $ref: "#/components/parameters/IfMatch"
+      responses:
+        "200":
+          description: Project deleted and the next active project selected
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [activeProjectId]
+                properties:
+                  activeProjectId:
+                    type: [string, "null"]
+        "412":
+          $ref: "#/components/responses/Conflict"
+  /projects/{projectId}/duplicate:
+    parameters:
+      - $ref: "#/components/parameters/ProjectId"
+    post:
+      tags: [projects]
+      summary: Duplicate a project
+      responses:
+        "201":
+          description: Created duplicate
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectDetail"
+        "409":
+          $ref: "#/components/responses/Error"
+  /projects/{projectId}/activate:
+    parameters:
+      - $ref: "#/components/parameters/ProjectId"
+    post:
+      tags: [projects]
+      summary: Set the active project
+      responses:
+        "200":
+          description: Active project selected
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [activeProjectId]
+                properties:
+                  activeProjectId:
+                    type: string
+        "404":
+          $ref: "#/components/responses/Error"
+  /projects/{projectId}/document:
+    parameters:
+      - $ref: "#/components/parameters/ProjectId"
+    get:
+      tags: [document]
+      summary: Read the normalized project document
+      responses:
+        "200":
+          description: Project document
+          headers:
+            ETag:
+              $ref: "#/components/headers/ETag"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Document"
+        "404":
+          $ref: "#/components/responses/Error"
+    put:
+      tags: [document]
+      summary: Replace the project document
+      parameters:
+        - $ref: "#/components/parameters/IfMatch"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DocumentWrite"
+      responses:
+        "200":
+          description: Saved document with latest activity
+          headers:
+            ETag:
+              $ref: "#/components/headers/ETag"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DocumentWriteResponse"
+        "412":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+  /projects/{projectId}/activity:
+    parameters:
+      - $ref: "#/components/parameters/ProjectId"
+    get:
+      tags: [activity]
+      summary: Read newest-first activity
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 100
+        - name: before
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+      responses:
+        "200":
+          description: Activity history
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ActivityList"
+        "404":
+          $ref: "#/components/responses/Error"
+    post:
+      tags: [activity]
+      summary: Append an activity entry
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ActivityInput"
+      responses:
+        "201":
+          description: Activity appended
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ActivityList"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+  /projects/{projectId}/coverage:
+    parameters:
+      - $ref: "#/components/parameters/ProjectId"
+    get:
+      tags: [coverage]
+      summary: Read declaration-based verification coverage
+      responses:
+        "200":
+          description: Coverage summary and rows
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Coverage"
+        "404":
+          $ref: "#/components/responses/Error"
+  /projects/{projectId}/export:
+    parameters:
+      - $ref: "#/components/parameters/ProjectId"
+    get:
+      tags: [files]
+      summary: Download a layers-project version 3 file
+      responses:
+        "200":
+          description: Project export
+          headers:
+            Content-Disposition:
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                type: object
+        "404":
+          $ref: "#/components/responses/Error"
+  /projects/import:
+    post:
+      tags: [files]
+      summary: Import a layers-project file
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "201":
+          description: Imported project and repair issues
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [project, issues]
+                properties:
+                  project:
+                    $ref: "#/components/schemas/ProjectDetail"
+                  issues:
+                    type: array
+                    items:
+                      type: string
+        "422":
+          $ref: "#/components/responses/ValidationError"
+components:
+  parameters:
+    ProjectId:
+      name: projectId
+      in: path
+      required: true
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 64
+    IfMatch:
+      name: If-Match
+      in: header
+      required: true
+      description: Quoted revision returned by the last write or read.
+      schema:
+        type: string
+        pattern: '^"\d+"$'
+        example: '"12"'
+  headers:
+    ETag:
+      description: Quoted revision for the resource.
+      schema:
+        type: string
+        pattern: '^"\d+"$'
+  responses:
+    Error:
+      description: API error
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    ValidationError:
+      description: Request validation failed
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    Conflict:
+      description: The resource changed since it was loaded
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+  schemas:
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+            message:
+              type: string
+            details: {}
+    ProjectSummary:
+      type: object
+      required:
+        - id
+        - name
+        - initials
+        - color
+        - description
+        - createdAt
+        - updatedAt
+        - chapterCount
+        - criterionCount
+        - checkedCount
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        initials:
+          type: string
+        color:
+          type: string
+          enum: [indigo, teal, amber, rose, violet, emerald, sky, slate]
+        description:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        chapterCount:
+          type: integer
+        criterionCount:
+          type: integer
+        checkedCount:
+          type: integer
+    ProjectDetail:
+      allOf:
+        - $ref: "#/components/schemas/ProjectSummary"
+        - type: object
+          required:
+            - testGuidelines
+            - metadataRevision
+            - documentRevision
+          properties:
+            testGuidelines:
+              type: string
+            metadataRevision:
+              type: integer
+            documentRevision:
+              type: integer
+    ProjectList:
+      type: object
+      required: [projects, activeProjectId]
+      properties:
+        projects:
+          type: array
+          items:
+            $ref: "#/components/schemas/ProjectSummary"
+        activeProjectId:
+          type: [string, "null"]
+    CreateProject:
+      type: object
+      required: [name]
+      properties:
+        id:
+          type: string
+          pattern: "^[a-zA-Z0-9_-]{1,64}$"
+        name:
+          type: string
+          minLength: 1
+          maxLength: 80
+        initials:
+          type: string
+          maxLength: 2
+        color:
+          type: string
+          enum: [indigo, teal, amber, rose, violet, emerald, sky, slate]
+        description:
+          type: string
+          maxLength: 280
+        testGuidelines:
+          type: string
+          maxLength: 8000
+    UpdateProject:
+      type: object
+      minProperties: 1
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 80
+        initials:
+          type: string
+          maxLength: 2
+        color:
+          type: string
+          enum: [indigo, teal, amber, rose, violet, emerald, sky, slate]
+        description:
+          type: string
+          maxLength: 280
+        testGuidelines:
+          type: string
+          maxLength: 8000
+    Verification:
+      type: object
+      required: [mode, auto, human, ai]
+      properties:
+        mode:
+          type: string
+          enum: [auto, human, ai]
+        auto:
+          type: object
+          required: [command]
+          properties:
+            command:
+              type: string
+              maxLength: 500
+        human:
+          type: object
+          required: [instructions]
+          properties:
+            instructions:
+              type: string
+              maxLength: 2000
+        ai:
+          type: object
+          required: [instructions]
+          properties:
+            instructions:
+              type: string
+              maxLength: 4000
+    Criterion:
+      type: object
+      required: [id, text, checked]
+      properties:
+        id:
+          type: string
+          maxLength: 128
+        text:
+          type: string
+          maxLength: 20000
+        checked:
+          type: boolean
+        chapterId:
+          type: string
+          maxLength: 128
+    Chapter:
+      type: object
+      required:
+        - id
+        - parentId
+        - title
+        - description
+        - finalLevel
+        - verification
+        - criteria
+        - childIds
+      properties:
+        id:
+          type: string
+          maxLength: 128
+        parentId:
+          type: [string, "null"]
+        title:
+          type: string
+          maxLength: 200
+        description:
+          type: string
+          maxLength: 100000
+        finalLevel:
+          type: boolean
+        verification:
+          $ref: "#/components/schemas/Verification"
+        criteria:
+          type: array
+          items:
+            $ref: "#/components/schemas/Criterion"
+        childIds:
+          type: array
+          items:
+            type: string
+    ChapterDocument:
+      type: object
+      required: [byId, rootIds]
+      properties:
+        byId:
+          type: object
+          additionalProperties:
+            $ref: "#/components/schemas/Chapter"
+        rootIds:
+          type: array
+          items:
+            type: string
+    Document:
+      type: object
+      required:
+        - schemaVersion
+        - projectId
+        - revision
+        - updatedAt
+        - chapters
+        - selectedId
+      properties:
+        schemaVersion:
+          type: integer
+        projectId:
+          type: string
+        revision:
+          type: integer
+        updatedAt:
+          type: string
+          format: date-time
+        chapters:
+          $ref: "#/components/schemas/ChapterDocument"
+        selectedId:
+          type: [string, "null"]
+    ActivityInput:
+      type: object
+      required: [message]
+      properties:
+        message:
+          type: string
+          minLength: 1
+          maxLength: 1000
+        chapterId:
+          type: [string, "null"]
+        chapterName:
+          type: string
+          maxLength: 200
+    DocumentWrite:
+      type: object
+      required: [chapters, selectedId]
+      properties:
+        chapters:
+          $ref: "#/components/schemas/ChapterDocument"
+        selectedId:
+          type: [string, "null"]
+        activity:
+          type: array
+          items:
+            allOf:
+              - $ref: "#/components/schemas/ActivityInput"
+              - type: object
+                required: [id]
+                properties:
+                  id:
+                    type: string
+                    maxLength: 128
+    ActivityEntry:
+      type: object
+      required: [id, message, chapterId, chapterName, time]
+      properties:
+        id:
+          type: string
+        message:
+          type: string
+        chapterId:
+          type: [string, "null"]
+        chapterName:
+          type: string
+        time:
+          type: string
+          format: date-time
+    ActivityList:
+      type: object
+      required: [events]
+      properties:
+        events:
+          type: array
+          items:
+            $ref: "#/components/schemas/ActivityEntry"
+        nextBefore:
+          type: [integer, "null"]
+    Stats:
+      type: object
+      required: [chapterCount, criterionCount, checkedCount]
+      properties:
+        chapterCount:
+          type: integer
+        criterionCount:
+          type: integer
+        checkedCount:
+          type: integer
+    DocumentWriteResponse:
+      allOf:
+        - $ref: "#/components/schemas/Document"
+        - type: object
+          required: [stats, activity]
+          properties:
+            stats:
+              $ref: "#/components/schemas/Stats"
+            activity:
+              type: array
+              items:
+                $ref: "#/components/schemas/ActivityEntry"
+    VerificationSummary:
+      type: object
+      required: [total, automated, human, ai, incompleteAuto, percent]
+      properties:
+        total:
+          type: integer
+        automated:
+          type: integer
+        human:
+          type: integer
+        ai:
+          type: integer
+        incompleteAuto:
+          type: integer
+        percent:
+          type: integer
+    CoverageRow:
+      type: object
+      required:
+        - chapterId
+        - chapterTitle
+        - chapterPath
+        - mode
+        - command
+        - automated
+        - incompleteAuto
+        - criterionCount
+        - checkedCount
+      properties:
+        chapterId:
+          type: string
+        chapterTitle:
+          type: string
+        chapterPath:
+          type: string
+        mode:
+          type: string
+          enum: [auto, human, ai]
+        command:
+          type: string
+        automated:
+          type: boolean
+        incompleteAuto:
+          type: boolean
+        criterionCount:
+          type: integer
+        checkedCount:
+          type: integer
+    Coverage:
+      type: object
+      required: [summary, rows, testGuidelines]
+      properties:
+        summary:
+          $ref: "#/components/schemas/VerificationSummary"
+        rows:
+          type: array
+          items:
+            $ref: "#/components/schemas/CoverageRow"
+        testGuidelines:
+          type: string

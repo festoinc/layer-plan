@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { test, expect } from "./fixtures";
 
 test("nested chapters, descriptions, and checklists save independently", async ({
   page,
@@ -317,6 +317,7 @@ test("Markdown is previewed by default and edits on double click or keyboard", a
 
 test("new criteria create subchapters while manual subchapters stay outside the checklist", async ({
   page,
+  request,
 }) => {
   await page.goto("/");
   await page
@@ -393,9 +394,12 @@ test("new criteria create subchapters while manual subchapters stay outside the 
   await page.getByLabel("New success criterion").fill("   ");
   await page.getByLabel("New success criterion").press("Enter");
   await expect(page.locator(".criterion")).toHaveCount(5);
-  const stored = await page.evaluate(() =>
-    JSON.parse(localStorage.getItem("layers:project:website:doc:v5")),
+  await expect(page.getByRole("status").first()).toContainText(
+    "All changes saved",
   );
+  const stored = await (
+    await request.get("http://127.0.0.1:3001/api/v1/projects/website/document")
+  ).json();
   const parent = stored.chapters.byId["password-reset"];
   const createdCriterion = parent.criteria.at(-1);
   expect(parent.childIds).toContain(createdCriterion.chapterId);

@@ -1,66 +1,26 @@
 import { readFileSync } from "node:fs";
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./fixtures";
 
-test("legacy workspace data is cleared and two projects are seeded", async ({
+test("data persists through the local API without localStorage", async ({
   page,
 }) => {
-  await page.addInitScript(() => {
-    localStorage.setItem(
-      "layers-chapters-v2",
-      JSON.stringify({
-        chapters: [
-          {
-            id: "legacy",
-            title: "Legacy plan",
-            description: "Migrated description",
-            criteria: [
-              { id: "legacy-1", text: "Migrated criterion", checked: true },
-            ],
-            children: [],
-          },
-        ],
-        selectedId: "legacy",
-        events: [],
-      }),
-    );
-    localStorage.setItem("layers:doc:v3", "{}");
-  });
-  await page.goto("/");
-
-  await expect(page.locator(".storage-banner")).toContainText(
-    "Project storage reset",
+  await page.goto("/#/projects/website/chapters/password-reset");
+  await page
+    .getByRole("textbox", { name: "Chapter title", exact: true })
+    .fill("API-backed title");
+  await page.getByRole("textbox", { name: "Chapter title" }).press("Tab");
+  await expect(page.getByRole("status").first()).toContainText(
+    "All changes saved",
   );
+
+  await page.evaluate(() => localStorage.clear());
+  await page.reload();
   await expect(
     page.getByRole("textbox", { name: "Chapter title", exact: true }),
-  ).toHaveValue("Password reset");
+  ).toHaveValue("API-backed title");
 
   const keys = await page.evaluate(() => Object.keys(localStorage));
-  expect(keys).not.toContain("layers-chapters-v2");
-  expect(keys).not.toContain("layers:doc:v3");
-  expect(keys).toContain("layers:projects:v5");
-  expect(keys).toContain("layers:project:website:doc:v5");
-  expect(keys).toContain("layers:project:mobile:doc:v5");
-});
-
-test("a corrupt project document is backed up instead of disappearing", async ({
-  page,
-}) => {
-  await page.goto("/");
-  await page.evaluate(() => {
-    localStorage.setItem("layers:project:website:doc:v5", "{this is not json");
-  });
-  await page.reload();
-
-  await expect(page.locator(".storage-banner-error")).toContainText(
-    "This project could not be read",
-  );
-  const backup = await page.evaluate(() => {
-    const key = Object.keys(localStorage).find((name) =>
-      name.startsWith("layers:backup:project-website-doc-v5"),
-    );
-    return key ? localStorage.getItem(key) : null;
-  });
-  expect(backup).toBe("{this is not json");
+  expect(keys.filter((key) => key.startsWith("layers"))).toEqual([]);
 });
 
 test("the last keystroke survives an immediate reload", async ({ page }) => {
@@ -77,12 +37,17 @@ test("the last keystroke survives an immediate reload", async ({ page }) => {
   ).toHaveText("Flushed before unload");
 });
 
-test("export and import round-trip a whole project", async ({ page }) => {
+test("export and import round-trip a whole project through the API", async ({
+  page,
+}) => {
   await page.goto("/#/projects/website/chapters/password-reset");
   await page
     .getByRole("textbox", { name: "Chapter title", exact: true })
     .fill("Exportable title");
   await page.getByRole("textbox", { name: "Chapter title" }).press("Tab");
+  await expect(page.getByRole("status").first()).toContainText(
+    "All changes saved",
+  );
 
   const downloadPromise = page.waitForEvent("download");
   await page.getByRole("button", { name: "Export project" }).click();
@@ -133,7 +98,10 @@ test("export and import round-trip a whole project", async ({ page }) => {
   ).toHaveValue("Imported title");
 });
 
-test("a second tab adopts external changes", async ({ page, context }) => {
+test("a second tab sees server-backed changes after reload", async ({
+  page,
+  context,
+}) => {
   await page.goto("/");
   const other = await context.newPage();
   await other.goto("/");
@@ -143,24 +111,100 @@ test("a second tab adopts external changes", async ({ page, context }) => {
 
   await page
     .getByRole("textbox", { name: "Chapter title", exact: true })
-    .fill("Synced from tab one");
+    .fill("Synced through the API");
   await page.getByRole("textbox", { name: "Chapter title" }).press("Tab");
+  await expect(page.getByRole("status").first()).toContainText(
+    "All changes saved",
+  );
 
+  await other.reload();
   await expect(
     other.getByRole("textbox", { name: "Chapter title", exact: true }),
-  ).toHaveValue("Synced from tab one");
+  ).toHaveValue("Synced through the API");
 });
 
-test("a failed write is reported and can be retried", async ({ page }) => {
-  await page.goto("/");
-  await page.evaluate(() => {
-    const original = Storage.prototype.setItem;
-    window.__restoreStorage = () => {
-      Storage.prototype.setItem = original;
-    };
-    Storage.prototype.setItem = function failingSetItem() {
-      throw new DOMException("Quota exceeded", "QuotaExceededError");
-    };
+test("a stale write shows a conflict and can reload the latest document", async ({
+  page,
+  context,
+}) => {
+  await page.goto("/#/projects/website/chapters/password-reset");
+  const other = await context.newPage();
+  await other.goto("/#/projects/website/chapters/password-reset");
+  await expect(
+    other.getByRole("textbox", { name: "Chapter title", exact: true }),
+  ).toHaveValue("Password reset");
+
+  await page
+    .getByRole("textbox", { name: "Chapter title", exact: true })
+    .fill("First writer");
+  await page.getByRole("textbox", { name: "Chapter title" }).press("Tab");
+  await expect(page.getByRole("status").first()).toContainText(
+    "All changes saved",
+  );
+
+  await other
+    .getByRole("textbox", { name: "Chapter title", exact: true })
+    .fill("Second writer");
+  await other.getByRole("textbox", { name: "Chapter title" }).press("Tab");
+  await expect(other.locator(".storage-banner-error")).toContainText(
+    "changed in another tab",
+  );
+  await other.getByRole("button", { name: "Reload latest" }).click();
+  await expect(
+    other.getByRole("textbox", { name: "Chapter title", exact: true }),
+  ).toHaveValue("First writer");
+});
+
+test("a stale write can explicitly overwrite the server document", async ({
+  page,
+  context,
+}) => {
+  await page.goto("/#/projects/website/chapters/password-reset");
+  const other = await context.newPage();
+  await other.goto("/#/projects/website/chapters/password-reset");
+
+  await page
+    .getByRole("textbox", { name: "Chapter title", exact: true })
+    .fill("First writer");
+  await page.getByRole("textbox", { name: "Chapter title" }).press("Tab");
+  await expect(page.getByRole("status").first()).toContainText(
+    "All changes saved",
+  );
+
+  await other
+    .getByRole("textbox", { name: "Chapter title", exact: true })
+    .fill("Second writer");
+  await other.getByRole("textbox", { name: "Chapter title" }).press("Tab");
+  await expect(other.locator(".storage-banner-error")).toContainText(
+    "changed in another tab",
+  );
+  await other.getByRole("button", { name: "Overwrite server" }).click();
+  await expect(
+    other.getByRole("alertdialog", {
+      name: "Overwrite the server document?",
+    }),
+  ).toBeVisible();
+  await other.getByRole("button", { name: "Overwrite document" }).click();
+  await expect(other.getByRole("status").first()).toContainText(
+    "All changes saved",
+  );
+
+  await page.reload();
+  await expect(
+    page.getByRole("textbox", { name: "Chapter title", exact: true }),
+  ).toHaveValue("Second writer");
+});
+
+test("a failed document write is reported and can be retried", async ({
+  page,
+}) => {
+  await page.goto("/#/projects/website/chapters/password-reset");
+  await page.route("**/api/v1/projects/website/document", async (route) => {
+    if (route.request().method() === "PUT") {
+      await route.abort();
+    } else {
+      await route.continue();
+    }
   });
 
   await page.getByRole("button", { name: "New chapter", exact: true }).click();
@@ -172,10 +216,10 @@ test("a failed write is reported and can be retried", async ({ page }) => {
     .click();
 
   await expect(page.locator(".storage-banner-error")).toContainText(
-    "Changes are not saved",
+    "local API is not reachable",
   );
 
-  await page.evaluate(() => window.__restoreStorage());
+  await page.unroute("**/api/v1/projects/website/document");
   await page.getByRole("button", { name: "Retry saving" }).click();
   await expect(page.getByRole("status").first()).toContainText(
     "All changes saved",
@@ -185,4 +229,27 @@ test("a failed write is reported and can be retried", async ({ page }) => {
   await expect(
     page.getByRole("textbox", { name: "Chapter title", exact: true }),
   ).toHaveValue("Unsaved chapter");
+});
+
+test("an unavailable API shows a retryable connection error", async ({
+  page,
+}) => {
+  await page.route("**/api/v1/projects", async (route) => {
+    if (route.request().method() === "GET") {
+      await route.abort();
+    } else {
+      await route.continue();
+    }
+  });
+  await page.goto("/");
+  await expect(
+    page.getByRole("heading", { name: "The local API is not available" }),
+  ).toBeVisible();
+
+  await page.unroute("**/api/v1/projects");
+  await page.getByRole("button", { name: "Retry" }).click();
+  await expect(page.getByRole("heading", { name: "Projects" })).toBeVisible();
+  await expect(
+    page.locator(".project-card").filter({ hasText: "Website project" }),
+  ).toBeVisible();
 });

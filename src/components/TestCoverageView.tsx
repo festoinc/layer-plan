@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   ChartNoAxesColumnIncreasing,
   CircleCheck,
@@ -21,20 +21,44 @@ export default function TestCoverageView({
   onSelectChapter,
 }: TestCoverageViewProps) {
   const state = useWorkspaceState();
-  const { getProjectGuidelines, updateProject } = useProjects();
-  const guidelines = getProjectGuidelines(state.projectId);
+  const { getProjectGuidelines, updateProject, loadProjectDetail } =
+    useProjects();
   const summary = summarizeVerification(state.chapters);
   const rows = getCoverageRows(state.chapters);
+  const [guidelines, setGuidelines] = useState(() =>
+    getProjectGuidelines(state.projectId),
+  );
   const [guidelinesError, setGuidelinesError] = useState("");
 
-  function saveGuidelines(value: string) {
+  useEffect(() => {
+    let cancelled = false;
+    void loadProjectDetail(state.projectId).then((result) => {
+      if (cancelled) return;
+      if (result.ok) {
+        setGuidelines(result.value.testGuidelines);
+        setGuidelinesError("");
+      } else {
+        setGuidelinesError(result.issues.join(" "));
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [loadProjectDetail, state.projectId]);
+
+  async function saveGuidelines(value: string) {
     if (value === guidelines) return;
-    const result = updateProject(state.projectId, { testGuidelines: value });
-    setGuidelinesError(
-      result.ok
-        ? ""
-        : result.issues.join(" ") || "Guidelines could not be saved.",
-    );
+    const result = await updateProject(state.projectId, {
+      testGuidelines: value,
+    });
+    if (result.ok) {
+      setGuidelines(value);
+      setGuidelinesError("");
+    } else {
+      setGuidelinesError(
+        result.issues.join(" ") || "Guidelines could not be saved.",
+      );
+    }
   }
 
   return (
@@ -59,7 +83,7 @@ export default function TestCoverageView({
             defaultValue={guidelines}
             rows={4}
             placeholder="Add commands, test accounts and reporting expectations…"
-            onBlur={(event) => saveGuidelines(event.target.value)}
+            onBlur={(event) => void saveGuidelines(event.target.value)}
           />
         </label>
         <p className="field-hint">

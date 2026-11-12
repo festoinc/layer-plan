@@ -1,4 +1,4 @@
-import { useId, useRef } from "react";
+import { useId, useRef, useState } from "react";
 import { Download, X } from "lucide-react";
 import { ProjectSummary } from "../domain/projects";
 import { useFocusTrap } from "../hooks/useFocusTrap";
@@ -7,7 +7,7 @@ export interface DeleteProjectDialogProps {
   project: ProjectSummary;
   onClose: () => void;
   onExport: () => void;
-  onDelete: () => void;
+  onDelete: () => Promise<void>;
 }
 
 export function DeleteProjectDialog({
@@ -16,6 +16,7 @@ export function DeleteProjectDialog({
   onExport,
   onDelete,
 }: DeleteProjectDialogProps) {
+  const [pending, setPending] = useState(false);
   const dialogRef = useRef<HTMLDivElement | null>(null);
   const titleId = useId();
   const descriptionId = useId();
@@ -44,7 +45,7 @@ export function DeleteProjectDialog({
               {project.chapterCount === 1 ? "" : "s"}, {project.criterionCount}{" "}
               criteri
               {project.criterionCount === 1 ? "on" : "a"} and the project’s
-              activity from this browser.
+              activity from the local database.
             </p>
           </div>
           <button
@@ -61,15 +62,37 @@ export function DeleteProjectDialog({
           be undone.
         </p>
         <div className="modal-actions">
-          <button type="button" className="secondary-button" onClick={onExport}>
+          <button
+            type="button"
+            className="secondary-button"
+            onClick={onExport}
+            disabled={pending}
+          >
             <Download size={15} />
             Export first
           </button>
-          <button type="button" className="secondary-button" onClick={onClose}>
+          <button
+            type="button"
+            className="secondary-button"
+            onClick={onClose}
+            disabled={pending}
+          >
             Cancel
           </button>
-          <button type="button" className="danger-button" onClick={onDelete}>
-            Delete project
+          <button
+            type="button"
+            className="danger-button"
+            disabled={pending}
+            onClick={async () => {
+              setPending(true);
+              try {
+                await onDelete();
+              } finally {
+                setPending(false);
+              }
+            }}
+          >
+            {pending ? "Deleting…" : "Delete project"}
           </button>
         </div>
       </div>

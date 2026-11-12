@@ -270,6 +270,23 @@ describe("workspace reducer", () => {
     expect(next.events).toBe(state.events);
   });
 
+  it("replaces only the activity history for canonical server events", () => {
+    const state = baseState();
+    const events = [
+      {
+        id: "server-1",
+        message: "Server event",
+        chapterId: null,
+        chapterName: "Parent",
+        time,
+      },
+    ];
+    const next = workspaceReducer(state, { type: "replaceActivity", events });
+    expect(next.events).toEqual(events);
+    expect(next.chapters).toBe(state.chapters);
+    expect(next.selectedId).toBe(state.selectedId);
+  });
+
   it("replaces the workspace on import and repairs the selection", () => {
     const next = workspaceReducer(baseState(), {
       type: "replaceWorkspace",

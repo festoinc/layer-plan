@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./fixtures";
 
 test("deep links, reload and browser history keep the chapter", async ({
   page,

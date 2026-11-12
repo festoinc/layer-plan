@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./fixtures";
 
 test("production build boots and persists changes", async ({ page }) => {
   const errors = [];

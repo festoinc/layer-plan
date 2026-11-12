@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./fixtures";
 
 async function addCriterion(page, text) {
   await page.getByLabel("New success criterion").fill(text);

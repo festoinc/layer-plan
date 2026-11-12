@@ -1,5 +1,5 @@
 import AxeBuilder from "@axe-core/playwright";
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./fixtures";
 
 /**
  * @param {import("@playwright/test").Page} page
@@ -48,6 +48,9 @@ test("skip link, chapter selection and the mobile drawer manage focus", async ({
   page,
 }) => {
   await page.goto("/");
+  await expect(
+    page.getByRole("textbox", { name: "Chapter title", exact: true }),
+  ).toHaveValue("Password reset");
   await page.keyboard.press("Tab");
   await expect(
     page.getByRole("link", { name: "Skip to document" }),

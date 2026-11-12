@@ -13,7 +13,7 @@ export interface ProjectsViewProps {
   onDuplicateProject: (project: ProjectSummary) => void;
   onExportProject: (project: ProjectSummary) => void;
   onDeleteProject: (project: ProjectSummary) => void;
-  onImportProject: (text: string) => { ok: boolean; issues: string[] };
+  onImportProject: (text: string) => Promise<{ ok: boolean; issues: string[] }>;
 }
 
 export function ProjectsView({
@@ -37,7 +37,7 @@ export function ProjectsView({
     event.target.value = "";
     if (!file) return;
     try {
-      const result = onImportProject(await file.text());
+      const result = await onImportProject(await file.text());
       setImportError(result.ok ? "" : result.issues.join(" "));
     } catch {
       setImportError("The selected file could not be read.");

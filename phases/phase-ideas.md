@@ -1,7 +1,7 @@
 # Phase ideas — deferred backlog
 
 Status: living document  
-Updated: 2026-11-03
+Updated: 2026-11-11
 
 Ideas captured while delivering phase 1 and phase 2 that were deliberately left
 out, plus a few candidates raised while planning phase 3. They are consolidated
@@ -16,15 +16,16 @@ How to use this file:
 
 ## Product capabilities
 
-### P-01 — Backend, authentication and accounts
+### P-01 — Authentication and user accounts
 
-**Source:** phase 1 boundaries, phase 2 out of scope.  
-**What:** a real server, database, sign-in, user accounts and account
-management.  
-**Why deferred:** every phase so far is a local-only prototype; the repository
-seam exists so an HTTP implementation can replace `localStorage`.  
-**Next step:** define the API boundary first (document, activity, project
-catalog), then choose an auth provider.
+**Source:** phase 1 boundaries, phase 2 out of scope; split from the original
+backend/auth idea after phase 5 delivered the local API and SQLite store.  
+**What:** sign-in, user accounts and account management on top of the phase 5
+API.  
+**Why deferred:** phase 5 is deliberately a single-user, loopback-only API with
+no identity. Collaboration and cross-device sync need identity first.  
+**Next step:** choose an auth provider and session model, then add ownership to
+projects and activity.
 
 ### P-02 — Collaboration, permissions and shared workspaces
 
@@ -45,14 +46,15 @@ backup.
 workaround.  
 **Next step:** reuse the project export format as the sync payload.
 
-### P-04 — Server-side activity audit log
+### P-04 — Durable server-side activity audit log
 
 **Source:** phase 1 boundaries ("activity is a browser-local change history,
 not a server audit log").  
-**What:** durable, attributable activity history that survives storage resets
-and supports auditing.  
-**Why deferred:** no backend or identity yet.  
-**Next step:** define the event schema and retention policy.
+**Status:** partially advanced by phase 5, which moved activity to the server.
+The current history is still capped at 100 entries and has no attribution.
+**What:** durable, attributable activity history that supports auditing.  
+**Why deferred:** no identity, retention policy or audit query surface yet.  
+**Next step:** define the event schema, retention policy and attribution model.
 
 ## Specification editing
 
@@ -98,6 +100,17 @@ ordering, search and filtering in the project list.
 **Why deferred:** phase 3 covers the full create/open/rename/duplicate/delete
 cycle; organisation features need usage feedback first.  
 **Next step:** collect which controls are actually used before adding more.
+
+### P-13 — Database driver selection: SQLite and Postgres
+
+**Source:** phase 5 decision to keep SQLite local while preserving a future
+Postgres option.  
+**What:** a supported Postgres adapter and a way for the user to select SQLite
+or Postgres, including migration and backup guidance.  
+**Why deferred:** phase 5 is local-only and uses SQLite behind `server/db`;
+adding a second driver now would expand the phase beyond the API cutover.  
+**Next step:** introduce a Postgres implementation of `ProjectStore`, migrate
+the schema, and add an explicit configuration screen or environment switch.
 
 ## Quality and platform
 

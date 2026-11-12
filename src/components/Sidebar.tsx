@@ -13,7 +13,7 @@ import { ChapterTree } from "./ChapterTree";
 import { ProjectSwitcher } from "./ProjectSwitcher";
 import { TreeNode } from "../hooks/useChapterTree";
 import { MAX_PROJECTS, ProjectSummary } from "../domain/projects";
-import { RepositoryStatus } from "../store/persistence";
+import type { WorkspaceStatus } from "../api/types";
 import { useWorkspaceStatus } from "../store/WorkspaceProvider";
 
 const VIEWS: [string, string, LucideIcon][] = [
@@ -32,7 +32,7 @@ export interface SidebarProps {
   collapsed: Set<string>;
   creating: { parentId: string | null } | null;
   chapterTitle: string;
-  status?: RepositoryStatus;
+  status?: WorkspaceStatus;
   navOpen: boolean;
   sidebarRef: RefObject<HTMLElement | null>;
   onNavigateView: (view: string) => void;
@@ -47,7 +47,7 @@ export interface SidebarProps {
   onOpenProjects: () => void;
   onNewProject: () => void;
   onExportProject: () => void;
-  onImportProject: (text: string) => { ok: boolean; issues: string[] };
+  onImportProject: (text: string) => Promise<{ ok: boolean; issues: string[] }>;
 }
 
 export function Sidebar({
@@ -86,7 +86,7 @@ export function Sidebar({
     event.target.value = "";
     if (!file) return;
     try {
-      const result = onImportProject(await file.text());
+      const result = await onImportProject(await file.text());
       setImportError(result.ok ? "" : result.issues.join(" "));
     } catch {
       setImportError("The selected file could not be read.");
@@ -95,10 +95,12 @@ export function Sidebar({
 
   const saved = status.state === "saved";
   const footerLabel = saved
-    ? "Saved locally"
+    ? "Saved to local API"
     : status.state === "pending"
-      ? "Saving locally"
-      : "Local workspace";
+      ? "Saving to local API"
+      : status.state === "conflict"
+        ? "Save conflict"
+        : "Local API";
 
   return (
     <aside
