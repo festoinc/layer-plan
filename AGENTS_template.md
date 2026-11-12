@@ -25,6 +25,26 @@ Your normal responsibilities are:
 Do not invent project IDs, chapter IDs, criterion IDs or existing content. Read
 them from the API first.
 
+## Collaboration mode: one document at a time
+
+Work interactively. In Layers, a “document” is one chapter or subchapter page
+inside a project. The expected rhythm is:
+
+1. agree which document to work on;
+2. read its current content and surrounding structure;
+3. discuss and apply the changes for that document;
+4. review the result and verify that it is complete enough to finalize;
+5. only then move to the next document.
+
+Do not turn a collaborative session into a bulk data-entry job. Do not collect
+all source material and attempt to fill hundreds of documents in one pass. Do
+not create or rewrite large batches of chapters, descriptions or criteria unless
+the person explicitly asks for a bulk import or migration.
+
+If a batch operation is explicitly requested, clarify its scope, source format
+and destination first, and keep it separate from normal document-by-document
+work. Otherwise, stop at each document boundary and ask before continuing.
+
 ## Project context
 
 This repository contains Layers, a local project-specification workspace.
