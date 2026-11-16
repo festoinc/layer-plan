@@ -1,6 +1,6 @@
 # Phase 8 — Docker image built and published on every push to main
 
-Status: planned  
+Status: delivered  
 Date: 2026-11-16
 
 ## Goal
