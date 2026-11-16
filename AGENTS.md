@@ -93,6 +93,38 @@ Rules:
 - Before and after testing, check that nginx and the other services are still
   running.
 
+### Layers MCP nginx host
+
+The host has a dedicated nginx virtual host for the Layers MCP test domain;
+the domain and host address are in `.agents.local.md`. It was configured with
+the user's explicit authorization. The existing restriction on changing nginx
+still applies to future work unless the user explicitly authorizes it.
+
+- The enabled configuration is `/etc/nginx/sites-enabled/layers-e2e-phase9`,
+  linked to `/etc/nginx/sites-available/layers-e2e-phase9`. It does not change
+  the existing satia or n8n virtual hosts.
+- Port 80 serves ACME challenges from `/var/www/layers-mcp-acme` and redirects
+  other requests to HTTPS. Port 443 uses the domain's Certbot-managed Let's
+  Encrypt certificate under `/etc/letsencrypt/live/<domain>/`; the Certbot
+  renewal configuration uses the same ACME webroot.
+- HTTPS requests proxy to `127.0.0.1:18080`, preserve the original Host header,
+  disable proxy buffering, and use a 300-second proxy read timeout. nginx limits
+  request bodies to 2 MiB for the entire virtual host, including the UI and
+  REST API as well as MCP.
+- The isolated phase 9 test container and its volume were removed after the
+  tests. No Layers backend was listening on `127.0.0.1:18080` at that point,
+  so the HTTPS endpoint returned 502 despite having a valid certificate.
+  A later test must provide its own isolated loopback backend and clean it up.
+- For MCP access, set `LAYERS_MCP_ALLOWED_HOSTS` to include the test domain.
+  Use HTTPS for bearer tokens and do not publish the backend port publicly.
+  The default Compose port binding needs a loopback-only test override.
+
+The 2026-11-16 remote HTTPS test verified MCP reads, document writes, stale
+revision handling, user isolation and read-only scopes. Codex CLI 0.169.0
+connected, but its session's `never` approval policy blocked write tool calls;
+it attempted a requested deletion without first asking in chat. The confirmation
+and Codex write acceptance checks remain open as backlog item P-20.
+
 Access pattern:
 
 ```sh

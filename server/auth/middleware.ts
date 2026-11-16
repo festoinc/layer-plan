@@ -21,6 +21,7 @@ export interface AuthHookOptions {
 
 export interface AuthHooks {
   requireAuth: preHandlerHookHandler;
+  requireMcpToken: preHandlerHookHandler;
   requireSession: preHandlerHookHandler;
   requireSuperAdmin: preHandlerHookHandler;
 }
@@ -64,7 +65,10 @@ export function createAuthHooks({
   authStore,
   now = () => new Date().toISOString(),
 }: AuthHookOptions): AuthHooks {
-  const authenticate = async (request: FastifyRequest): Promise<void> => {
+  const authenticate = async (
+    request: FastifyRequest,
+    mcp = false,
+  ): Promise<void> => {
     const authorization = request.headers.authorization;
     if (authorization) {
       const match = /^Bearer\s+(.+)$/i.exec(authorization.trim());
@@ -83,7 +87,7 @@ export function createAuthHooks({
       if (!user || user.disabledAt) {
         throw unauthenticated("The account is disabled.");
       }
-      if (!tokenAllows(token.scopes, request.method)) {
+      if (!mcp && !tokenAllows(token.scopes, request.method)) {
         throw new ApiError(
           403,
           "forbidden",
@@ -107,6 +111,7 @@ export function createAuthHooks({
       return;
     }
 
+    if (mcp) throw unauthenticated("An API bearer token is required.");
     const rawToken = request.cookies?.[SESSION_COOKIE];
     if (!rawToken) throw unauthenticated();
     const session = authStore.findSessionByTokenHash(hashToken(rawToken));
@@ -142,6 +147,10 @@ export function createAuthHooks({
     await authenticate(request);
   };
 
+  const requireMcpToken: preHandlerHookHandler = async (request) => {
+    await authenticate(request, true);
+  };
+
   const requireSession: preHandlerHookHandler = async (request) => {
     await authenticate(request);
     if (request.auth?.method !== "session") {
@@ -174,7 +183,7 @@ export function createAuthHooks({
     }
   };
 
-  return { requireAuth, requireSession, requireSuperAdmin };
+  return { requireAuth, requireMcpToken, requireSession, requireSuperAdmin };
 }
 
 export { SESSION_COOKIE, sessionExpiry };

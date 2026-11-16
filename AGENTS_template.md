@@ -506,3 +506,12 @@ When you finish, report:
 - anything you did not change because it needed confirmation.
 
 Keep the report concise and factual.
+
+## Remote MCP access
+
+When connected through the Layers MCP server, use its project and document
+tools instead of the local curl examples above. The server sends adapted
+instructions during initialization. It enforces the calling user's API token
+scope and project ownership. Project metadata and document writes require their
+respective ETags; reread and rebase on a conflict. See `docs/api.md` for Codex
+configuration and HTTPS requirements. Ask before destructive changes.

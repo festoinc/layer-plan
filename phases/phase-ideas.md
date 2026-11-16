@@ -119,6 +119,22 @@ environment switch.
 
 ## Quality and platform
 
+### P-20 — Codex MCP write approvals and destructive confirmation
+
+**Source:** phase 9 remote Codex test.
+
+**What:** verify a working Codex approval flow for MCP writes and ensure a
+destructive action receives explicit user confirmation before execution.
+
+**Why deferred:** Codex CLI 0.169.0 connected and read projects, but the test
+session's `never` approval policy blocked write calls. On a direct deletion
+request, Codex attempted the tool without first asking in chat. MCP server
+instructions alone do not enforce confirmation.
+
+**Next step:** test an interactive approval-enabled Codex session, verify a
+successful document edit and a confirmed deletion of a disposable project,
+and document any client-specific requirements or limitations.
+
 ### P-09 — Full cross-browser and assistive-technology audit
 
 **Source:** phase 1 boundaries, phase 2 out of scope.  
@@ -160,9 +176,6 @@ moves from document editing toward a project overview.
 chapter editor.  
 **Next step:** prototype only if a project dashboard becomes a real need; the
 phase 3 projects page is the first step in that direction.
-
-### P-15 — MCP
-make docker api be avalible though mcplet's
 
 ### P-16 — Search
 

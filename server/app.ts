@@ -22,6 +22,7 @@ import type { AuthStore } from "./db/authStore";
 import type { ProjectStore } from "./db/store";
 import type { PasswordHasher } from "./auth/password";
 import { createAuthHooks } from "./auth/middleware";
+import { registerMcpRoutes } from "./mcp/routes";
 
 export interface BuildAppOptions {
   config: ServerConfig;
@@ -119,6 +120,7 @@ export async function buildApp({
   registerActivityRoutes(app, store, hooks);
   registerCoverageRoutes(app, store, hooks);
   registerExportRoutes(app, store, hooks);
+  registerMcpRoutes(app, hooks, config);
   if (config.testMode) {
     registerTestRoutes(app, { config, store, authStore, passwordHasher });
   }

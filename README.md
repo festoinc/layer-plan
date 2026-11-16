@@ -55,23 +55,24 @@ examples are in [`docs/api.md`](docs/api.md).
 
 ### Environment
 
-| Variable                           | Default                 | Meaning                                             |
-| ---------------------------------- | ----------------------- | --------------------------------------------------- |
-| `HOST`                             | `127.0.0.1`             | API bind address                                    |
-| `PORT`                             | `3001`                  | API port                                            |
-| `LAYERS_DB_PATH`                   | `data/layers.sqlite`    | SQLite database file                                |
-| `LAYERS_SEED_SAMPLES`              | `1`                     | Seed samples when the database is empty             |
-| `LAYERS_TEST_MODE`                 | `0`                     | Enable the test-only reset endpoint                 |
-| `LAYERS_ALLOW_REMOTE`              | `0`                     | Allow a non-loopback bind                           |
-| `LAYERS_SUPER_ADMIN_EMAIL`         | none                    | Super-admin login email; required outside test mode |
-| `LAYERS_SUPER_ADMIN_PASSWORD`      | none                    | Super-admin password, at least 12 characters        |
-| `LAYERS_SUPER_ADMIN_NAME`          | `Super Admin`           | Super-admin display name                            |
-| `LAYERS_SESSION_TTL_DAYS`          | `30`                    | Sliding browser-session lifetime                    |
-| `LAYERS_SECURE_COOKIES`            | `0`                     | Set `Secure` on the session cookie                  |
-| `LAYERS_UI_ORIGIN`                 | `http://127.0.0.1:5173` | Extra allowed browser origin                        |
-| `LAYERS_LOGIN_RATE_LIMIT`          | `5`                     | Login attempts per window                           |
-| `LAYERS_LOGIN_RATE_WINDOW_MINUTES` | `15`                    | Login rate-limit window                             |
-| `VITE_API_URL`                     | `/api/v1`               | Browser API base URL                                |
+| Variable                           | Default                     | Meaning                                             |
+| ---------------------------------- | --------------------------- | --------------------------------------------------- |
+| `HOST`                             | `127.0.0.1`                 | API bind address                                    |
+| `PORT`                             | `3001`                      | API port                                            |
+| `LAYERS_DB_PATH`                   | `data/layers.sqlite`        | SQLite database file                                |
+| `LAYERS_SEED_SAMPLES`              | `1`                         | Seed samples when the database is empty             |
+| `LAYERS_TEST_MODE`                 | `0`                         | Enable the test-only reset endpoint                 |
+| `LAYERS_ALLOW_REMOTE`              | `0`                         | Allow a non-loopback bind                           |
+| `LAYERS_SUPER_ADMIN_EMAIL`         | none                        | Super-admin login email; required outside test mode |
+| `LAYERS_SUPER_ADMIN_PASSWORD`      | none                        | Super-admin password, at least 12 characters        |
+| `LAYERS_SUPER_ADMIN_NAME`          | `Super Admin`               | Super-admin display name                            |
+| `LAYERS_SESSION_TTL_DAYS`          | `30`                        | Sliding browser-session lifetime                    |
+| `LAYERS_SECURE_COOKIES`            | `0`                         | Set `Secure` on the session cookie                  |
+| `LAYERS_UI_ORIGIN`                 | `http://127.0.0.1:5173`     | Extra allowed browser origin                        |
+| `LAYERS_LOGIN_RATE_LIMIT`          | `5`                         | Login attempts per window                           |
+| `LAYERS_LOGIN_RATE_WINDOW_MINUTES` | `15`                        | Login rate-limit window                             |
+| `LAYERS_MCP_ALLOWED_HOSTS`         | `localhost,127.0.0.1,[::1]` | Allowed MCP request hostnames                       |
+| `VITE_API_URL`                     | `/api/v1`                   | Browser API base URL                                |
 
 The server refuses a non-loopback bind unless `LAYERS_ALLOW_REMOTE=1`.
 Authentication is always required outside test mode. The default loopback bind
@@ -405,3 +406,12 @@ accessibility (axe) and focus management.
   pull requests. On a push to `main` it also builds the Docker image,
   smoke-tests the container and publishes `latest` and `sha-<7>` to GHCR,
   deleting older package versions.
+
+### Remote Codex access
+
+Layers exposes its project and document operations to Codex over MCP at `/mcp`.
+Each user connects with their own Layers API token. Before remote access, set
+`LAYERS_MCP_ALLOWED_HOSTS` and configure HTTPS with a private backend; the
+default Docker Compose port is publicly bound and needs a loopback override
+behind a local reverse proxy. See [Remote Codex MCP access](docs/api.md#remote-codex-mcp-access)
+for setup, token handling, and limits.
