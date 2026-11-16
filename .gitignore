@@ -9,3 +9,4 @@ dist-server/
 server/api/openapi.json
 
 .env
+.agents.local.md

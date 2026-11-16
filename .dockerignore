@@ -12,6 +12,8 @@ docs
 tests
 .env
 .env.*
+AGENTS.md
+.agents.local.md
 *.log
 .DS_Store
 AGENTS_template.md
