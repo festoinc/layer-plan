@@ -1,16 +1,21 @@
 import { buildApp } from "./app";
 import { loadConfig } from "./config";
+import { createPasswordHasher } from "./auth/password";
 import { openDatabase } from "./db/client";
 import { runMigrations } from "./db/migrate";
+import { SqliteAuthStore } from "./db/authStore";
 import { SqliteStore } from "./db/store";
+import { bootstrap } from "./db/bootstrap";
 
 const config = loadConfig();
 const db = openDatabase(config.dbPath);
 runMigrations(db);
 const store = new SqliteStore(db);
-if (config.seedSamples) store.seedSamples();
+const authStore = new SqliteAuthStore(db);
+const passwordHasher = createPasswordHasher({ testMode: config.testMode });
+await bootstrap({ config, store, authStore, passwordHasher });
 
-const app = await buildApp({ config, store });
+const app = await buildApp({ config, store, authStore, passwordHasher });
 
 async function shutdown(signal: string) {
   app.log.info({ signal }, "Shutting down");

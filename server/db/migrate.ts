@@ -24,6 +24,10 @@ const MIGRATIONS: Migration[] = [
     version: 1,
     sql: readMigration("migrations/001_init.sql"),
   },
+  {
+    version: 2,
+    sql: readMigration("migrations/002_auth.sql"),
+  },
 ];
 
 export function runMigrations(db: DatabaseConnection): void {

@@ -4,10 +4,10 @@ A local workspace for project specifications. Create projects, and inside each
 project create chapters and nested subchapters. Each chapter has an editable
 Markdown description, verification rules and a success-criteria checklist.
 
-Everything is stored in a local Fastify API backed by SQLite. There is no
-authentication, no cloud service and no browser `localStorage` persistence. The
-React UI is one client of the API; local AI agents can use the same HTTP
-contract.
+Everything is stored in a local Fastify API backed by SQLite. Accounts and
+sessions protect the API, projects are private to their owner, and local AI
+agents use bearer API tokens. There is no cloud service and no browser
+`localStorage` persistence. The React UI is one client of the API.
 
 ## Run
 
@@ -15,13 +15,19 @@ Node 22 or newer is required.
 
 ```sh
 npm install
+cp .env.example .env
+# edit LAYERS_SUPER_ADMIN_EMAIL and LAYERS_SUPER_ADMIN_PASSWORD
 npm run dev
 ```
 
 `npm run dev` starts the API at `http://127.0.0.1:3001` and the Vite UI at
 `http://127.0.0.1:5173`. The SQLite database defaults to `data/layers.sqlite`
-and is migrated automatically. The first run seeds the **Website project** and
-**Mobile app** samples.
+and is migrated automatically. The first run creates the super admin from
+`.env` and seeds the **Website project** and **Mobile app** samples, owned by
+that super admin.
+
+`.env` is ignored by git and contains a plaintext super-admin password. Restrict
+its file permissions and never commit it.
 
 To run the built UI and API together from one process:
 
@@ -49,18 +55,53 @@ examples are in [`docs/api.md`](docs/api.md).
 
 ### Environment
 
-| Variable              | Default              | Meaning                                 |
-| --------------------- | -------------------- | --------------------------------------- |
-| `HOST`                | `127.0.0.1`          | API bind address                        |
-| `PORT`                | `3001`               | API port                                |
-| `LAYERS_DB_PATH`      | `data/layers.sqlite` | SQLite database file                    |
-| `LAYERS_SEED_SAMPLES` | `1`                  | Seed samples when the database is empty |
-| `LAYERS_TEST_MODE`    | `0`                  | Enable the test-only reset endpoint     |
-| `LAYERS_ALLOW_REMOTE` | `0`                  | Allow a non-loopback bind               |
-| `VITE_API_URL`        | `/api/v1`            | Browser API base URL                    |
+| Variable                           | Default                 | Meaning                                             |
+| ---------------------------------- | ----------------------- | --------------------------------------------------- |
+| `HOST`                             | `127.0.0.1`             | API bind address                                    |
+| `PORT`                             | `3001`                  | API port                                            |
+| `LAYERS_DB_PATH`                   | `data/layers.sqlite`    | SQLite database file                                |
+| `LAYERS_SEED_SAMPLES`              | `1`                     | Seed samples when the database is empty             |
+| `LAYERS_TEST_MODE`                 | `0`                     | Enable the test-only reset endpoint                 |
+| `LAYERS_ALLOW_REMOTE`              | `0`                     | Allow a non-loopback bind                           |
+| `LAYERS_SUPER_ADMIN_EMAIL`         | none                    | Super-admin login email; required outside test mode |
+| `LAYERS_SUPER_ADMIN_PASSWORD`      | none                    | Super-admin password, at least 12 characters        |
+| `LAYERS_SUPER_ADMIN_NAME`          | `Super Admin`           | Super-admin display name                            |
+| `LAYERS_SESSION_TTL_DAYS`          | `30`                    | Sliding browser-session lifetime                    |
+| `LAYERS_SECURE_COOKIES`            | `0`                     | Set `Secure` on the session cookie                  |
+| `LAYERS_UI_ORIGIN`                 | `http://127.0.0.1:5173` | Extra allowed browser origin                        |
+| `LAYERS_LOGIN_RATE_LIMIT`          | `5`                     | Login attempts per window                           |
+| `LAYERS_LOGIN_RATE_WINDOW_MINUTES` | `15`                    | Login rate-limit window                             |
+| `VITE_API_URL`                     | `/api/v1`               | Browser API base URL                                |
 
-The server refuses a non-loopback bind unless `LAYERS_ALLOW_REMOTE=1`. The API
-has no authentication, so loopback is the security boundary.
+The server refuses a non-loopback bind unless `LAYERS_ALLOW_REMOTE=1`.
+Authentication is always required outside test mode. Keep the default loopback
+bind; this phase does not provide TLS or remote deployment.
+
+## Authentication and accounts
+
+- The super admin is configured in `.env` and synchronized into SQLite at
+  startup. Changing the password in `.env` and restarting revokes the super
+  admin's sessions.
+- Sign in at `#/sign-in` with the super-admin email and password.
+- The super admin creates member accounts at `#/users` by entering an email and
+  password. No email is sent. Passwords cannot be changed or recovered in this
+  phase.
+- Each user owns their projects. Another user's project returns `404`, including
+  for the super admin. The super admin manages users but does not bypass project
+  ownership.
+- The account page at `#/account` lists browser sessions and API tokens.
+- API tokens are shown once, stored hashed, and can be read-only or read-write.
+  Local AI agents use `Authorization: Bearer <token>`.
+- Login is rate-limited. Browser sessions use an `HttpOnly`, `SameSite=Lax`
+  cookie and are never stored in `localStorage`.
+
+Agent example:
+
+```sh
+export LAYERS_API_TOKEN=lrs_...
+curl -H "Authorization: Bearer $LAYERS_API_TOKEN" \
+  http://127.0.0.1:3001/api/v1/projects
+```
 
 ## Usage
 
@@ -110,10 +151,10 @@ its parent that created it.
 server/          Fastify API, SQLite store, migrations, seed, OpenAPI routes
 src/domain/      Pure models: projects, chapters, criteria, verification, schema
 src/api/         Fetch client and typed project/document/activity calls
-src/store/       React providers for the project catalog and active workspace
+src/store/       Auth, project catalog and active workspace providers
 src/hooks/       Hash router, memoized chapter tree, focus trap
-src/components/  Sidebar, project switcher/page/dialogs, tree, editor, banners
-src/app/         App shell, per-project workspace shell, error boundaries
+src/components/  Sidebar, projects, auth/account/users pages, editor, banners
+src/app/         Auth gate, app shell, workspace shell, error boundaries
 src/Markdown.tsx Markdown preview/editor primitives
 src/data.ts      Sample projects used by the API seed
 docs/api.md      Short API/agent guide
@@ -148,17 +189,22 @@ AGENTS_template.md  Instructions for AI agents using the API
 The database is created automatically. Migrations live in
 `server/db/migrations/`.
 
-| Table               | Contents                                                      |
-| ------------------- | ------------------------------------------------------------- |
-| `projects`          | Metadata, guidelines, stats, metadata revision and timestamps |
-| `project_documents` | Normalized chapters, selected chapter and document revision   |
-| `activity_entries`  | Append-only activity, newest first, capped at 100 per project |
-| `app_state`         | Active project selection                                      |
-| `schema_migrations` | Applied database migrations                                   |
+| Table               | Contents                                                    |
+| ------------------- | ----------------------------------------------------------- |
+| `users`             | Email, display name, password hash, role and disabled state |
+| `sessions`          | Hashed browser-session tokens and expiry                    |
+| `api_tokens`        | Hashed agent tokens, scopes, expiry and revocation          |
+| `projects`          | Owner, metadata, guidelines, stats and revisions            |
+| `project_documents` | Normalized chapters, selected chapter and document revision |
+| `activity_entries`  | Append-only activity with actor attribution                 |
+| `user_state`        | Per-user active project                                     |
+| `app_state`         | Legacy global state; migrated and unused after phase 6      |
+| `schema_migrations` | Applied database migrations                                 |
 
 WAL mode, foreign keys and a busy timeout are enabled. Project deletion cascades
 to its document and activity. `npm run db:reset` deletes the database, reapplies
-migrations and seeds the sample projects when `LAYERS_SEED_SAMPLES` is enabled.
+migrations, creates the super admin and seeds the sample projects when
+`LAYERS_SEED_SAMPLES` is enabled.
 
 Project **Export project** downloads a `layers-project` version 3 JSON file;
 the file includes an embedded `instructions` field explaining the format for
@@ -168,39 +214,50 @@ suffix on name collisions. Older v1/v2 files remain importable.
 
 ### API
 
-| Method   | Path                             | Purpose                       |
-| -------- | -------------------------------- | ----------------------------- |
-| `GET`    | `/api/v1/health`                 | API and database check        |
-| `GET`    | `/api/v1/projects`               | Catalog and active project    |
-| `POST`   | `/api/v1/projects`               | Create a project              |
-| `GET`    | `/api/v1/projects/:id`           | Project detail and guidelines |
-| `PATCH`  | `/api/v1/projects/:id`           | Update metadata/guidelines    |
-| `DELETE` | `/api/v1/projects/:id`           | Delete a project              |
-| `POST`   | `/api/v1/projects/:id/duplicate` | Duplicate a project           |
-| `POST`   | `/api/v1/projects/:id/activate`  | Set the active project        |
-| `GET`    | `/api/v1/projects/:id/document`  | Read the document             |
-| `PUT`    | `/api/v1/projects/:id/document`  | Replace the document          |
-| `GET`    | `/api/v1/projects/:id/activity`  | Read activity                 |
-| `POST`   | `/api/v1/projects/:id/activity`  | Append activity               |
-| `GET`    | `/api/v1/projects/:id/coverage`  | Derived verification coverage |
-| `GET`    | `/api/v1/projects/:id/export`    | Download a project file       |
-| `POST`   | `/api/v1/projects/import`        | Import a project file         |
+| Method       | Path                             | Purpose                            |
+| ------------ | -------------------------------- | ---------------------------------- |
+| `GET`        | `/api/v1/health`                 | Public API and database check      |
+| `POST`       | `/api/v1/auth/login`             | Sign in and set a session cookie   |
+| `POST`       | `/api/v1/auth/logout`            | Sign out                           |
+| `GET`        | `/api/v1/auth/session`           | Current browser session            |
+| `GET`        | `/api/v1/me`                     | Current user for either credential |
+| `GET/DELETE` | `/api/v1/auth/sessions`          | List or revoke other sessions      |
+| `GET/POST`   | `/api/v1/me/tokens`              | List or create API tokens          |
+| `GET/POST`   | `/api/v1/users`                  | Super-admin user management        |
+| `GET`        | `/api/v1/projects`               | Owned catalog and active project   |
+| `POST`       | `/api/v1/projects`               | Create a project                   |
+| `GET`        | `/api/v1/projects/:id`           | Project detail and guidelines      |
+| `PATCH`      | `/api/v1/projects/:id`           | Update metadata/guidelines         |
+| `DELETE`     | `/api/v1/projects/:id`           | Delete a project                   |
+| `POST`       | `/api/v1/projects/:id/duplicate` | Duplicate a project                |
+| `POST`       | `/api/v1/projects/:id/activate`  | Set the active project             |
+| `GET`        | `/api/v1/projects/:id/document`  | Read the document                  |
+| `PUT`        | `/api/v1/projects/:id/document`  | Replace the document               |
+| `GET`        | `/api/v1/projects/:id/activity`  | Read activity                      |
+| `POST`       | `/api/v1/projects/:id/activity`  | Append activity                    |
+| `GET`        | `/api/v1/projects/:id/coverage`  | Derived verification coverage      |
+| `GET`        | `/api/v1/projects/:id/export`    | Download a project file            |
+| `POST`       | `/api/v1/projects/import`        | Import a project file              |
 
-See [`docs/api.md`](docs/api.md) for revision rules and examples. Error responses
-use `{ "error": { "code", "message", "details" } }`.
+All project routes require a session cookie or bearer token. See
+[`docs/api.md`](docs/api.md) for login, token, revision rules and examples.
+Error responses use `{ "error": { "code", "message", "details" } }`.
 
 ### Routes
 
 Hash routing keeps every project and chapter linkable and survives reload:
 
+- `#/sign-in` — sign in
+- `#/account` — account, sessions and API tokens
+- `#/users` — super-admin user management
 - `#/projects` — project list
 - `#/projects/<projectId>/chapters/<chapterId>` — specifications
 - `#/projects/<projectId>/coverage` — automated test coverage
 - `#/projects/<projectId>/activity` — project activity
 
 Unknown project ids return to the project list; unknown chapter ids fall back to
-the first chapter and the URL is rewritten. The active project is stored by the
-API.
+the first chapter and the URL is rewritten. The active project is stored per
+user by the API.
 
 ## Verify
 
@@ -222,16 +279,19 @@ starts the API and UI through `npm run dev:e2e`, uses a dedicated SQLite file an
 resets it before each test. The production smoke test builds the UI and server,
 resets a temporary database and runs Chromium against `npm start`.
 
-The browser suite covers the phase 1–4 scenarios plus API-backed persistence,
-optimistic conflict handling, retry after API failure, export/import through the
-API, project lifecycle, project isolation, project-scoped routing, activity,
-verification modes, coverage counting, accessibility (axe) and focus
-management.
+The browser suite covers the phase 1–6 scenarios plus sign-in and session
+handling, account and API-token management, super-admin user creation and
+disablement, two-user project isolation, API-backed persistence, optimistic
+conflict handling, retry after API failure, export/import, project lifecycle,
+project-scoped routing, activity, verification modes, coverage counting,
+accessibility (axe) and focus management.
 
 ## Runtime boundaries
 
-- No authentication, accounts, permissions or collaboration. The API is
-  loopback-only and single-user.
+- Authentication and private project ownership are available. Collaboration,
+  project roles, sharing and invitations are not.
+- No password change, password recovery, email verification or email delivery.
+  A forgotten password requires disabling the account and creating a new one.
 - No remote deployment, TLS, Postgres support or database selection yet. All SQL
   stays behind `server/db` so that work can be added later.
 - No offline mode. The app requires the local API.
@@ -246,10 +306,11 @@ management.
 
 ## Tests and tooling
 
-- **Vitest** — domain unit tests, API client unit tests, Fastify integration
-  tests with in-memory SQLite, and OpenAPI contract tests.
+- **Vitest** — domain and auth unit tests, API client unit tests, Fastify
+  integration tests with in-memory SQLite, and OpenAPI contract tests.
 - **Playwright** — Chromium UI tests against the real API and SQLite, with one
-  worker and a test-only database reset endpoint.
+  worker, a test-only database reset endpoint and test-mode super-admin
+  credentials.
 - **TypeScript** — client and server type checking through separate configs.
 - **ESLint + Prettier** — lint and formatting checks.
 - **OpenAPI** — Redocly lint, generated types and a served Scalar reference.

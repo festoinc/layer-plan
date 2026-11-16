@@ -3,7 +3,7 @@ import type {
   ProjectPatch,
   ProjectSummary,
 } from "../domain/projects";
-import { apiRequest } from "./client";
+import { apiRequest, apiRequestText } from "./client";
 import type {
   ImportProjectResponse,
   ProjectDetail,
@@ -81,13 +81,7 @@ export async function activateProject(
 }
 
 export async function fetchProjectExport(id: string): Promise<string> {
-  const response = await fetch(
-    `${import.meta.env.VITE_API_URL ?? "/api/v1"}/projects/${encodeURIComponent(id)}/export`,
-  );
-  if (!response.ok) {
-    throw new Error(`The project could not be exported (${response.status}).`);
-  }
-  return response.text();
+  return apiRequestText(`/projects/${encodeURIComponent(id)}/export`);
 }
 
 export async function importProject(

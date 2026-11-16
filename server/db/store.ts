@@ -88,6 +88,7 @@ export interface CoverageResult {
 
 interface ProjectRow {
   id: string;
+  owner_id: string | null;
   name: string;
   initials: string;
   color: string;
@@ -118,6 +119,8 @@ interface ActivityRow {
   chapter_id: string | null;
   chapter_name: string;
   created_at: string;
+  actor_user_id: string | null;
+  actor_name: string | null;
 }
 
 export interface ProjectStoreOptions {
@@ -126,35 +129,51 @@ export interface ProjectStoreOptions {
 }
 
 export interface ProjectStore {
-  listProjects(): ProjectListResult;
-  getProject(id: string): ProjectDetail | null;
-  createProject(input: ProjectInput & { id?: string }): ProjectDetail;
+  listProjects(ownerId: string): ProjectListResult;
+  getProject(ownerId: string, id: string): ProjectDetail | null;
+  createProject(
+    ownerId: string,
+    input: ProjectInput & { id?: string },
+  ): ProjectDetail;
   updateProject(
+    ownerId: string,
     id: string,
     patch: ProjectPatch,
     expectedRevision: number,
   ): ProjectDetail;
   deleteProject(
+    ownerId: string,
     id: string,
     expectedRevision: number,
   ): { activeProjectId: string | null };
-  duplicateProject(id: string): ProjectDetail;
-  activateProject(id: string): string | null;
-  getDocument(id: string): DocumentSnapshot | null;
+  duplicateProject(ownerId: string, id: string): ProjectDetail;
+  activateProject(ownerId: string, id: string): string | null;
+  getDocument(ownerId: string, id: string): DocumentSnapshot | null;
   saveDocument(
+    ownerId: string,
     id: string,
     input: SaveDocumentInput,
     expectedRevision: number,
   ): SaveDocumentResult;
   listActivity(
+    ownerId: string,
     id: string,
     options?: { limit?: number; before?: number },
   ): ActivityEntry[];
-  appendActivity(id: string, input: CreateActivityInput): ActivityEntry[];
-  getCoverage(id: string): CoverageResult | null;
-  exportProject(id: string): ProjectExport | null;
-  importProject(raw: unknown): ImportProjectResult;
-  reset(seed?: boolean): void;
+  appendActivity(
+    ownerId: string,
+    id: string,
+    input: CreateActivityInput,
+  ): ActivityEntry[];
+  getCoverage(ownerId: string, id: string): CoverageResult | null;
+  exportProject(ownerId: string, id: string): ProjectExport | null;
+  importProject(ownerId: string, raw: unknown): ImportProjectResult;
+  getUserState(ownerId: string): { activeProjectId: string | null };
+  claimUnownedProjects(ownerId: string): number;
+  migrateLegacyActiveProject(ownerId: string): void;
+  reset(): void;
+  seedSamples(ownerId: string): boolean;
+  ping(): void;
   close(): void;
 }
 
@@ -195,6 +214,8 @@ function activityFromRow(row: ActivityRow): ActivityEntry {
     chapterId: row.chapter_id,
     chapterName: row.chapter_name,
     time: row.created_at,
+    ...(row.actor_user_id ? { actorUserId: row.actor_user_id } : {}),
+    ...(row.actor_name ? { actorName: row.actor_name } : {}),
   };
 }
 
@@ -232,35 +253,39 @@ export class SqliteStore implements ProjectStore {
     this.newId = options.newId ?? createId;
   }
 
-  private projectRow(id: string): ProjectRow | null {
+  private projectRow(ownerId: string, id: string): ProjectRow | null {
     const row = this.db
       .prepare(
         `SELECT p.*, d.revision AS document_revision
          FROM projects p
          LEFT JOIN project_documents d ON d.project_id = p.id
-         WHERE p.id = ?`,
+         WHERE p.id = ? AND p.owner_id = ?`,
       )
-      .get(id) as ProjectRow | undefined;
+      .get(id, ownerId) as ProjectRow | undefined;
     return row ?? null;
   }
 
-  private documentRow(id: string): DocumentRow | null {
+  private documentRow(ownerId: string, id: string): DocumentRow | null {
     const row = this.db
-      .prepare("SELECT * FROM project_documents WHERE project_id = ?")
-      .get(id) as DocumentRow | undefined;
+      .prepare(
+        `SELECT d.* FROM project_documents d
+         JOIN projects p ON p.id = d.project_id
+         WHERE d.project_id = ? AND p.owner_id = ?`,
+      )
+      .get(id, ownerId) as DocumentRow | undefined;
     return row ?? null;
   }
 
-  private requireProject(id: string): ProjectRow {
-    const row = this.projectRow(id);
+  private requireProject(ownerId: string, id: string): ProjectRow {
+    const row = this.projectRow(ownerId, id);
     if (!row) {
       throw new ApiError(404, "not_found", "The project does not exist.");
     }
     return row;
   }
 
-  private requireDocument(id: string): DocumentRow {
-    const row = this.documentRow(id);
+  private requireDocument(ownerId: string, id: string): DocumentRow {
+    const row = this.documentRow(ownerId, id);
     if (!row) {
       throw new ApiError(
         500,
@@ -271,43 +296,48 @@ export class SqliteStore implements ProjectStore {
     return row;
   }
 
-  private activeProjectId(): string | null {
+  private activeProjectId(ownerId: string): string | null {
     const state = this.db
-      .prepare("SELECT value FROM app_state WHERE key = 'active_project_id'")
-      .get() as { value: string | null } | undefined;
-    const candidate = state?.value ?? null;
-    if (candidate && this.projectRow(candidate)) return candidate;
+      .prepare("SELECT active_project_id FROM user_state WHERE user_id = ?")
+      .get(ownerId) as { active_project_id: string | null } | undefined;
+    const candidate = state?.active_project_id ?? null;
+    if (candidate && this.projectRow(ownerId, candidate)) return candidate;
 
-    const first = sortProjects(this.allSummaries(), null)[0]?.id ?? null;
-    this.setActiveProjectId(first);
+    const first = sortProjects(this.allSummaries(ownerId), null)[0]?.id ?? null;
+    this.setActiveProjectId(ownerId, first);
     return first;
   }
 
-  private setActiveProjectId(id: string | null): void {
+  private setActiveProjectId(ownerId: string, id: string | null): void {
     this.db
       .prepare(
-        `INSERT INTO app_state (key, value) VALUES ('active_project_id', ?)
-         ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
+        `INSERT INTO user_state (user_id, active_project_id)
+         VALUES (?, ?)
+         ON CONFLICT(user_id) DO UPDATE SET
+           active_project_id = excluded.active_project_id`,
       )
-      .run(id);
+      .run(ownerId, id);
   }
 
-  private allSummaries(): ProjectSummary[] {
+  private allSummaries(ownerId: string): ProjectSummary[] {
     const rows = this.db
-      .prepare("SELECT * FROM projects")
-      .all() as ProjectRow[];
+      .prepare("SELECT * FROM projects WHERE owner_id = ?")
+      .all(ownerId) as ProjectRow[];
     return rows.map(summaryFromRow);
   }
 
-  private projectNames(): string[] {
+  private projectNames(ownerId: string): string[] {
     return (
-      this.db.prepare("SELECT name FROM projects").all() as Array<{
+      this.db
+        .prepare("SELECT name FROM projects WHERE owner_id = ?")
+        .all(ownerId) as Array<{
         name: string;
       }>
     ).map((row) => row.name);
   }
 
   private insertProjectRow(
+    ownerId: string,
     project: Project,
     stats: ProjectStats,
     testGuidelines: string,
@@ -316,13 +346,14 @@ export class SqliteStore implements ProjectStore {
     this.db
       .prepare(
         `INSERT INTO projects (
-          id, name, initials, color, description, test_guidelines,
+          id, owner_id, name, initials, color, description, test_guidelines,
           chapter_count, criterion_count, checked_count,
           metadata_revision, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)`,
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)`,
       )
       .run(
         project.id,
+        ownerId,
         project.name,
         project.initials,
         project.color,
@@ -358,13 +389,18 @@ export class SqliteStore implements ProjectStore {
       );
   }
 
-  private insertActivityRow(projectId: string, entry: ActivityEntry): void {
+  private insertActivityRow(
+    projectId: string,
+    entry: ActivityEntry,
+    actorUserId: string | null = null,
+  ): void {
     assertActivityInput(entry);
     this.db
       .prepare(
         `INSERT OR IGNORE INTO activity_entries
-          (id, project_id, message, chapter_id, chapter_name, created_at)
-         VALUES (?, ?, ?, ?, ?, ?)`,
+          (id, project_id, message, chapter_id, chapter_name, created_at,
+           actor_user_id)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         entry.id,
@@ -373,6 +409,7 @@ export class SqliteStore implements ProjectStore {
         entry.chapterId,
         entry.chapterName,
         entry.time,
+        entry.actorUserId ?? actorUserId,
       );
   }
 
@@ -381,6 +418,7 @@ export class SqliteStore implements ProjectStore {
     message: string,
     chapterName: string,
     chapterId: string | null = null,
+    actorUserId: string | null = null,
   ): void {
     this.insertActivityRow(
       projectId,
@@ -391,6 +429,7 @@ export class SqliteStore implements ProjectStore {
         chapterName,
         time: this.now(),
       }),
+      actorUserId,
     );
   }
 
@@ -412,6 +451,7 @@ export class SqliteStore implements ProjectStore {
   private insertNewActivity(
     projectId: string,
     inputs: CreateActivityInput[],
+    actorUserId: string,
   ): void {
     for (const input of inputs) {
       assertActivityInput(input);
@@ -424,32 +464,38 @@ export class SqliteStore implements ProjectStore {
           chapterName: input.chapterName,
           time: this.now(),
         }),
+        actorUserId,
       );
     }
     this.trimActivity(projectId);
   }
 
-  listProjects(): ProjectListResult {
-    const activeProjectId = this.activeProjectId();
+  listProjects(ownerId: string): ProjectListResult {
+    const activeProjectId = this.activeProjectId(ownerId);
     return {
-      projects: sortProjects(this.allSummaries(), activeProjectId),
+      projects: sortProjects(this.allSummaries(ownerId), activeProjectId),
       activeProjectId,
     };
   }
 
-  getProject(id: string): ProjectDetail | null {
-    const row = this.projectRow(id);
+  getProject(ownerId: string, id: string): ProjectDetail | null {
+    const row = this.projectRow(ownerId, id);
     return row ? detailFromRow(row) : null;
   }
 
-  createProject(input: ProjectInput & { id?: string }): ProjectDetail {
+  createProject(
+    ownerId: string,
+    input: ProjectInput & { id?: string },
+  ): ProjectDetail {
     const id = input.id ?? this.newId();
     assertProjectId(id);
-    if (this.projectRow(id)) {
+    if (this.db.prepare("SELECT 1 FROM projects WHERE id = ?").get(id)) {
       throw new ApiError(409, "project_exists", "That project id is in use.");
     }
     const count = (
-      this.db.prepare("SELECT COUNT(*) AS count FROM projects").get() as {
+      this.db
+        .prepare("SELECT COUNT(*) AS count FROM projects WHERE owner_id = ?")
+        .get(ownerId) as {
         count: number;
       }
     ).count;
@@ -480,6 +526,7 @@ export class SqliteStore implements ProjectStore {
 
     const transaction = this.db.transaction(() => {
       this.insertProjectRow(
+        ownerId,
         project,
         stats,
         input.testGuidelines ?? "",
@@ -491,20 +538,22 @@ export class SqliteStore implements ProjectStore {
         "Created project",
         chapter.title,
         chapter.id,
+        ownerId,
       );
-      this.setActiveProjectId(project.id);
+      this.setActiveProjectId(ownerId, project.id);
     });
     transaction();
 
-    return this.requireDetail(project.id);
+    return this.requireDetail(ownerId, project.id);
   }
 
   updateProject(
+    ownerId: string,
     id: string,
     patch: ProjectPatch,
     expectedRevision: number,
   ): ProjectDetail {
-    const row = this.requireProject(id);
+    const row = this.requireProject(ownerId, id);
     if (row.metadata_revision !== expectedRevision) {
       throw new ApiError(
         412,
@@ -548,7 +597,7 @@ export class SqliteStore implements ProjectStore {
             name = ?, initials = ?, color = ?, description = ?,
             test_guidelines = ?, metadata_revision = metadata_revision + 1,
             updated_at = ?
-           WHERE id = ?`,
+           WHERE id = ? AND owner_id = ?`,
         )
         .run(
           project.name,
@@ -558,19 +607,21 @@ export class SqliteStore implements ProjectStore {
           nextGuidelines,
           project.updatedAt,
           id,
+          ownerId,
         );
-      this.activityMessage(id, message, project.name);
+      this.activityMessage(id, message, project.name, null, ownerId);
     });
     transaction();
 
-    return this.requireDetail(id);
+    return this.requireDetail(ownerId, id);
   }
 
   deleteProject(
+    ownerId: string,
     id: string,
     expectedRevision: number,
   ): { activeProjectId: string | null } {
-    const row = this.requireProject(id);
+    const row = this.requireProject(ownerId, id);
     if (row.metadata_revision !== expectedRevision) {
       throw new ApiError(
         412,
@@ -579,23 +630,26 @@ export class SqliteStore implements ProjectStore {
         { currentRevision: row.metadata_revision },
       );
     }
-    const wasActive = this.activeProjectId() === id;
+    const wasActive = this.activeProjectId(ownerId) === id;
 
     const transaction = this.db.transaction(() => {
-      this.db.prepare("DELETE FROM projects WHERE id = ?").run(id);
+      this.db
+        .prepare("DELETE FROM projects WHERE id = ? AND owner_id = ?")
+        .run(id, ownerId);
       if (wasActive) {
-        const next = sortProjects(this.allSummaries(), null)[0]?.id ?? null;
-        this.setActiveProjectId(next);
+        const next =
+          sortProjects(this.allSummaries(ownerId), null)[0]?.id ?? null;
+        this.setActiveProjectId(ownerId, next);
       }
     });
     transaction();
 
-    return { activeProjectId: this.activeProjectId() };
+    return { activeProjectId: this.activeProjectId(ownerId) };
   }
 
-  duplicateProject(id: string): ProjectDetail {
-    const source = this.requireProject(id);
-    const sourceDocument = this.getDocument(id);
+  duplicateProject(ownerId: string, id: string): ProjectDetail {
+    const source = this.requireProject(ownerId, id);
+    const sourceDocument = this.getDocument(ownerId, id);
     if (!sourceDocument) {
       throw new ApiError(
         500,
@@ -604,7 +658,9 @@ export class SqliteStore implements ProjectStore {
       );
     }
     const count = (
-      this.db.prepare("SELECT COUNT(*) AS count FROM projects").get() as {
+      this.db
+        .prepare("SELECT COUNT(*) AS count FROM projects WHERE owner_id = ?")
+        .get(ownerId) as {
         count: number;
       }
     ).count;
@@ -617,7 +673,10 @@ export class SqliteStore implements ProjectStore {
     }
 
     const newProjectId = this.newId();
-    const name = uniqueProjectName(`${source.name} copy`, this.projectNames());
+    const name = uniqueProjectName(
+      `${source.name} copy`,
+      this.projectNames(ownerId),
+    );
     const timestamp = this.now();
     const project = normalizeProject(
       {
@@ -634,29 +693,37 @@ export class SqliteStore implements ProjectStore {
     const stats = summarizeDocument(chapters);
 
     const transaction = this.db.transaction(() => {
-      this.insertProjectRow(project, stats, source.test_guidelines, timestamp);
+      this.insertProjectRow(
+        ownerId,
+        project,
+        stats,
+        source.test_guidelines,
+        timestamp,
+      );
       this.insertDocumentRow(project.id, chapters, selectedId, timestamp);
       this.activityMessage(
         project.id,
         `Duplicated from ${source.name}`,
         project.name,
+        null,
+        ownerId,
       );
-      this.setActiveProjectId(project.id);
+      this.setActiveProjectId(ownerId, project.id);
     });
     transaction();
 
-    return this.requireDetail(project.id);
+    return this.requireDetail(ownerId, project.id);
   }
 
-  activateProject(id: string): string | null {
-    this.requireProject(id);
-    this.setActiveProjectId(id);
+  activateProject(ownerId: string, id: string): string | null {
+    this.requireProject(ownerId, id);
+    this.setActiveProjectId(ownerId, id);
     return id;
   }
 
-  getDocument(id: string): DocumentSnapshot | null {
-    this.requireProject(id);
-    const row = this.requireDocument(id);
+  getDocument(ownerId: string, id: string): DocumentSnapshot | null {
+    this.requireProject(ownerId, id);
+    const row = this.requireDocument(ownerId, id);
     let parsed: unknown;
     try {
       parsed = JSON.parse(row.chapters_json) as unknown;
@@ -687,12 +754,13 @@ export class SqliteStore implements ProjectStore {
   }
 
   saveDocument(
+    ownerId: string,
     id: string,
     input: SaveDocumentInput,
     expectedRevision: number,
   ): SaveDocumentResult {
-    this.requireProject(id);
-    const row = this.requireDocument(id);
+    this.requireProject(ownerId, id);
+    const row = this.requireDocument(ownerId, id);
     if (row.revision !== expectedRevision) {
       throw new ApiError(
         412,
@@ -761,7 +829,7 @@ export class SqliteStore implements ProjectStore {
             `UPDATE projects SET
               chapter_count = ?, criterion_count = ?, checked_count = ?,
               updated_at = ?
-             WHERE id = ?`,
+             WHERE id = ? AND owner_id = ?`,
           )
           .run(
             stats.chapterCount,
@@ -769,9 +837,10 @@ export class SqliteStore implements ProjectStore {
             stats.checkedCount,
             timestamp,
             id,
+            ownerId,
           );
       }
-      this.insertNewActivity(id, input.activity ?? []);
+      this.insertNewActivity(id, input.activity ?? [], ownerId);
     });
     transaction();
 
@@ -784,47 +853,56 @@ export class SqliteStore implements ProjectStore {
         chapters,
         selectedId,
       },
-      activity: this.listActivity(id),
+      activity: this.listActivity(ownerId, id),
       stats,
     };
   }
 
   listActivity(
+    ownerId: string,
     id: string,
     options: { limit?: number; before?: number } = {},
   ): ActivityEntry[] {
-    this.requireProject(id);
+    this.requireProject(ownerId, id);
     const limit = Math.min(Math.max(options.limit ?? 100, 1), 100);
     const rows = options.before
       ? (this.db
           .prepare(
-            `SELECT * FROM activity_entries
-             WHERE project_id = ? AND sequence < ?
-             ORDER BY sequence DESC LIMIT ?`,
+            `SELECT a.*, u.display_name AS actor_name
+             FROM activity_entries a
+             LEFT JOIN users u ON u.id = a.actor_user_id
+             WHERE a.project_id = ? AND a.sequence < ?
+             ORDER BY a.sequence DESC LIMIT ?`,
           )
           .all(id, options.before, limit) as ActivityRow[])
       : (this.db
           .prepare(
-            `SELECT * FROM activity_entries
-             WHERE project_id = ?
-             ORDER BY sequence DESC LIMIT ?`,
+            `SELECT a.*, u.display_name AS actor_name
+             FROM activity_entries a
+             LEFT JOIN users u ON u.id = a.actor_user_id
+             WHERE a.project_id = ?
+             ORDER BY a.sequence DESC LIMIT ?`,
           )
           .all(id, limit) as ActivityRow[]);
     return rows.map(activityFromRow);
   }
 
-  appendActivity(id: string, input: CreateActivityInput): ActivityEntry[] {
-    this.requireProject(id);
+  appendActivity(
+    ownerId: string,
+    id: string,
+    input: CreateActivityInput,
+  ): ActivityEntry[] {
+    this.requireProject(ownerId, id);
     const transaction = this.db.transaction(() => {
-      this.insertNewActivity(id, [input]);
+      this.insertNewActivity(id, [input], ownerId);
     });
     transaction();
-    return this.listActivity(id);
+    return this.listActivity(ownerId, id);
   }
 
-  getCoverage(id: string): CoverageResult | null {
-    const row = this.requireProject(id);
-    const document = this.getDocument(id);
+  getCoverage(ownerId: string, id: string): CoverageResult | null {
+    const row = this.requireProject(ownerId, id);
+    const document = this.getDocument(ownerId, id);
     if (!document) return null;
     return {
       summary: summarizeVerification(document.chapters),
@@ -833,14 +911,14 @@ export class SqliteStore implements ProjectStore {
     };
   }
 
-  exportProject(id: string): ProjectExport | null {
-    const row = this.requireProject(id);
-    const document = this.getDocument(id);
+  exportProject(ownerId: string, id: string): ProjectExport | null {
+    const row = this.requireProject(ownerId, id);
+    const document = this.getDocument(ownerId, id);
     if (!document) return null;
     const workspace = createWorkspace({
       projectId: id,
       chapters: document.chapters,
-      events: this.listActivity(id),
+      events: this.listActivity(ownerId, id),
       selectedId: document.selectedId,
     });
     return serializeProjectExport(
@@ -851,9 +929,11 @@ export class SqliteStore implements ProjectStore {
     );
   }
 
-  importProject(raw: unknown): ImportProjectResult {
+  importProject(ownerId: string, raw: unknown): ImportProjectResult {
     const count = (
-      this.db.prepare("SELECT COUNT(*) AS count FROM projects").get() as {
+      this.db
+        .prepare("SELECT COUNT(*) AS count FROM projects WHERE owner_id = ?")
+        .get(ownerId) as {
         count: number;
       }
     ).count;
@@ -880,9 +960,11 @@ export class SqliteStore implements ProjectStore {
     }
 
     const id = this.newId();
-    const name = uniqueProjectName(imported.project.name, this.projectNames(), {
-      suffix: " (imported)",
-    });
+    const name = uniqueProjectName(
+      imported.project.name,
+      this.projectNames(ownerId),
+      { suffix: " (imported)" },
+    );
     const timestamp = this.now();
     const project = normalizeProject(
       {
@@ -899,42 +981,97 @@ export class SqliteStore implements ProjectStore {
     const stats = summarizeDocument(document);
 
     const transaction = this.db.transaction(() => {
-      this.insertProjectRow(project, stats, imported.testGuidelines, timestamp);
+      this.insertProjectRow(
+        ownerId,
+        project,
+        stats,
+        imported.testGuidelines,
+        timestamp,
+      );
       this.insertDocumentRow(project.id, document, selectedId, timestamp);
       for (const event of imported.workspace.events) {
-        this.insertActivityRow(project.id, event);
+        this.insertActivityRow(
+          project.id,
+          { ...event, actorUserId: null, actorName: null },
+          null,
+        );
       }
       this.activityMessage(
         project.id,
         `Imported project "${project.name}"`,
         project.name,
+        null,
+        ownerId,
       );
       this.trimActivity(project.id);
-      this.setActiveProjectId(project.id);
+      this.setActiveProjectId(ownerId, project.id);
     });
     transaction();
 
     return {
-      project: this.requireDetail(project.id),
+      project: this.requireDetail(ownerId, project.id),
       issues: imported.issues,
     };
   }
 
-  reset(seed = false): void {
+  getUserState(ownerId: string): { activeProjectId: string | null } {
+    return { activeProjectId: this.activeProjectId(ownerId) };
+  }
+
+  claimUnownedProjects(ownerId: string): number {
+    const transaction = this.db.transaction(() => {
+      const rows = this.db
+        .prepare("SELECT id FROM projects WHERE owner_id IS NULL")
+        .all() as Array<{ id: string }>;
+      if (!rows.length) return 0;
+      const ids = rows.map((row) => row.id);
+      const placeholders = ids.map(() => "?").join(", ");
+      this.db
+        .prepare(`UPDATE projects SET owner_id = ? WHERE owner_id IS NULL`)
+        .run(ownerId);
+      this.db
+        .prepare(
+          `UPDATE activity_entries SET actor_user_id = ?
+           WHERE actor_user_id IS NULL
+             AND project_id IN (${placeholders})`,
+        )
+        .run(ownerId, ...ids);
+      return rows.length;
+    });
+    return transaction();
+  }
+
+  migrateLegacyActiveProject(ownerId: string): void {
+    const state = this.db
+      .prepare("SELECT value FROM app_state WHERE key = 'active_project_id'")
+      .get() as { value: string | null } | undefined;
+    const candidate = state?.value ?? null;
+    const existing = this.db
+      .prepare("SELECT 1 FROM user_state WHERE user_id = ?")
+      .get(ownerId);
+    if (!existing && candidate && this.projectRow(ownerId, candidate)) {
+      this.setActiveProjectId(ownerId, candidate);
+    }
+    this.db
+      .prepare("DELETE FROM app_state WHERE key = 'active_project_id'")
+      .run();
+  }
+
+  reset(): void {
     const transaction = this.db.transaction(() => {
       this.db.exec(`
         DELETE FROM activity_entries;
         DELETE FROM project_documents;
         DELETE FROM projects;
+        DELETE FROM user_state;
         DELETE FROM app_state;
         DELETE FROM sqlite_sequence WHERE name = 'activity_entries';
       `);
     });
     transaction();
-    if (seed) this.seedSamples();
   }
 
-  seedSamples(): boolean {
+  seedSamples(ownerId: string): boolean {
     const count = (
       this.db.prepare("SELECT COUNT(*) AS count FROM projects").get() as {
         count: number;
@@ -964,7 +1101,13 @@ export class SqliteStore implements ProjectStore {
         }
         const selectedId = getDefaultId(normalized.document, sample.selectedId);
         const stats = summarizeDocument(normalized.document);
-        this.insertProjectRow(project, stats, sample.testGuidelines, timestamp);
+        this.insertProjectRow(
+          ownerId,
+          project,
+          stats,
+          sample.testGuidelines,
+          timestamp,
+        );
         this.insertDocumentRow(
           project.id,
           normalized.document,
@@ -973,18 +1116,22 @@ export class SqliteStore implements ProjectStore {
         );
         if (!firstId) firstId = project.id;
       }
-      this.setActiveProjectId(firstId);
+      this.setActiveProjectId(ownerId, firstId);
     });
     transaction();
     return true;
+  }
+
+  ping(): void {
+    this.db.prepare("SELECT 1").get();
   }
 
   close(): void {
     this.db.close();
   }
 
-  private requireDetail(id: string): ProjectDetail {
-    const row = this.requireProject(id);
+  private requireDetail(ownerId: string, id: string): ProjectDetail {
+    const row = this.requireProject(ownerId, id);
     return detailFromRow(row);
   }
 }

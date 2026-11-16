@@ -15,7 +15,7 @@
     "api:lint": "redocly lint server/api/openapi.yaml",
     "build": "npm run build:ui && npm run build:api",
     "build:ui": "vite build",
-    "build:api": "tsup server/index.ts --format esm --platform node --out-dir dist-server --clean --external better-sqlite3",
+    "build:api": "tsup server/index.ts --format esm --platform node --out-dir dist-server --clean --external better-sqlite3 --external @node-rs/argon2",
     "start": "node dist-server/index.js",
     "preview": "vite preview --host 127.0.0.1",
     "lint": "eslint .",
@@ -31,10 +31,14 @@
     "test:prod": "npm run build && cross-env LAYERS_DB_PATH=test-results/prod.sqlite LAYERS_SEED_SAMPLES=1 LAYERS_TEST_MODE=1 npm run db:reset && cross-env LAYERS_DB_PATH=test-results/prod.sqlite LAYERS_SEED_SAMPLES=1 LAYERS_TEST_MODE=1 E2E_TARGET=production playwright test tests/smoke.spec.js"
   },
   "dependencies": {
+    "@fastify/cookie": "^11.1.5",
     "@fastify/cors": "^11.4.1",
+    "@fastify/rate-limit": "^11.2.2",
     "@fastify/static": "^10.1.10",
+    "@node-rs/argon2": "^2.2.2",
     "@scalar/fastify-api-reference": "^1.78.0",
     "better-sqlite3": "^13.1.1",
+    "dotenv": "^18.0.10",
     "fastify": "^5.12.8",
     "lucide-react": "^0.468.0",
     "react": "^19.0.0",

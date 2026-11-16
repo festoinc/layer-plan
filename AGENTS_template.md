@@ -56,13 +56,36 @@ This repository contains Layers, a local project-specification workspace.
 - Short API examples: `docs/api.md`
 - SQLite database: `data/layers.sqlite` by default
 
-The API is local-only and has no authentication. Do not expose it beyond
-loopback. Do not change `HOST` to a public interface unless the person
-explicitly asks for that and understands the security implications.
+The API is local-only and authenticated. Browser clients use an `HttpOnly`
+session cookie. You must use a bearer API token and never ask the person for
+their password. Do not expose the API beyond loopback. Do not change `HOST` to a
+public interface unless the person explicitly asks for that and understands the
+security implications.
 
-The API is the source of truth. Do not edit SQLite directly, do not use
-browser `localStorage`, and do not modify files under `data/` while the API is
-running.
+The API is the source of truth. Do not edit SQLite directly, do not use browser
+`localStorage`, and do not modify files under `data/` while the API is running.
+
+## Authentication for agents
+
+Ask the person to create an API token on the account page (`#/account`) or in
+the UI, then set it in the environment:
+
+```sh
+export LAYERS_API_TOKEN=lrs_...
+AUTH="Authorization: Bearer $LAYERS_API_TOKEN"
+```
+
+Use `-H "$AUTH"` on every project, document, activity, coverage and export call.
+The token inherits that user's project access. It cannot manage users, sessions
+or other tokens. A read-only token can list and read; it cannot write.
+
+When the API returns `401 unauthenticated`, stop and ask for a new token. Do not
+retry in a loop. When it returns `403 forbidden`, the token scope or account
+role is insufficient.
+
+Project ids are private to their owner. Another user's project returns `404`,
+including for the super admin. Never assume a project id belongs to the current
+token's user.
 
 ## Start or check the stack
 
@@ -97,22 +120,29 @@ npm run api:lint      # validate the OpenAPI document
 
 Base URL: `http://127.0.0.1:3001/api/v1`
 
-| Method   | Path                      | Purpose                          |
-| -------- | ------------------------- | -------------------------------- |
-| `GET`    | `/projects`               | List projects and active project |
-| `POST`   | `/projects`               | Create a project                 |
-| `GET`    | `/projects/:id`           | Read metadata and guidelines     |
-| `PATCH`  | `/projects/:id`           | Update metadata or guidelines    |
-| `DELETE` | `/projects/:id`           | Delete a project                 |
-| `POST`   | `/projects/:id/duplicate` | Duplicate a project              |
-| `POST`   | `/projects/:id/activate`  | Set the active project           |
-| `GET`    | `/projects/:id/document`  | Read the document                |
-| `PUT`    | `/projects/:id/document`  | Replace the document             |
-| `GET`    | `/projects/:id/activity`  | Read activity                    |
-| `POST`   | `/projects/:id/activity`  | Append an activity entry         |
-| `GET`    | `/projects/:id/coverage`  | Read verification coverage       |
-| `GET`    | `/projects/:id/export`    | Download a project file          |
-| `POST`   | `/projects/import`        | Import a project file            |
+| Method       | Path                      | Purpose                            |
+| ------------ | ------------------------- | ---------------------------------- |
+| `POST`       | `/auth/login`             | Browser sign-in; sets a cookie     |
+| `POST`       | `/auth/logout`            | Browser sign-out                   |
+| `GET`        | `/auth/session`           | Current browser session            |
+| `GET`        | `/me`                     | Current user for either credential |
+| `GET/DELETE` | `/auth/sessions`          | List or revoke other sessions      |
+| `GET/POST`   | `/me/tokens`              | List or create API tokens          |
+| `GET/POST`   | `/users`                  | Super-admin user management        |
+| `GET`        | `/projects`               | List projects and active project   |
+| `POST`       | `/projects`               | Create a project                   |
+| `GET`        | `/projects/:id`           | Read metadata and guidelines       |
+| `PATCH`      | `/projects/:id`           | Update metadata or guidelines      |
+| `DELETE`     | `/projects/:id`           | Delete a project                   |
+| `POST`       | `/projects/:id/duplicate` | Duplicate a project                |
+| `POST`       | `/projects/:id/activate`  | Set the active project             |
+| `GET`        | `/projects/:id/document`  | Read the document                  |
+| `PUT`        | `/projects/:id/document`  | Replace the document               |
+| `GET`        | `/projects/:id/activity`  | Read activity                      |
+| `POST`       | `/projects/:id/activity`  | Append an activity entry           |
+| `GET`        | `/projects/:id/coverage`  | Read verification coverage         |
+| `GET`        | `/projects/:id/export`    | Download a project file            |
+| `POST`       | `/projects/import`        | Import a project file              |
 
 See `server/api/openapi.yaml` for exact request and response schemas. When the
 contract and an old example disagree, the OpenAPI document wins.
@@ -122,7 +152,7 @@ contract and an old example disagree, the OpenAPI document wins.
 1. List projects:
 
 ```sh
-curl -sS http://127.0.0.1:3001/api/v1/projects
+curl -sS -H "$AUTH" http://127.0.0.1:3001/api/v1/projects
 ```
 
 2. Read the project and its document. Save the document `ETag`:
@@ -130,10 +160,10 @@ curl -sS http://127.0.0.1:3001/api/v1/projects
 ```sh
 PROJECT_ID=website
 
-curl -sS -D /tmp/layers-project.headers \
+curl -sS -H "$AUTH" -D /tmp/layers-project.headers \
   "http://127.0.0.1:3001/api/v1/projects/$PROJECT_ID"
 
-curl -sS -D /tmp/layers-document.headers \
+curl -sS -H "$AUTH" -D /tmp/layers-document.headers \
   "http://127.0.0.1:3001/api/v1/projects/$PROJECT_ID/document" \
   -o /tmp/layers-document.json
 ```
@@ -221,7 +251,7 @@ REVISION=$(awk 'tolower($1) == "etag:" { gsub(/"/, "", $2); print $2 }' \
 3. Send the complete document with `If-Match`:
 
 ```sh
-curl -sS -X PUT \
+curl -sS -H "$AUTH" -X PUT \
   "http://127.0.0.1:3001/api/v1/projects/$PROJECT_ID/document" \
   -H 'Content-Type: application/json' \
   -H "If-Match: \"$REVISION\"" \
@@ -278,7 +308,7 @@ For a document write, include new entries in the `activity` array. For a
 standalone note, use:
 
 ```sh
-curl -sS -X POST \
+curl -sS -H "$AUTH" -X POST \
   "http://127.0.0.1:3001/api/v1/projects/$PROJECT_ID/activity" \
   -H 'Content-Type: application/json' \
   -d '{"message":"Reviewed AI verification instructions","chapterId":null,"chapterName":"Website project"}'
@@ -304,7 +334,8 @@ Coverage is declaration-based:
 Read coverage with:
 
 ```sh
-curl -sS "http://127.0.0.1:3001/api/v1/projects/$PROJECT_ID/coverage"
+curl -sS -H "$AUTH" \
+  "http://127.0.0.1:3001/api/v1/projects/$PROJECT_ID/coverage"
 ```
 
 Use the `coverage` endpoint for an agent-oriented summary. The React UI derives
@@ -315,7 +346,7 @@ the same values from the loaded document.
 Export before risky bulk changes:
 
 ```sh
-curl -sS -o "/tmp/layers-$PROJECT_ID.json" \
+curl -sS -H "$AUTH" -o "/tmp/layers-$PROJECT_ID.json" \
   "http://127.0.0.1:3001/api/v1/projects/$PROJECT_ID/export"
 ```
 
@@ -324,7 +355,7 @@ the format and how to read it. Read that field first. Import always creates a
 new project; it never overwrites or merges:
 
 ```sh
-curl -sS -X POST http://127.0.0.1:3001/api/v1/projects/import \
+curl -sS -H "$AUTH" -X POST http://127.0.0.1:3001/api/v1/projects/import \
   -H 'Content-Type: application/json' \
   --data @/tmp/layers-project.json
 ```
@@ -349,10 +380,17 @@ Branch on `error.code`, not only the HTTP status.
 
 Common codes:
 
+- `unauthenticated`
+- `invalid_credentials`
+- `account_disabled`
+- `forbidden`
+- `invalid_origin`
 - `not_found`
 - `validation_failed`
 - `revision_conflict`
 - `precondition_required`
+- `email_taken`
+- `rate_limited`
 - `project_limit`
 - `payload_too_large`
 - `stored_data_invalid`
@@ -372,8 +410,9 @@ If the task is to change the product rather than edit documentation:
 - Update Playwright tests for UI behaviour changes.
 - Keep the shared domain rules in `src/domain` as the single implementation.
 - Do not reintroduce browser `localStorage` persistence.
-- Do not add authentication, remote exposure or Postgres support unless the
-  task explicitly asks for it.
+- Do not weaken authentication, session handling or project ownership checks.
+- Do not add remote exposure, Postgres support or collaboration unless the task
+  explicitly asks for it.
 
 Relevant files:
 
@@ -381,11 +420,14 @@ Relevant files:
 server/api/openapi.yaml       API contract
 server/api/schemas.ts         runtime validation
 server/api/routes/            route handlers
-server/db/store.ts            SQLite queries and transactions
+server/auth/                  password, tokens, sessions and guards
+server/db/store.ts            SQLite project queries and transactions
+server/db/authStore.ts        users, sessions and API tokens
+server/db/bootstrap.ts        super-admin and ownership bootstrap
 server/db/migrations/         schema migrations
 src/domain/                   shared domain rules
 src/api/                      browser API client
-src/store/                    React providers
+src/store/                    auth and workspace React providers
 docs/api.md                   agent/curl guide
 ```
 

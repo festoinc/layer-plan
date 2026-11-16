@@ -2,19 +2,26 @@ openapi: 3.1.0
 info:
   title: Layers local API
   version: 1.0.0
-  description: |
-    Local, unauthenticated API for Layers project specifications.
-    The server binds to loopback by default and is intended for the React
-    application and local AI agents.
+  description: |-
+    Authenticated local API for Layers project specifications.
+    The server binds to loopback by default. Browser clients use an HttpOnly session
+    cookie; local AI agents use bearer API tokens. Every project is private to its
+    owner.
   license:
     name: Private local project
     url: https://example.com/private-license
 servers:
   - url: http://127.0.0.1:3001/api/v1
-security: []
+security:
+  - sessionCookie: []
+  - bearerAuth: []
 tags:
   - name: health
     description: API and database health.
+  - name: auth
+    description: Sign-in, sessions, accounts and API tokens.
+  - name: users
+    description: Super-admin user management.
   - name: projects
     description: Project catalog, metadata and lifecycle.
   - name: document
@@ -28,7 +35,8 @@ tags:
 paths:
   /health:
     get:
-      tags: [health]
+      tags:
+        - health
       summary: Check the API and database
       responses:
         "200":
@@ -37,7 +45,10 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [status, version, database]
+                required:
+                  - status
+                  - version
+                  - database
                 properties:
                   status:
                     type: string
@@ -49,9 +60,11 @@ paths:
                     const: ok
         "503":
           $ref: "#/components/responses/Error"
+      security: []
   /openapi.json:
     get:
-      tags: [health]
+      tags:
+        - health
       summary: Return this OpenAPI document as JSON
       responses:
         "200":
@@ -60,9 +73,11 @@ paths:
             application/json:
               schema:
                 type: object
+      security: []
   /projects:
     get:
-      tags: [projects]
+      tags:
+        - projects
       summary: List projects and the active project
       responses:
         "200":
@@ -71,8 +86,13 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ProjectList"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
     post:
-      tags: [projects]
+      tags:
+        - projects
       summary: Create a project
       requestBody:
         required: true
@@ -90,6 +110,10 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ProjectDetail"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "409":
           $ref: "#/components/responses/Error"
         "422":
@@ -98,7 +122,8 @@ paths:
     parameters:
       - $ref: "#/components/parameters/ProjectId"
     get:
-      tags: [projects]
+      tags:
+        - projects
       summary: Read project metadata, guidelines and revisions
       responses:
         "200":
@@ -110,10 +135,15 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ProjectDetail"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/Error"
     patch:
-      tags: [projects]
+      tags:
+        - projects
       summary: Update metadata or test guidelines
       parameters:
         - $ref: "#/components/parameters/IfMatch"
@@ -133,12 +163,17 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ProjectDetail"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "412":
           $ref: "#/components/responses/Conflict"
         "422":
           $ref: "#/components/responses/ValidationError"
     delete:
-      tags: [projects]
+      tags:
+        - projects
       summary: Delete a project
       parameters:
         - $ref: "#/components/parameters/IfMatch"
@@ -149,17 +184,25 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [activeProjectId]
+                required:
+                  - activeProjectId
                 properties:
                   activeProjectId:
-                    type: [string, "null"]
+                    type:
+                      - string
+                      - "null"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "412":
           $ref: "#/components/responses/Conflict"
   /projects/{projectId}/duplicate:
     parameters:
       - $ref: "#/components/parameters/ProjectId"
     post:
-      tags: [projects]
+      tags:
+        - projects
       summary: Duplicate a project
       responses:
         "201":
@@ -168,13 +211,18 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ProjectDetail"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "409":
           $ref: "#/components/responses/Error"
   /projects/{projectId}/activate:
     parameters:
       - $ref: "#/components/parameters/ProjectId"
     post:
-      tags: [projects]
+      tags:
+        - projects
       summary: Set the active project
       responses:
         "200":
@@ -183,17 +231,23 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [activeProjectId]
+                required:
+                  - activeProjectId
                 properties:
                   activeProjectId:
                     type: string
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/Error"
   /projects/{projectId}/document:
     parameters:
       - $ref: "#/components/parameters/ProjectId"
     get:
-      tags: [document]
+      tags:
+        - document
       summary: Read the normalized project document
       responses:
         "200":
@@ -205,10 +259,15 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Document"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/Error"
     put:
-      tags: [document]
+      tags:
+        - document
       summary: Replace the project document
       parameters:
         - $ref: "#/components/parameters/IfMatch"
@@ -228,6 +287,10 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/DocumentWriteResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "412":
           $ref: "#/components/responses/Conflict"
         "422":
@@ -236,7 +299,8 @@ paths:
     parameters:
       - $ref: "#/components/parameters/ProjectId"
     get:
-      tags: [activity]
+      tags:
+        - activity
       summary: Read newest-first activity
       parameters:
         - name: limit
@@ -258,10 +322,15 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ActivityList"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/Error"
     post:
-      tags: [activity]
+      tags:
+        - activity
       summary: Append an activity entry
       requestBody:
         required: true
@@ -276,13 +345,18 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ActivityList"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "422":
           $ref: "#/components/responses/ValidationError"
   /projects/{projectId}/coverage:
     parameters:
       - $ref: "#/components/parameters/ProjectId"
     get:
-      tags: [coverage]
+      tags:
+        - coverage
       summary: Read declaration-based verification coverage
       responses:
         "200":
@@ -291,13 +365,18 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Coverage"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/Error"
   /projects/{projectId}/export:
     parameters:
       - $ref: "#/components/parameters/ProjectId"
     get:
-      tags: [files]
+      tags:
+        - files
       summary: Download a layers-project version 3 file
       responses:
         "200":
@@ -310,11 +389,16 @@ paths:
             application/json:
               schema:
                 type: object
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/Error"
   /projects/import:
     post:
-      tags: [files]
+      tags:
+        - files
       summary: Import a layers-project file
       requestBody:
         required: true
@@ -329,7 +413,9 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [project, issues]
+                required:
+                  - project
+                  - issues
                 properties:
                   project:
                     $ref: "#/components/schemas/ProjectDetail"
@@ -337,6 +423,289 @@ paths:
                     type: array
                     items:
                       type: string
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+  /auth/login:
+    post:
+      tags:
+        - auth
+      summary: Sign in with email and password
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+      responses:
+        "200":
+          description: Signed in and session cookie set
+          headers:
+            Set-Cookie:
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LoginResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+  /auth/logout:
+    post:
+      tags:
+        - auth
+      summary: Sign out and clear the session cookie
+      security: []
+      responses:
+        "204":
+          description: Signed out
+  /auth/session:
+    get:
+      tags:
+        - auth
+      summary: Read the current browser session
+      security:
+        - sessionCookie: []
+      responses:
+        "200":
+          description: Current user and session
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LoginResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+  /me:
+    get:
+      tags:
+        - auth
+      summary: Read the current user
+      responses:
+        "200":
+          description: Current user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MeResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+  /auth/sessions:
+    get:
+      tags:
+        - auth
+      summary: List the current user sessions
+      security:
+        - sessionCookie: []
+      responses:
+        "200":
+          description: Browser sessions
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionsResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    delete:
+      tags:
+        - auth
+      summary: Revoke all sessions except the current one
+      security:
+        - sessionCookie: []
+      responses:
+        "204":
+          description: Other sessions revoked
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+  /auth/sessions/{sessionId}:
+    parameters:
+      - name: sessionId
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 128
+    delete:
+      tags:
+        - auth
+      summary: Revoke one of the current user sessions
+      security:
+        - sessionCookie: []
+      responses:
+        "204":
+          description: Session revoked
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/Error"
+  /me/tokens:
+    get:
+      tags:
+        - auth
+      summary: List API tokens
+      security:
+        - sessionCookie: []
+      responses:
+        "200":
+          description: API tokens without secrets
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TokensResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      tags:
+        - auth
+      summary: Create an API token
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateToken"
+      responses:
+        "201":
+          description: Token created; the secret is returned once
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreateTokenResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/Error"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+  /me/tokens/{tokenId}:
+    parameters:
+      - name: tokenId
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 128
+    delete:
+      tags:
+        - auth
+      summary: Revoke an API token
+      security:
+        - sessionCookie: []
+      responses:
+        "204":
+          description: Token revoked
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/Error"
+  /users:
+    get:
+      tags:
+        - users
+      summary: List users
+      security:
+        - sessionCookie: []
+      responses:
+        "200":
+          description: Users
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UsersResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      tags:
+        - users
+      summary: Create a member user
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateUser"
+      responses:
+        "201":
+          description: User created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/Error"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+  /users/{userId}:
+    parameters:
+      - name: userId
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 128
+    patch:
+      tags:
+        - users
+      summary: Enable or disable a user
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateUser"
+      responses:
+        "200":
+          description: Updated user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/Error"
         "422":
           $ref: "#/components/responses/ValidationError"
 components:
@@ -356,14 +725,14 @@ components:
       description: Quoted revision returned by the last write or read.
       schema:
         type: string
-        pattern: '^"\d+"$'
+        pattern: ^"\d+"$
         example: '"12"'
   headers:
     ETag:
       description: Quoted revision for the resource.
       schema:
         type: string
-        pattern: '^"\d+"$'
+        pattern: ^"\d+"$
   responses:
     Error:
       description: API error
@@ -383,14 +752,35 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/Error"
+    Unauthorized:
+      description: Authentication is required
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    Forbidden:
+      description: The authenticated user is not allowed to perform this action
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    RateLimited:
+      description: Too many authentication attempts
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
   schemas:
     Error:
       type: object
-      required: [error]
+      required:
+        - error
       properties:
         error:
           type: object
-          required: [code, message]
+          required:
+            - code
+            - message
           properties:
             code:
               type: string
@@ -419,7 +809,15 @@ components:
           type: string
         color:
           type: string
-          enum: [indigo, teal, amber, rose, violet, emerald, sky, slate]
+          enum:
+            - indigo
+            - teal
+            - amber
+            - rose
+            - violet
+            - emerald
+            - sky
+            - slate
         description:
           type: string
         createdAt:
@@ -451,21 +849,26 @@ components:
               type: integer
     ProjectList:
       type: object
-      required: [projects, activeProjectId]
+      required:
+        - projects
+        - activeProjectId
       properties:
         projects:
           type: array
           items:
             $ref: "#/components/schemas/ProjectSummary"
         activeProjectId:
-          type: [string, "null"]
+          type:
+            - string
+            - "null"
     CreateProject:
       type: object
-      required: [name]
+      required:
+        - name
       properties:
         id:
           type: string
-          pattern: "^[a-zA-Z0-9_-]{1,64}$"
+          pattern: ^[a-zA-Z0-9_-]{1,64}$
         name:
           type: string
           minLength: 1
@@ -475,7 +878,15 @@ components:
           maxLength: 2
         color:
           type: string
-          enum: [indigo, teal, amber, rose, violet, emerald, sky, slate]
+          enum:
+            - indigo
+            - teal
+            - amber
+            - rose
+            - violet
+            - emerald
+            - sky
+            - slate
         description:
           type: string
           maxLength: 280
@@ -495,7 +906,15 @@ components:
           maxLength: 2
         color:
           type: string
-          enum: [indigo, teal, amber, rose, violet, emerald, sky, slate]
+          enum:
+            - indigo
+            - teal
+            - amber
+            - rose
+            - violet
+            - emerald
+            - sky
+            - slate
         description:
           type: string
           maxLength: 280
@@ -504,35 +923,48 @@ components:
           maxLength: 8000
     Verification:
       type: object
-      required: [mode, auto, human, ai]
+      required:
+        - mode
+        - auto
+        - human
+        - ai
       properties:
         mode:
           type: string
-          enum: [auto, human, ai]
+          enum:
+            - auto
+            - human
+            - ai
         auto:
           type: object
-          required: [command]
+          required:
+            - command
           properties:
             command:
               type: string
               maxLength: 500
         human:
           type: object
-          required: [instructions]
+          required:
+            - instructions
           properties:
             instructions:
               type: string
               maxLength: 2000
         ai:
           type: object
-          required: [instructions]
+          required:
+            - instructions
           properties:
             instructions:
               type: string
               maxLength: 4000
     Criterion:
       type: object
-      required: [id, text, checked]
+      required:
+        - id
+        - text
+        - checked
       properties:
         id:
           type: string
@@ -561,7 +993,9 @@ components:
           type: string
           maxLength: 128
         parentId:
-          type: [string, "null"]
+          type:
+            - string
+            - "null"
         title:
           type: string
           maxLength: 200
@@ -582,7 +1016,9 @@ components:
             type: string
     ChapterDocument:
       type: object
-      required: [byId, rootIds]
+      required:
+        - byId
+        - rootIds
       properties:
         byId:
           type: object
@@ -614,67 +1050,98 @@ components:
         chapters:
           $ref: "#/components/schemas/ChapterDocument"
         selectedId:
-          type: [string, "null"]
+          type:
+            - string
+            - "null"
     ActivityInput:
       type: object
-      required: [message]
+      required:
+        - message
       properties:
         message:
           type: string
           minLength: 1
           maxLength: 1000
         chapterId:
-          type: [string, "null"]
+          type:
+            - string
+            - "null"
         chapterName:
           type: string
           maxLength: 200
     DocumentWrite:
       type: object
-      required: [chapters, selectedId]
+      required:
+        - chapters
+        - selectedId
       properties:
         chapters:
           $ref: "#/components/schemas/ChapterDocument"
         selectedId:
-          type: [string, "null"]
+          type:
+            - string
+            - "null"
         activity:
           type: array
           items:
             allOf:
               - $ref: "#/components/schemas/ActivityInput"
               - type: object
-                required: [id]
+                required:
+                  - id
                 properties:
                   id:
                     type: string
                     maxLength: 128
     ActivityEntry:
       type: object
-      required: [id, message, chapterId, chapterName, time]
+      required:
+        - id
+        - message
+        - chapterId
+        - chapterName
+        - time
       properties:
         id:
           type: string
         message:
           type: string
         chapterId:
-          type: [string, "null"]
+          type:
+            - string
+            - "null"
         chapterName:
           type: string
         time:
           type: string
           format: date-time
+        actorUserId:
+          type:
+            - string
+            - "null"
+        actorName:
+          type:
+            - string
+            - "null"
     ActivityList:
       type: object
-      required: [events]
+      required:
+        - events
       properties:
         events:
           type: array
           items:
             $ref: "#/components/schemas/ActivityEntry"
         nextBefore:
-          type: [integer, "null"]
+          type:
+            - integer
+            - "null"
     Stats:
       type: object
-      required: [chapterCount, criterionCount, checkedCount]
+      required:
+        - chapterCount
+        - criterionCount
+        - checkedCount
       properties:
         chapterCount:
           type: integer
@@ -686,7 +1153,9 @@ components:
       allOf:
         - $ref: "#/components/schemas/Document"
         - type: object
-          required: [stats, activity]
+          required:
+            - stats
+            - activity
           properties:
             stats:
               $ref: "#/components/schemas/Stats"
@@ -696,7 +1165,13 @@ components:
                 $ref: "#/components/schemas/ActivityEntry"
     VerificationSummary:
       type: object
-      required: [total, automated, human, ai, incompleteAuto, percent]
+      required:
+        - total
+        - automated
+        - human
+        - ai
+        - incompleteAuto
+        - percent
       properties:
         total:
           type: integer
@@ -731,7 +1206,10 @@ components:
           type: string
         mode:
           type: string
-          enum: [auto, human, ai]
+          enum:
+            - auto
+            - human
+            - ai
         command:
           type: string
         automated:
@@ -744,7 +1222,10 @@ components:
           type: integer
     Coverage:
       type: object
-      required: [summary, rows, testGuidelines]
+      required:
+        - summary
+        - rows
+        - testGuidelines
       properties:
         summary:
           $ref: "#/components/schemas/VerificationSummary"
@@ -754,3 +1235,239 @@ components:
             $ref: "#/components/schemas/CoverageRow"
         testGuidelines:
           type: string
+    AuthUser:
+      type: object
+      required:
+        - id
+        - email
+        - displayName
+        - role
+        - createdAt
+        - updatedAt
+        - disabledAt
+      properties:
+        id:
+          type: string
+        email:
+          type: string
+          format: email
+        displayName:
+          type: string
+        role:
+          type: string
+          enum:
+            - super_admin
+            - member
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        disabledAt:
+          type:
+            - string
+            - "null"
+          format: date-time
+    SessionInfo:
+      type: object
+      required:
+        - id
+        - createdAt
+        - lastSeenAt
+        - expiresAt
+      properties:
+        id:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        lastSeenAt:
+          type: string
+          format: date-time
+        expiresAt:
+          type: string
+          format: date-time
+        userAgent:
+          type:
+            - string
+            - "null"
+        current:
+          type: boolean
+    LoginRequest:
+      type: object
+      required:
+        - email
+        - password
+      properties:
+        email:
+          type: string
+          format: email
+          maxLength: 254
+        password:
+          type: string
+          minLength: 1
+          maxLength: 200
+    LoginResponse:
+      type: object
+      required:
+        - user
+        - session
+      properties:
+        user:
+          $ref: "#/components/schemas/AuthUser"
+        session:
+          $ref: "#/components/schemas/SessionInfo"
+    MeResponse:
+      type: object
+      required:
+        - user
+      properties:
+        user:
+          $ref: "#/components/schemas/AuthUser"
+    SessionsResponse:
+      type: object
+      required:
+        - sessions
+      properties:
+        sessions:
+          type: array
+          items:
+            $ref: "#/components/schemas/SessionInfo"
+    CreateUser:
+      type: object
+      required:
+        - email
+        - password
+      properties:
+        email:
+          type: string
+          format: email
+          maxLength: 254
+        password:
+          type: string
+          minLength: 12
+          maxLength: 200
+        displayName:
+          type: string
+          minLength: 1
+          maxLength: 80
+    UpdateUser:
+      type: object
+      required:
+        - disabled
+      properties:
+        disabled:
+          type: boolean
+    UserResponse:
+      type: object
+      required:
+        - user
+      properties:
+        user:
+          $ref: "#/components/schemas/AuthUser"
+    UsersResponse:
+      type: object
+      required:
+        - users
+      properties:
+        users:
+          type: array
+          items:
+            $ref: "#/components/schemas/AuthUser"
+    ApiTokenInfo:
+      type: object
+      required:
+        - id
+        - name
+        - prefix
+        - scopes
+        - createdAt
+        - lastUsedAt
+        - expiresAt
+        - revokedAt
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        prefix:
+          type: string
+        scopes:
+          type: array
+          items:
+            type: string
+            enum:
+              - read
+              - write
+        createdAt:
+          type: string
+          format: date-time
+        lastUsedAt:
+          type:
+            - string
+            - "null"
+          format: date-time
+        expiresAt:
+          type:
+            - string
+            - "null"
+          format: date-time
+        revokedAt:
+          type:
+            - string
+            - "null"
+          format: date-time
+    CreateToken:
+      type: object
+      required:
+        - name
+        - scopes
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 80
+        scopes:
+          type: array
+          minItems: 1
+          maxItems: 2
+          items:
+            type: string
+            enum:
+              - read
+              - write
+        expiresInDays:
+          type: integer
+          minimum: 1
+          maximum: 3650
+    CreateTokenResponse:
+      type: object
+      required:
+        - token
+        - tokenInfo
+      properties:
+        token:
+          type: string
+        tokenInfo:
+          $ref: "#/components/schemas/ApiTokenInfo"
+    TokensResponse:
+      type: object
+      required:
+        - tokens
+      properties:
+        tokens:
+          type: array
+          items:
+            $ref: "#/components/schemas/ApiTokenInfo"
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: layers_session
+      description: HttpOnly browser session cookie set by /auth/login.
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: lrs_...
+      description: API token created on the account page or via /me/tokens.

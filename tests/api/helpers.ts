@@ -1,12 +1,20 @@
 import path from "node:path";
 import type { FastifyInstance, InjectOptions } from "fastify";
 import { buildApp } from "../../server/app";
-import type { ServerConfig } from "../../server/config";
+import { loadConfig, type ServerConfig } from "../../server/config";
+import { createPasswordHasher } from "../../server/auth/password";
 import { openDatabase, type DatabaseConnection } from "../../server/db/client";
 import { runMigrations } from "../../server/db/migrate";
+import { SqliteAuthStore } from "../../server/db/authStore";
 import { SqliteStore } from "../../server/db/store";
+import { bootstrap } from "../../server/db/bootstrap";
 
 export const FIXED_NOW = "2026-01-01T00:00:00.000Z";
+export const TEST_SUPER_ADMIN = {
+  email: "super@example.test",
+  password: "test-super-admin-password",
+  displayName: "Super Admin",
+};
 
 function idFactory() {
   let counter = 0;
@@ -16,51 +24,193 @@ function idFactory() {
 export interface TestApi {
   app: FastifyInstance;
   store: SqliteStore;
+  authStore: SqliteAuthStore;
+  config: ServerConfig;
   db: DatabaseConnection;
   close: () => Promise<void>;
+  login: (email: string, password: string) => Promise<TestLogin>;
+  createMember: (
+    superCookie: string,
+    input?: {
+      email?: string;
+      password?: string;
+      displayName?: string;
+    },
+  ) => Promise<{ user: TestUser; cookie: string; password: string }>;
+  createToken: (
+    cookie: string,
+    input?: { name?: string; scopes?: Array<"read" | "write"> },
+  ) => Promise<string>;
+}
+
+export interface TestUser {
+  id: string;
+  email: string;
+  displayName: string;
+  role: "super_admin" | "member";
+  createdAt: string;
+  disabledAt: string | null;
+}
+
+export interface TestLogin {
+  cookie: string;
+  user: TestUser;
+}
+
+function cookieFrom(response: { headers: Record<string, unknown> }): string {
+  const raw = response.headers["set-cookie"];
+  const value = Array.isArray(raw) ? raw[0] : raw;
+  if (typeof value !== "string") {
+    throw new Error("The response did not set a cookie.");
+  }
+  return value.split(";")[0];
 }
 
 export async function createTestApi(
-  options: { seed?: boolean } = {},
+  options: { seed?: boolean; loginRateLimit?: number } = {},
 ): Promise<TestApi> {
+  const config = loadConfig(
+    {
+      ...process.env,
+      LAYERS_DB_PATH: ":memory:",
+      LAYERS_SEED_SAMPLES: options.seed === false ? "0" : "1",
+      LAYERS_TEST_MODE: "1",
+      LAYERS_LOGIN_RATE_LIMIT: String(options.loginRateLimit ?? 1000),
+      LAYERS_SUPER_ADMIN_EMAIL: TEST_SUPER_ADMIN.email,
+      LAYERS_SUPER_ADMIN_PASSWORD: TEST_SUPER_ADMIN.password,
+      LAYERS_SUPER_ADMIN_NAME: TEST_SUPER_ADMIN.displayName,
+    },
+    { requireAuth: true },
+  );
+  config.staticRoot = path.resolve("test-results/does-not-exist");
+  config.openapiPath = path.resolve("server/api/openapi.yaml");
+
   const db = openDatabase(":memory:");
   runMigrations(db);
   const store = new SqliteStore(db, {
     now: () => FIXED_NOW,
     newId: idFactory(),
   });
-  if (options.seed !== false) store.seedSamples();
+  const authStore = new SqliteAuthStore(db, {
+    now: () => FIXED_NOW,
+    newId: idFactory(),
+  });
+  const passwordHasher = createPasswordHasher({ testMode: true });
+  await bootstrap({ config, store, authStore, passwordHasher });
 
-  const config: ServerConfig = {
-    host: "127.0.0.1",
-    port: 0,
-    dbPath: ":memory:",
-    seedSamples: options.seed !== false,
-    testMode: true,
-    allowRemote: false,
-    staticRoot: path.resolve("test-results/does-not-exist"),
-    openapiPath: path.resolve("server/api/openapi.yaml"),
-  };
-  const app = await buildApp({ config, store, logger: false });
+  const app = await buildApp({
+    config,
+    store,
+    authStore,
+    passwordHasher,
+    logger: false,
+    now: () => FIXED_NOW,
+  });
   await app.ready();
+
+  async function login(email: string, password: string): Promise<TestLogin> {
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/v1/auth/login",
+      payload: { email, password },
+      headers: { "content-type": "application/json" },
+    });
+    if (response.statusCode !== 200) {
+      throw new Error(
+        `Login failed for ${email}: ${response.statusCode} ${response.payload}`,
+      );
+    }
+    const body = json(response) as { user: TestUser };
+    return { cookie: cookieFrom(response), user: body.user };
+  }
+
+  async function createMember(
+    superCookie: string,
+    input: {
+      email?: string;
+      password?: string;
+      displayName?: string;
+    } = {},
+  ): Promise<{ user: TestUser; cookie: string; password: string }> {
+    const email = input.email ?? "member@example.test";
+    const password = input.password ?? "member-password-123";
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/v1/users",
+      payload: {
+        email,
+        password,
+        displayName: input.displayName ?? "Member",
+      },
+      headers: authHeaders(superCookie),
+    });
+    if (response.statusCode !== 201) {
+      throw new Error(
+        `Create member failed: ${response.statusCode} ${response.payload}`,
+      );
+    }
+    const body = json(response) as { user: TestUser };
+    const loginResult = await login(email, password);
+    return { user: body.user, cookie: loginResult.cookie, password };
+  }
+
+  async function createToken(
+    cookie: string,
+    input: {
+      name?: string;
+      scopes?: Array<"read" | "write">;
+    } = {},
+  ): Promise<string> {
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/v1/me/tokens",
+      payload: {
+        name: input.name ?? "Test token",
+        scopes: input.scopes ?? ["read", "write"],
+      },
+      headers: authHeaders(cookie),
+    });
+    if (response.statusCode !== 201) {
+      throw new Error(
+        `Create token failed: ${response.statusCode} ${response.payload}`,
+      );
+    }
+    return (json(response) as { token: string }).token;
+  }
 
   return {
     app,
     store,
+    authStore,
+    config,
     db,
+    login,
+    createMember,
+    createToken,
     close: async () => {
       await app.close();
     },
   };
 }
 
+export function authHeaders(cookie: string): Record<string, string> {
+  return { cookie };
+}
+
+export function bearerHeaders(token: string): Record<string, string> {
+  return { authorization: `Bearer ${token}` };
+}
+
 export function json(response: { payload: string }) {
   return JSON.parse(response.payload);
 }
 
-export function docRequest(body: object): InjectOptions {
+export function docRequest(
+  body: object,
+  headers: Record<string, string> = {},
+): InjectOptions {
   return {
     payload: body,
-    headers: { "content-type": "application/json" },
+    headers: { "content-type": "application/json", ...headers },
   };
 }

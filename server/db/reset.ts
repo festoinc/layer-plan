@@ -1,8 +1,11 @@
 import fs from "node:fs";
 import { loadConfig } from "../config";
+import { createPasswordHasher } from "../auth/password";
 import { openDatabase } from "./client";
 import { runMigrations } from "./migrate";
+import { SqliteAuthStore } from "./authStore";
 import { SqliteStore } from "./store";
+import { bootstrap } from "./bootstrap";
 
 const config = loadConfig();
 
@@ -19,6 +22,8 @@ if (config.dbPath !== ":memory:") {
 const db = openDatabase(config.dbPath);
 runMigrations(db);
 const store = new SqliteStore(db);
-if (config.seedSamples) store.seedSamples();
+const authStore = new SqliteAuthStore(db);
+const passwordHasher = createPasswordHasher({ testMode: config.testMode });
+await bootstrap({ config, store, authStore, passwordHasher });
 store.close();
 console.log(`Reset and migrated ${config.dbPath}`);

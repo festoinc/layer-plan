@@ -7,7 +7,7 @@ export function registerHealthRoutes(
 ) {
   app.get("/api/v1/health", async (_request, reply) => {
     try {
-      store.listProjects();
+      store.ping();
       return {
         status: "ok",
         version: "1.0.0",

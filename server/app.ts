@@ -1,24 +1,35 @@
 import fs from "node:fs";
+import cookie from "@fastify/cookie";
 import cors from "@fastify/cors";
+import rateLimit from "@fastify/rate-limit";
 import fastifyStatic from "@fastify/static";
 import scalar from "@scalar/fastify-api-reference";
 import Fastify, { type FastifyInstance } from "fastify";
 import { parse as parseYaml } from "yaml";
-import { errorHandler, notFoundHandler } from "./api/errors";
+import { ApiError, errorHandler, notFoundHandler } from "./api/errors";
 import { registerActivityRoutes } from "./api/routes/activity";
+import { registerAuthRoutes } from "./api/routes/auth";
 import { registerCoverageRoutes } from "./api/routes/coverage";
 import { registerDocumentRoutes } from "./api/routes/document";
 import { registerExportRoutes } from "./api/routes/exports";
 import { registerHealthRoutes } from "./api/routes/health";
+import { registerMeRoutes } from "./api/routes/me";
 import { registerProjectRoutes } from "./api/routes/projects";
 import { registerTestRoutes } from "./api/routes/test";
+import { registerUserRoutes } from "./api/routes/users";
 import type { ServerConfig } from "./config";
+import type { AuthStore } from "./db/authStore";
 import type { ProjectStore } from "./db/store";
+import type { PasswordHasher } from "./auth/password";
+import { createAuthHooks } from "./auth/middleware";
 
 export interface BuildAppOptions {
   config: ServerConfig;
   store: ProjectStore;
+  authStore: AuthStore;
+  passwordHasher: PasswordHasher;
   logger?: boolean;
+  now?: () => string;
 }
 
 function readOpenApi(path: string): string {
@@ -28,20 +39,61 @@ function readOpenApi(path: string): string {
 export async function buildApp({
   config,
   store,
+  authStore,
+  passwordHasher,
   logger = true,
+  now,
 }: BuildAppOptions): Promise<FastifyInstance> {
   const app = Fastify({
-    logger,
+    logger: logger
+      ? {
+          redact: [
+            "req.headers.authorization",
+            "req.headers.cookie",
+            "res.headers.set-cookie",
+            'res.headers["set-cookie"]',
+          ],
+        }
+      : false,
     bodyLimit: 10 * 1024 * 1024,
   });
 
+  await app.register(cookie);
   await app.register(cors, {
-    origin: [/^http:\/\/127\.0\.0\.1:\d+$/, /^http:\/\/localhost:\d+$/],
+    origin: config.uiOrigins,
+    credentials: true,
     methods: ["GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "If-Match"],
+    allowedHeaders: ["Authorization", "Content-Type", "If-Match"],
     exposedHeaders: ["ETag", "Content-Disposition"],
   });
+  await app.register(rateLimit, {
+    global: false,
+    errorResponseBuilder: (_request, context) =>
+      new ApiError(
+        429,
+        "rate_limited",
+        "Too many sign-in attempts. Try again later.",
+        { retryAfterSeconds: Math.max(1, Math.ceil(context.ttl / 1000)) },
+      ),
+  });
 
+  app.setErrorHandler(errorHandler);
+  app.setNotFoundHandler((request, reply) => {
+    const url = request.raw.url ?? "";
+    const wantsHtml =
+      request.method === "GET" &&
+      !url.startsWith("/api/") &&
+      !url.startsWith("/assets/") &&
+      fs.existsSync(config.staticRoot);
+    if (wantsHtml) {
+      return reply
+        .type("text/html")
+        .send(fs.readFileSync(`${config.staticRoot}/index.html`, "utf8"));
+    }
+    return notFoundHandler(request, reply);
+  });
+
+  const hooks = createAuthHooks({ config, authStore, now });
   const openapiYaml = readOpenApi(config.openapiPath);
   const openapi = parseYaml(openapiYaml) as Record<string, unknown>;
 
@@ -59,13 +111,16 @@ export async function buildApp({
   });
 
   registerHealthRoutes(app, store);
-  registerProjectRoutes(app, store);
-  registerDocumentRoutes(app, store);
-  registerActivityRoutes(app, store);
-  registerCoverageRoutes(app, store);
-  registerExportRoutes(app, store);
+  registerAuthRoutes(app, { config, authStore, hooks, passwordHasher });
+  registerMeRoutes(app, authStore, hooks);
+  registerUserRoutes(app, authStore, hooks, passwordHasher);
+  registerProjectRoutes(app, store, hooks);
+  registerDocumentRoutes(app, store, hooks);
+  registerActivityRoutes(app, store, hooks);
+  registerCoverageRoutes(app, store, hooks);
+  registerExportRoutes(app, store, hooks);
   if (config.testMode) {
-    registerTestRoutes(app, store, config.seedSamples);
+    registerTestRoutes(app, { config, store, authStore, passwordHasher });
   }
 
   if (fs.existsSync(config.staticRoot)) {
@@ -75,22 +130,6 @@ export async function buildApp({
       wildcard: false,
     });
   }
-
-  app.setErrorHandler(errorHandler);
-  app.setNotFoundHandler((request, reply) => {
-    const url = request.raw.url ?? "";
-    const wantsHtml =
-      request.method === "GET" &&
-      !url.startsWith("/api/") &&
-      !url.startsWith("/assets/") &&
-      fs.existsSync(config.staticRoot);
-    if (wantsHtml) {
-      return reply
-        .type("text/html")
-        .send(fs.readFileSync(`${config.staticRoot}/index.html`, "utf8"));
-    }
-    return notFoundHandler(request, reply);
-  });
 
   app.addHook("onClose", async () => {
     store.close();

@@ -7,3 +7,5 @@ playwright-report/
 data/
 dist-server/
 server/api/openapi.json
+
+.env

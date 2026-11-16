@@ -119,3 +119,38 @@ export function parseBody<T>(schema: z.ZodType<T>, body: unknown): T {
 export function parseQuery<T>(schema: z.ZodType<T>, query: unknown): T {
   return parseBody(schema, query);
 }
+
+export const loginSchema = z
+  .object({
+    email: z.string().trim().min(3).max(254).email(),
+    password: z.string().min(1).max(200),
+  })
+  .strict();
+
+export const createUserSchema = z
+  .object({
+    email: z.string().trim().min(3).max(254).email(),
+    password: z.string().min(12).max(200),
+    displayName: z.string().trim().min(1).max(80).optional(),
+  })
+  .strict();
+
+export const updateUserSchema = z
+  .object({
+    disabled: z.boolean(),
+  })
+  .strict();
+
+export const createTokenSchema = z
+  .object({
+    name: z.string().trim().min(1).max(80),
+    scopes: z
+      .array(z.enum(["read", "write"]))
+      .min(1)
+      .max(2)
+      .refine((scopes) => new Set(scopes).size === scopes.length, {
+        message: "Scopes must be unique.",
+      }),
+    expiresInDays: z.number().int().min(1).max(3650).optional(),
+  })
+  .strict();

@@ -1,5 +1,12 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { createTestApi, docRequest, json, type TestApi } from "./helpers";
+import {
+  authHeaders,
+  createTestApi,
+  docRequest,
+  json,
+  TEST_SUPER_ADMIN,
+  type TestApi,
+} from "./helpers";
 
 let api: TestApi | null = null;
 afterEach(async () => {
@@ -7,12 +14,20 @@ afterEach(async () => {
   api = null;
 });
 
+async function superCookie(testApi: TestApi): Promise<string> {
+  return (
+    await testApi.login(TEST_SUPER_ADMIN.email, TEST_SUPER_ADMIN.password)
+  ).cookie;
+}
+
 describe("project catalog API", () => {
   it("seeds the sample catalog and reports the active project", async () => {
     api = await createTestApi();
+    const cookie = await superCookie(api);
     const response = await api.app.inject({
       method: "GET",
       url: "/api/v1/projects",
+      headers: authHeaders(cookie),
     });
     expect(response.statusCode).toBe(200);
     const body = json(response);
@@ -24,18 +39,32 @@ describe("project catalog API", () => {
     expect(body.projects[0].chapterCount).toBeGreaterThan(0);
   });
 
+  it("requires authentication for the catalog", async () => {
+    api = await createTestApi();
+    const response = await api.app.inject({
+      method: "GET",
+      url: "/api/v1/projects",
+    });
+    expect(response.statusCode).toBe(401);
+    expect(json(response).error.code).toBe("unauthenticated");
+  });
+
   it("creates, updates, duplicates, activates and deletes projects", async () => {
     api = await createTestApi();
+    const cookie = await superCookie(api);
     const created = await api.app.inject({
       method: "POST",
       url: "/api/v1/projects",
-      ...docRequest({
-        name: "Internal tools",
-        initials: "IT",
-        color: "amber",
-        description: "Internal specifications.",
-        testGuidelines: "Run the internal suite.",
-      }),
+      ...docRequest(
+        {
+          name: "Internal tools",
+          initials: "IT",
+          color: "amber",
+          description: "Internal specifications.",
+          testGuidelines: "Run the internal suite.",
+        },
+        authHeaders(cookie),
+      ),
     });
     expect(created.statusCode).toBe(201);
     expect(created.headers.etag).toBe('"1"');
@@ -46,13 +75,16 @@ describe("project catalog API", () => {
     const activity = await api.app.inject({
       method: "GET",
       url: `/api/v1/projects/${project.id}/activity`,
+      headers: authHeaders(cookie),
     });
     expect(json(activity).events[0].message).toBe("Created project");
+    expect(json(activity).events[0].actorName).toBe("Super Admin");
 
     const updated = await api.app.inject({
       method: "PATCH",
       url: `/api/v1/projects/${project.id}`,
       headers: {
+        ...authHeaders(cookie),
         "content-type": "application/json",
         "if-match": '"1"',
       },
@@ -67,6 +99,7 @@ describe("project catalog API", () => {
       method: "PATCH",
       url: `/api/v1/projects/${project.id}`,
       headers: {
+        ...authHeaders(cookie),
         "content-type": "application/json",
         "if-match": '"1"',
       },
@@ -78,6 +111,7 @@ describe("project catalog API", () => {
     const missing = await api.app.inject({
       method: "PATCH",
       url: `/api/v1/projects/${project.id}`,
+      headers: authHeaders(cookie),
       payload: { name: "No precondition" },
     });
     expect(missing.statusCode).toBe(428);
@@ -85,6 +119,7 @@ describe("project catalog API", () => {
     const duplicate = await api.app.inject({
       method: "POST",
       url: `/api/v1/projects/${project.id}/duplicate`,
+      headers: authHeaders(cookie),
     });
     expect(duplicate.statusCode).toBe(201);
     const copy = json(duplicate);
@@ -93,6 +128,7 @@ describe("project catalog API", () => {
     const activate = await api.app.inject({
       method: "POST",
       url: `/api/v1/projects/${project.id}/activate`,
+      headers: authHeaders(cookie),
     });
     expect(activate.statusCode).toBe(200);
     expect(json(activate).activeProjectId).toBe(project.id);
@@ -100,7 +136,7 @@ describe("project catalog API", () => {
     const deleted = await api.app.inject({
       method: "DELETE",
       url: `/api/v1/projects/${project.id}`,
-      headers: { "if-match": '"2"' },
+      headers: { ...authHeaders(cookie), "if-match": '"2"' },
     });
     expect(deleted.statusCode).toBe(200);
     expect(json(deleted).activeProjectId).not.toBe(project.id);
@@ -108,10 +144,11 @@ describe("project catalog API", () => {
 
   it("rejects invalid project input", async () => {
     api = await createTestApi();
+    const cookie = await superCookie(api);
     const response = await api.app.inject({
       method: "POST",
       url: "/api/v1/projects",
-      ...docRequest({ name: "" }),
+      ...docRequest({ name: "" }, authHeaders(cookie)),
     });
     expect(response.statusCode).toBe(422);
     expect(json(response).error.code).toBe("validation_failed");

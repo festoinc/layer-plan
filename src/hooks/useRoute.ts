@@ -5,6 +5,9 @@ export const ROUTE_VIEWS = {
   specifications: "specifications" as const,
   coverage: "coverage" as const,
   activity: "activity" as const,
+  signIn: "sign-in" as const,
+  account: "account" as const,
+  users: "users" as const,
 };
 
 export type RouteView = (typeof ROUTE_VIEWS)[keyof typeof ROUTE_VIEWS];
@@ -69,6 +72,34 @@ export function parseRoute(hash: string): ParsedRoute {
       chapterId: null,
       legacy: true,
       valid: false,
+    };
+  }
+
+  if (path === ROUTE_VIEWS.signIn) {
+    return {
+      view: ROUTE_VIEWS.signIn,
+      projectId: null,
+      chapterId: null,
+      legacy: false,
+      valid: true,
+    };
+  }
+  if (path === ROUTE_VIEWS.account) {
+    return {
+      view: ROUTE_VIEWS.account,
+      projectId: null,
+      chapterId: null,
+      legacy: false,
+      valid: true,
+    };
+  }
+  if (path === ROUTE_VIEWS.users) {
+    return {
+      view: ROUTE_VIEWS.users,
+      projectId: null,
+      chapterId: null,
+      legacy: false,
+      valid: true,
     };
   }
 
@@ -193,6 +224,9 @@ export function parseRoute(hash: string): ParsedRoute {
 
 export function routeToHash(route: RouteTarget): string {
   if (route.view === ROUTE_VIEWS.projects) return "#/projects";
+  if (route.view === ROUTE_VIEWS.signIn) return "#/sign-in";
+  if (route.view === ROUTE_VIEWS.account) return "#/account";
+  if (route.view === ROUTE_VIEWS.users) return "#/users";
 
   if (!route.projectId) {
     if (route.view === ROUTE_VIEWS.coverage) return "#/coverage";

@@ -34,6 +34,9 @@ export function ActivityView({ onSelectChapter }: ActivityViewProps) {
                 <span className="activity-marker" />
                 <div>
                   <p>{event.message}</p>
+                  {event.actorName && (
+                    <span className="activity-actor">by {event.actorName}</span>
+                  )}
                   {exists && event.chapterId ? (
                     <button onClick={() => onSelectChapter(event.chapterId!)}>
                       {event.chapterName || "Untitled chapter"}

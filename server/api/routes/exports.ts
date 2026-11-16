@@ -1,5 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import type { ProjectStore } from "../../db/store";
+import type { AuthHooks } from "../../auth/middleware";
 
 interface ProjectParams {
   id: string;
@@ -18,12 +19,20 @@ function filename(name: string): string {
 export function registerExportRoutes(
   app: FastifyInstance,
   store: ProjectStore,
+  hooks: AuthHooks,
 ) {
   app.get<{ Params: ProjectParams }>(
     "/api/v1/projects/:id/export",
+    { preHandler: hooks.requireAuth },
     async (request, reply) => {
-      const project = store.getProject(request.params.id);
-      const exported = store.exportProject(request.params.id);
+      const project = store.getProject(
+        request.auth!.user.id,
+        request.params.id,
+      );
+      const exported = store.exportProject(
+        request.auth!.user.id,
+        request.params.id,
+      );
       if (!project || !exported) {
         return reply.code(404).send({
           error: {
@@ -41,8 +50,12 @@ export function registerExportRoutes(
     },
   );
 
-  app.post("/api/v1/projects/import", async (request, reply) => {
-    const result = store.importProject(request.body);
-    return reply.code(201).send(result);
-  });
+  app.post(
+    "/api/v1/projects/import",
+    { preHandler: hooks.requireAuth },
+    async (request, reply) => {
+      const result = store.importProject(request.auth!.user.id, request.body);
+      return reply.code(201).send(result);
+    },
+  );
 }

@@ -1,6 +1,6 @@
 # Phase 6 — Authentication, accounts and project ownership
 
-Status: planned  
+Status: delivered  
 Date: 2026-11-15
 
 ## Goal
@@ -1339,27 +1339,123 @@ removal remains in effect.
 
 ## 16. Delivery notes
 
-To be completed when the phase is delivered. Record:
+Implemented on 2026-11-15.
 
-- the final super-admin env names and startup behavior;
-- the migration/claim result on a real phase 5 database;
-- session and token TTLs actually used;
-- the OpenAPI security shape;
-- test counts for unit, API, contract and Playwright;
-- production build sizes and any new bundle cost;
-- any deviations from this plan.
+### Runtime and configuration
+
+- `.env` is loaded with `dotenv`; `.env.example` is committed and `.env` is
+  ignored. `LAYERS_SUPER_ADMIN_EMAIL`, `LAYERS_SUPER_ADMIN_PASSWORD` and
+  `LAYERS_SUPER_ADMIN_NAME` are required outside test mode. Test mode supplies
+  `super@example.test` / `test-super-admin-password` / `Super Admin`.
+- Startup order is migrations → super-admin synchronization → legacy project
+  claim → legacy active-project migration → session/token pruning → sample
+  seeding. The shared routine is `server/db/bootstrap.ts`, used by the server,
+  `db:reset`, test helpers and the test-only reset endpoint.
+- The super admin is a singleton `users` row with role `super_admin`. Changing
+  its `.env` password updates the hash and revokes its sessions; changing the
+  email or display name updates the same row and preserves owned projects.
+- Runtime dependencies added: `@fastify/cookie`, `@fastify/rate-limit`,
+  `@node-rs/argon2` and `dotenv`. The server build externalizes
+  `@node-rs/argon2` and `better-sqlite3`.
+
+### Database and ownership
+
+- Migration `server/db/migrations/002_auth.sql` adds `users`, `sessions`,
+  `api_tokens`, `user_state`, `projects.owner_id` and
+  `activity_entries.actor_user_id`.
+- `projects.owner_id` is nullable for migration only. Startup claims every
+  unowned project and its unattributed activity to the super admin. A later
+  migration can rebuild the column as `NOT NULL`.
+- The legacy `app_state.active_project_id` value is copied to the super admin's
+  `user_state` and the legacy key is deleted. `app_state` remains unused.
+- Seeded sample projects belong to the super admin. New members start with an
+  empty catalog.
+- `ProjectStore` methods now take `ownerId`; foreign project reads and writes
+  return `404` before `If-Match` parsing.
+- Activity reads join `users` for `actorName`. New activity records
+  `actor_user_id`; imported activity is stored without an actor; exports strip
+  actor fields and remain `layers-project` v3.
+
+### Authentication and API
+
+- Passwords use Argon2id via `@node-rs/argon2` (19 MiB, 2 passes, 1 lane;
+  reduced parameters in test mode).
+- Browser sessions use the `layers_session` cookie: `HttpOnly`,
+  `SameSite=Lax`, `Path=/`, optional `Secure`, 30-day sliding lifetime. Only
+  SHA-256 token hashes are stored. Session timestamps are touched at most once
+  per hour.
+- API tokens use `lrs_...`, are stored hashed, support `read`/`write` scopes,
+  optional expiry, revocation and a 20-active-token limit. Token management and
+  user/session management require a cookie session.
+- Login is rate-limited per IP and normalized email. The rate-limit error uses
+  the standard API envelope.
+- Cookie-authenticated mutations check the `Origin` header when present. CORS
+  uses exact configured origins with credentials.
+- Public routes: `/health`, `/openapi.json`, `/docs`, `/auth/login`,
+  `/auth/logout`. `/auth/session`, `/auth/sessions`, `/me/tokens` and `/users`
+  are cookie-only. `/me` and all project routes accept a cookie or bearer token.
+- OpenAPI documents `sessionCookie` and `bearerAuth`, public overrides, auth
+  endpoints, 401/403 responses and the new error codes. Generated types were
+  regenerated.
+
+### Client
+
+- `AuthProvider` loads `/auth/session`, handles 401 expiry events and exposes
+  sign-in/out, session and token actions, and super-admin user actions.
+- `AuthGate` renders sign-in, account, users or the workspace. The requested
+  hash is preserved naturally, so deep links return after sign-in.
+- Added `#/sign-in`, `#/account` and `#/users`; the topbar has a user menu.
+- The account page lists sessions and API tokens, creates tokens with a one-time
+  secret, and revokes sessions/tokens. There is no password UI.
+- The users page creates members with email, display name, password and password
+  confirmation, and disables/enables accounts. The super admin cannot disable
+  itself.
+- The workspace unmounts on sign-out/user change, clearing prior project data.
+
+### Explicit deviations from the plan
+
+- Password rehash-on-login for old Argon2 parameters was not added; new hashes
+  always use the current parameters.
+- Session cleanup runs at startup and on access, not after every login.
+- `LAYERS_UI_ORIGIN` adds one extra origin rather than a comma-separated list.
+- The planned `server/auth/guards.ts` was not needed; `middleware.ts` exports
+  the three Fastify guards.
+- The planned separate `server/api/schemas/auth.ts` was folded into
+  `server/api/schemas.ts`.
+
+### Verification
+
+Run on 2026-11-15:
+
+```sh
+npm run lint          # clean
+npm run format:check  # clean
+npm run typecheck     # clean
+npm run test:unit     # 78 passed (9 files)
+npm run test:api      # 40 passed (7 files)
+npm run test:contract # 8 passed
+npm run api:lint      # valid, warnings only
+npm run build         # succeeded
+npm run test:e2e      # 42 passed (Chromium)
+npm run test:prod     # 1 passed (production preview)
+```
+
+Production build (gzip): app 22.2 kB, vendor 50.6 kB, React 69.0 kB, icons
+2.5 kB, projects page 2.0 kB, coverage 1.9 kB, activity 0.7 kB, CSS 8.9 kB.
+The auth pages are included in the main app chunk.
 
 ## 17. Backlog relationship
 
-- Phase 6 completes **P-01 — Authentication and user accounts**.
+- Phase 6 completes **P-01 — Authentication and user accounts**. P-01 was
+  removed from `phases/phase-ideas.md`.
 - **P-02 — Collaboration, permissions and shared workspaces** remains next. It
   still needs project memberships, roles, invitations, per-user selected chapter
   and a conflict-resolution model.
 - **P-04 — Durable server-side activity audit log** is advanced by actor
   attribution, but retention, audit queries and a larger history remain.
-- **P-03 — Cross-device sync** still depends on identity and a remote deployment
-  story.
+- **P-03 — Cross-device sync** now has identity, but still needs a remote
+  deployment and sync protocol.
 - **P-15 — MCP** can use the bearer-token workflow delivered here instead of an
   unauthenticated local API.
-- After delivery, remove P-01 from `phases/phase-ideas.md` and update P-02,
-  P-03, P-04 and P-15 to reference the new identity boundary.
+- New deferred ideas were added for **P-17 password change/recovery**, **P-18
+  project transfer/user deletion** and **P-19 per-user selected chapter**.

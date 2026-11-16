@@ -1,5 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import type { ProjectStore } from "../../db/store";
+import type { AuthHooks } from "../../auth/middleware";
 
 interface ProjectParams {
   id: string;
@@ -8,9 +9,12 @@ interface ProjectParams {
 export function registerCoverageRoutes(
   app: FastifyInstance,
   store: ProjectStore,
+  hooks: AuthHooks,
 ) {
   app.get<{ Params: ProjectParams }>(
     "/api/v1/projects/:id/coverage",
-    async (request) => store.getCoverage(request.params.id),
+    { preHandler: hooks.requireAuth },
+    async (request) =>
+      store.getCoverage(request.auth!.user.id, request.params.id),
   );
 }

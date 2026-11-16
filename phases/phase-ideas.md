@@ -1,7 +1,7 @@
 # Phase ideas — deferred backlog
 
 Status: living document  
-Updated: 2026-11-11
+Updated: 2026-11-16
 
 Ideas captured while delivering phase 1 and phase 2 that were deliberately left
 out, plus a few candidates raised while planning phase 3. They are consolidated
@@ -16,45 +16,49 @@ How to use this file:
 
 ## Product capabilities
 
-### P-01 — Authentication and user accounts
-
-**Source:** phase 1 boundaries, phase 2 out of scope; split from the original
-backend/auth idea after phase 5 delivered the local API and SQLite store.  
-**What:** sign-in, user accounts and account management on top of the phase 5
-API.  
-**Why deferred:** phase 5 is deliberately a single-user, loopback-only API with
-no identity. Collaboration and cross-device sync need identity first.  
-**Next step:** choose an auth provider and session model, then add ownership to
-projects and activity.
-
 ### P-02 — Collaboration, permissions and shared workspaces
 
-**Source:** phase 1 boundaries, phase 2 out of scope.  
+**Source:** phase 1 boundaries, phase 2 out of scope.
+
 **What:** multiple people editing one project, roles, invitations and
-permission checks.  
-**Why deferred:** needs P-01 and a conflict-resolution model.  
+permission checks.
+
+**Why deferred:** identity and private project ownership are delivered in phase
+6, but sharing still needs project memberships, roles, per-user selected
+chapters and a conflict-resolution model.
+
 **Next step:** decide the collaboration model (presence plus last-write-wins,
 CRDT, or server-sequenced operations) before UI work.
 
 ### P-03 — Cross-device sync and cloud backup
 
 **Source:** phase 1 persistence boundary ("data is specific to the browser and
-origin; there is no cross-device synchronization").  
+origin; there is no cross-device synchronization").
+
 **What:** projects available on another browser or device, automatic remote
-backup.  
-**Why deferred:** depends on P-01; project export/import is the current manual
-workaround.  
+backup.
+
+**Why deferred:** identity is available after phase 6, but remote hosting, TLS
+and a sync protocol are still missing. Project export/import is the current
+manual workaround.
+
 **Next step:** reuse the project export format as the sync payload.
 
 ### P-04 — Durable server-side activity audit log
 
 **Source:** phase 1 boundaries ("activity is a browser-local change history,
-not a server audit log").  
+not a server audit log").
+
 **Status:** partially advanced by phase 5, which moved activity to the server.
 The current history is still capped at 100 entries and has no attribution.
-**What:** durable, attributable activity history that supports auditing.  
-**Why deferred:** no identity, retention policy or audit query surface yet.  
-**Next step:** define the event schema, retention policy and attribution model.
+
+**What:** durable, attributable activity history that supports auditing.
+
+**Why deferred:** phase 6 adds identity and actor attribution, but there is
+still no retention policy, audit query surface or durable event schema.
+
+**Next step:** define the retention policy, audit query surface and expanded
+event schema.
 
 ## Specification editing
 
@@ -109,8 +113,9 @@ Postgres option.
 or Postgres, including migration and backup guidance.  
 **Why deferred:** phase 5 is local-only and uses SQLite behind `server/db`;
 adding a second driver now would expand the phase beyond the API cutover.  
-**Next step:** introduce a Postgres implementation of `ProjectStore`, migrate
-the schema, and add an explicit configuration screen or environment switch.
+**Next step:** introduce a Postgres implementation of `ProjectStore` and the
+auth store, migrate the schema, and add an explicit configuration screen or
+environment switch.
 
 ## Quality and platform
 
@@ -156,9 +161,6 @@ chapter editor.
 **Next step:** prototype only if a project dashboard becomes a real need; the
 phase 3 projects page is the first step in that direction.
 
-### P-13 — commits
-add fields where we can save commit id to every document so we can then review what were implemented and where 
-
 ### P-14 — Doker
 create doker image where whole app will run db is attached volume to persist restat 
 
@@ -166,4 +168,55 @@ create doker image where whole app will run db is attached volume to persist res
 make docker api be avalible though mcplet's
 
 ### P-16 — Search
-MCP search by keyword or commit id 
+
+**Source:** phase 7 introduced document commit references; this idea covers
+finding them again.
+
+**What:** MCP and UI search by keyword or commit hash across documents, with
+results linking back to the chapter.
+
+**Why deferred:** phase 7 stores commit hashes but deliberately adds no search
+surface.
+
+**Next step:** decide whether search runs over the project API, SQLite FTS or
+only exported files, then add query endpoints and an MCP tool.
+
+### P-17 — Password change and recovery
+
+**Source:** phase 6 boundary: the super admin creates accounts, but passwords
+cannot be changed, reset or recovered.
+
+**What:** self-service password change, admin password reset, and a recovery
+flow that works without email delivery.
+
+**Why deferred:** phase 6 deliberately avoided password lifecycle work; no
+email provider exists.
+
+**Next step:** decide whether recovery is local-only (recovery code or CLI) or
+requires SMTP, then add endpoints, UI and session revocation.
+
+### P-18 — Project transfer and user deletion
+
+**Source:** phase 6 boundary: projects are owned by one user and users are only
+disabled, not deleted or transferred.
+
+**What:** reassign a project to another user, delete a user, and define what
+happens to owned projects.
+
+**Why deferred:** needs explicit ownership-transfer rules and audit retention
+decisions.
+
+**Next step:** define transfer and deletion semantics before adding UI.
+
+### P-19 — Per-user selected chapter
+
+**Source:** phase 6 decision to keep `selectedId` in the project document while
+projects are private.
+
+**What:** move the selected chapter from the document into per-user state.
+
+**Why deferred:** only one user can access a project in phase 6, so there is no
+observable conflict.
+
+**Next step:** deliver with P-02 sharing, where each member needs their own
+selection.

@@ -1,5 +1,12 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { createTestApi, docRequest, json, type TestApi } from "./helpers";
+import {
+  authHeaders,
+  createTestApi,
+  docRequest,
+  json,
+  TEST_SUPER_ADMIN,
+  type TestApi,
+} from "./helpers";
 
 let api: TestApi | null = null;
 afterEach(async () => {
@@ -7,10 +14,17 @@ afterEach(async () => {
   api = null;
 });
 
-async function getDocument(testApi: TestApi, id = "website") {
+async function superCookie(testApi: TestApi): Promise<string> {
+  return (
+    await testApi.login(TEST_SUPER_ADMIN.email, TEST_SUPER_ADMIN.password)
+  ).cookie;
+}
+
+async function getDocument(testApi: TestApi, cookie: string, id = "website") {
   const response = await testApi.app.inject({
     method: "GET",
     url: `/api/v1/projects/${id}/document`,
+    headers: authHeaders(cookie),
   });
   expect(response.statusCode).toBe(200);
   return { body: json(response), etag: response.headers.etag as string };
@@ -19,7 +33,8 @@ async function getDocument(testApi: TestApi, id = "website") {
 describe("document API", () => {
   it("reads and replaces a document with optimistic concurrency", async () => {
     api = await createTestApi();
-    const first = await getDocument(api);
+    const cookie = await superCookie(api);
+    const first = await getDocument(api, cookie);
     expect(first.etag).toBe('"1"');
     expect(first.body.chapters.byId["password-reset"]).toBeDefined();
 
@@ -37,6 +52,7 @@ describe("document API", () => {
       method: "PUT",
       url: "/api/v1/projects/website/document",
       headers: {
+        ...authHeaders(cookie),
         "content-type": "application/json",
         "if-match": first.etag,
       },
@@ -60,11 +76,13 @@ describe("document API", () => {
     expect(body.chapters.byId["password-reset"].title).toBe("Reset password");
     expect(body.activity[0].message).toBe("Renamed password reset");
     expect(body.activity[0].time).toBe("2026-01-01T00:00:00.000Z");
+    expect(body.activity[0].actorName).toBe("Super Admin");
 
     const stale = await api.app.inject({
       method: "PUT",
       url: "/api/v1/projects/website/document",
       headers: {
+        ...authHeaders(cookie),
         "content-type": "application/json",
         "if-match": first.etag,
       },
@@ -76,11 +94,13 @@ describe("document API", () => {
 
   it("does not bump the revision for an identical document", async () => {
     api = await createTestApi();
-    const first = await getDocument(api);
+    const cookie = await superCookie(api);
+    const first = await getDocument(api, cookie);
     const saved = await api.app.inject({
       method: "PUT",
       url: "/api/v1/projects/website/document",
       headers: {
+        ...authHeaders(cookie),
         "content-type": "application/json",
         "if-match": first.etag,
       },
@@ -95,11 +115,13 @@ describe("document API", () => {
 
   it("validates selected chapters and document shape", async () => {
     api = await createTestApi();
-    const first = await getDocument(api);
+    const cookie = await superCookie(api);
+    const first = await getDocument(api, cookie);
     const invalidSelected = await api.app.inject({
       method: "PUT",
       url: "/api/v1/projects/website/document",
       headers: {
+        ...authHeaders(cookie),
         "content-type": "application/json",
         "if-match": first.etag,
       },
@@ -115,6 +137,7 @@ describe("document API", () => {
       method: "PUT",
       url: "/api/v1/projects/website/document",
       headers: {
+        ...authHeaders(cookie),
         "content-type": "application/json",
         "if-match": first.etag,
       },
@@ -125,12 +148,14 @@ describe("document API", () => {
 
   it("deduplicates and caps activity", async () => {
     api = await createTestApi();
-    let document = await getDocument(api);
+    const cookie = await superCookie(api);
+    let document = await getDocument(api, cookie);
     for (let index = 0; index < 105; index += 1) {
       const saved = await api.app.inject({
         method: "PUT",
         url: "/api/v1/projects/website/document",
         headers: {
+          ...authHeaders(cookie),
           "content-type": "application/json",
           "if-match": document.etag,
         },
@@ -159,6 +184,7 @@ describe("document API", () => {
     const activity = await api.app.inject({
       method: "GET",
       url: "/api/v1/projects/website/activity?limit=200",
+      headers: authHeaders(cookie),
     });
     const events = json(activity).events;
     expect(events).toHaveLength(100);
@@ -167,6 +193,7 @@ describe("document API", () => {
 
   it("reports corrupt stored documents instead of silently resetting them", async () => {
     api = await createTestApi();
+    const cookie = await superCookie(api);
     api.db
       .prepare(
         "UPDATE project_documents SET chapters_json = ? WHERE project_id = ?",
@@ -175,6 +202,7 @@ describe("document API", () => {
     const response = await api.app.inject({
       method: "GET",
       url: "/api/v1/projects/website/document",
+      headers: authHeaders(cookie),
     });
     expect(response.statusCode).toBe(500);
     expect(json(response).error.code).toBe("stored_data_invalid");
@@ -182,9 +210,11 @@ describe("document API", () => {
 
   it("returns coverage from the stored document", async () => {
     api = await createTestApi();
+    const cookie = await superCookie(api);
     const response = await api.app.inject({
       method: "GET",
       url: "/api/v1/projects/website/coverage",
+      headers: authHeaders(cookie),
     });
     expect(response.statusCode).toBe(200);
     const body = json(response);
@@ -195,9 +225,11 @@ describe("document API", () => {
 
   it("exports and imports a project", async () => {
     api = await createTestApi();
+    const cookie = await superCookie(api);
     const exported = await api.app.inject({
       method: "GET",
       url: "/api/v1/projects/website/export",
+      headers: authHeaders(cookie),
     });
     expect(exported.statusCode).toBe(200);
     const payload = json(exported);
@@ -205,17 +237,22 @@ describe("document API", () => {
     expect(payload.formatVersion).toBe(3);
     expect(payload.instructions).toContain("# Layers project export");
     expect(payload.instructions).toContain("POST /api/v1/projects/import");
+    expect(
+      payload.activity.every(
+        (event: { actorName?: string }) => event.actorName === undefined,
+      ),
+    ).toBe(true);
 
     payload.chapters.byId["password-reset"].title = "Imported reset";
     const imported = await api.app.inject({
       method: "POST",
       url: "/api/v1/projects/import",
-      ...docRequest(payload),
+      ...docRequest(payload, authHeaders(cookie)),
     });
     expect(imported.statusCode).toBe(201);
     const body = json(imported);
     expect(body.project.name).toContain("(imported)");
-    const document = await getDocument(api, body.project.id);
+    const document = await getDocument(api, cookie, body.project.id);
     expect(document.body.chapters.byId["password-reset"].title).toBe(
       "Imported reset",
     );
@@ -228,9 +265,11 @@ describe("document API", () => {
       url: "/api/v1/test/reset",
     });
     expect(reset.statusCode).toBe(204);
+    const cookie = await superCookie(api);
     const projects = await api.app.inject({
       method: "GET",
       url: "/api/v1/projects",
+      headers: authHeaders(cookie),
     });
     expect(json(projects).projects).toHaveLength(2);
   });

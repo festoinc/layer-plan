@@ -61,3 +61,65 @@ export interface WorkspaceStatus {
   state: WorkspaceStatusState;
   message: string;
 }
+
+export type UserRole = "super_admin" | "member";
+
+export interface AuthUser {
+  id: string;
+  email: string;
+  displayName: string;
+  role: UserRole;
+  createdAt: string;
+  updatedAt: string;
+  disabledAt: string | null;
+}
+
+export interface SessionInfo {
+  id: string;
+  createdAt: string;
+  lastSeenAt: string;
+  expiresAt: string;
+  userAgent: string | null;
+  current?: boolean;
+}
+
+export interface LoginResponse {
+  user: AuthUser;
+  session: SessionInfo;
+}
+
+export interface MeResponse {
+  user: AuthUser;
+}
+
+export interface SessionsResponse {
+  sessions: SessionInfo[];
+}
+
+export interface ApiTokenInfo {
+  id: string;
+  name: string;
+  prefix: string;
+  scopes: string[];
+  createdAt: string;
+  lastUsedAt: string | null;
+  expiresAt: string | null;
+  revokedAt: string | null;
+}
+
+export interface TokensResponse {
+  tokens: ApiTokenInfo[];
+}
+
+export interface CreateTokenResponse {
+  token: string;
+  tokenInfo: ApiTokenInfo;
+}
+
+export interface UsersResponse {
+  users: AuthUser[];
+}
+
+export interface UserResponse {
+  user: AuthUser;
+}

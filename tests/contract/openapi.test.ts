@@ -3,7 +3,15 @@ import SwaggerParser from "@apidevtools/swagger-parser";
 import Ajv, { type ValidateFunction } from "ajv";
 import addFormats from "ajv-formats";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { createTestApi, json, type TestApi } from "../api/helpers";
+import {
+  authHeaders,
+  bearerHeaders,
+  createTestApi,
+  docRequest,
+  json,
+  TEST_SUPER_ADMIN,
+  type TestApi,
+} from "../api/helpers";
 
 const specPath = path.resolve("server/api/openapi.yaml");
 const ajv = new Ajv({ strict: false, allErrors: true });
@@ -11,6 +19,7 @@ addFormats(ajv);
 
 let apiDoc: any;
 let api: TestApi;
+let superCookie: string;
 
 function schemaAt(pathKey: string, method: string, status: string) {
   return apiDoc.paths[pathKey][method].responses[status].content[
@@ -32,28 +41,179 @@ beforeAll(async () => {
   await SwaggerParser.validate(specPath);
   apiDoc = await SwaggerParser.dereference(specPath);
   api = await createTestApi();
+  superCookie = (
+    await api.login(TEST_SUPER_ADMIN.email, TEST_SUPER_ADMIN.password)
+  ).cookie;
 });
 
 afterAll(async () => {
   await api?.close();
 });
 
+const expectedPaths = [
+  "/health",
+  "/openapi.json",
+  "/auth/login",
+  "/auth/logout",
+  "/auth/session",
+  "/auth/sessions",
+  "/auth/sessions/{sessionId}",
+  "/me",
+  "/me/tokens",
+  "/me/tokens/{tokenId}",
+  "/users",
+  "/users/{userId}",
+  "/projects",
+  "/projects/{projectId}",
+  "/projects/{projectId}/activate",
+  "/projects/{projectId}/activity",
+  "/projects/{projectId}/coverage",
+  "/projects/{projectId}/document",
+  "/projects/{projectId}/duplicate",
+  "/projects/{projectId}/export",
+  "/projects/import",
+].sort();
+
 describe("OpenAPI contract", () => {
-  it("documents every API route", () => {
-    expect(Object.keys(apiDoc.paths).sort()).toEqual(
-      [
-        "/health",
-        "/openapi.json",
-        "/projects",
-        "/projects/{projectId}",
-        "/projects/{projectId}/activate",
-        "/projects/{projectId}/activity",
-        "/projects/{projectId}/coverage",
-        "/projects/{projectId}/document",
-        "/projects/{projectId}/duplicate",
-        "/projects/{projectId}/export",
-        "/projects/import",
-      ].sort(),
+  it("documents every API route and both security schemes", () => {
+    expect(Object.keys(apiDoc.paths).sort()).toEqual(expectedPaths);
+    expect(apiDoc.components.securitySchemes.sessionCookie).toMatchObject({
+      type: "apiKey",
+      in: "cookie",
+      name: "layers_session",
+    });
+    expect(apiDoc.components.securitySchemes.bearerAuth).toMatchObject({
+      type: "http",
+      scheme: "bearer",
+    });
+    expect(apiDoc.security).toEqual([
+      { sessionCookie: [] },
+      { bearerAuth: [] },
+    ]);
+  });
+
+  it("marks public routes and documents 401/403 on protected routes", () => {
+    for (const [pathKey, method] of [
+      ["/health", "get"],
+      ["/openapi.json", "get"],
+      ["/auth/login", "post"],
+      ["/auth/logout", "post"],
+    ] as const) {
+      expect(apiDoc.paths[pathKey][method].security).toEqual([]);
+    }
+    for (const pathKey of Object.keys(apiDoc.paths)) {
+      for (const [method, operation] of Object.entries<any>(
+        apiDoc.paths[pathKey],
+      )) {
+        if (!["get", "post", "patch", "put", "delete"].includes(method)) {
+          continue;
+        }
+        const isPublic =
+          (pathKey === "/health" && method === "get") ||
+          (pathKey === "/openapi.json" && method === "get") ||
+          (pathKey === "/auth/login" && method === "post") ||
+          (pathKey === "/auth/logout" && method === "post");
+        if (isPublic) continue;
+        expect(
+          operation.responses["401"],
+          `${method} ${pathKey} 401`,
+        ).toBeTruthy();
+        expect(
+          operation.responses["403"],
+          `${method} ${pathKey} 403`,
+        ).toBeTruthy();
+      }
+    }
+  });
+
+  it("matches the auth, session and user responses", async () => {
+    const login = await api.app.inject({
+      method: "POST",
+      url: "/api/v1/auth/login",
+      payload: {
+        email: TEST_SUPER_ADMIN.email,
+        password: TEST_SUPER_ADMIN.password,
+      },
+      headers: { "content-type": "application/json" },
+    });
+    expect(login.statusCode).toBe(200);
+    expectValid(schemaAt("/auth/login", "post", "200"), json(login), "login");
+
+    const session = await api.app.inject({
+      method: "GET",
+      url: "/api/v1/auth/session",
+      headers: authHeaders(superCookie),
+    });
+    expectValid(
+      schemaAt("/auth/session", "get", "200"),
+      json(session),
+      "session",
+    );
+
+    const me = await api.app.inject({
+      method: "GET",
+      url: "/api/v1/me",
+      headers: authHeaders(superCookie),
+    });
+    expectValid(schemaAt("/me", "get", "200"), json(me), "me");
+
+    const sessions = await api.app.inject({
+      method: "GET",
+      url: "/api/v1/auth/sessions",
+      headers: authHeaders(superCookie),
+    });
+    expectValid(
+      schemaAt("/auth/sessions", "get", "200"),
+      json(sessions),
+      "sessions",
+    );
+
+    const users = await api.app.inject({
+      method: "GET",
+      url: "/api/v1/users",
+      headers: authHeaders(superCookie),
+    });
+    expectValid(schemaAt("/users", "get", "200"), json(users), "users");
+
+    const createdUser = await api.app.inject({
+      method: "POST",
+      url: "/api/v1/users",
+      ...docRequest(
+        {
+          email: `contract-${Date.now()}@example.test`,
+          password: "a-long-member-password",
+          displayName: "Contract User",
+        },
+        authHeaders(superCookie),
+      ),
+    });
+    expect(createdUser.statusCode).toBe(201);
+    expectValid(
+      schemaAt("/users", "post", "201"),
+      json(createdUser),
+      "create user",
+    );
+
+    const tokens = await api.app.inject({
+      method: "GET",
+      url: "/api/v1/me/tokens",
+      headers: authHeaders(superCookie),
+    });
+    expectValid(schemaAt("/me/tokens", "get", "200"), json(tokens), "tokens");
+
+    const createdToken = await api.app.inject({
+      method: "POST",
+      url: "/api/v1/me/tokens",
+      ...docRequest(
+        { name: "Contract token", scopes: ["read"] },
+        authHeaders(superCookie),
+      ),
+    });
+    expect(createdToken.statusCode).toBe(201);
+    expectValid(
+      schemaAt("/me/tokens", "post", "201"),
+      json(createdToken),
+      "create token",
     );
   });
 
@@ -61,6 +221,7 @@ describe("OpenAPI contract", () => {
     const response = await api.app.inject({
       method: "GET",
       url: "/api/v1/projects",
+      headers: authHeaders(superCookie),
     });
     expect(response.statusCode).toBe(200);
     expectValid(schemaAt("/projects", "get", "200"), json(response), "catalog");
@@ -68,6 +229,7 @@ describe("OpenAPI contract", () => {
     const detail = await api.app.inject({
       method: "GET",
       url: "/api/v1/projects/website",
+      headers: authHeaders(superCookie),
     });
     expect(detail.statusCode).toBe(200);
     expectValid(
@@ -81,6 +243,7 @@ describe("OpenAPI contract", () => {
     const document = await api.app.inject({
       method: "GET",
       url: "/api/v1/projects/website/document",
+      headers: authHeaders(superCookie),
     });
     expect(document.statusCode).toBe(200);
     const documentBody = json(document);
@@ -95,9 +258,7 @@ describe("OpenAPI contract", () => {
       selectedId: documentBody.selectedId,
     };
     expectValid(
-      schemaAt("/projects/{projectId}/document", "put", "200")
-        ? apiDoc.components.schemas.DocumentWrite
-        : {},
+      apiDoc.components.schemas.DocumentWrite,
       writeBody,
       "document write request",
     );
@@ -105,6 +266,7 @@ describe("OpenAPI contract", () => {
       method: "PUT",
       url: "/api/v1/projects/website/document",
       headers: {
+        ...authHeaders(superCookie),
         "content-type": "application/json",
         "if-match": document.headers.etag,
       },
@@ -120,6 +282,7 @@ describe("OpenAPI contract", () => {
     const activity = await api.app.inject({
       method: "GET",
       url: "/api/v1/projects/website/activity",
+      headers: authHeaders(superCookie),
     });
     expectValid(
       schemaAt("/projects/{projectId}/activity", "get", "200"),
@@ -130,6 +293,7 @@ describe("OpenAPI contract", () => {
     const coverage = await api.app.inject({
       method: "GET",
       url: "/api/v1/projects/website/coverage",
+      headers: authHeaders(superCookie),
     });
     expectValid(
       schemaAt("/projects/{projectId}/coverage", "get", "200"),
@@ -138,7 +302,8 @@ describe("OpenAPI contract", () => {
     );
   });
 
-  it("matches activity and import responses", async () => {
+  it("matches activity and import responses with bearer tokens", async () => {
+    const token = await api.createToken(superCookie);
     const activity = await api.app.inject({
       method: "POST",
       url: "/api/v1/projects/website/activity",
@@ -147,6 +312,7 @@ describe("OpenAPI contract", () => {
         chapterId: null,
         chapterName: "Website project",
       },
+      headers: { ...bearerHeaders(token), "content-type": "application/json" },
     });
     expect(activity.statusCode).toBe(201);
     expectValid(
@@ -158,12 +324,16 @@ describe("OpenAPI contract", () => {
     const exported = await api.app.inject({
       method: "GET",
       url: "/api/v1/projects/website/export",
+      headers: bearerHeaders(token),
     });
     expect(exported.statusCode).toBe(200);
     const imported = await api.app.inject({
       method: "POST",
       url: "/api/v1/projects/import",
-      headers: { "content-type": "application/json" },
+      headers: {
+        ...bearerHeaders(token),
+        "content-type": "application/json",
+      },
       payload: exported.payload,
     });
     expect(imported.statusCode).toBe(201);
@@ -174,10 +344,33 @@ describe("OpenAPI contract", () => {
     );
   });
 
-  it("matches error responses", async () => {
+  it("matches authentication and authorization error responses", async () => {
+    const unauthorized = await api.app.inject({
+      method: "GET",
+      url: "/api/v1/projects",
+    });
+    expect(unauthorized.statusCode).toBe(401);
+    expectValid(
+      schemaAt("/projects", "get", "401"),
+      json(unauthorized),
+      "unauthenticated",
+    );
+
+    const member = await api.createMember(superCookie, {
+      email: `contract-member-${Date.now()}@example.test`,
+    });
+    const forbidden = await api.app.inject({
+      method: "GET",
+      url: "/api/v1/users",
+      headers: authHeaders(member.cookie),
+    });
+    expect(forbidden.statusCode).toBe(403);
+    expectValid(schemaAt("/users", "get", "403"), json(forbidden), "forbidden");
+
     const notFound = await api.app.inject({
       method: "GET",
       url: "/api/v1/projects/missing",
+      headers: authHeaders(superCookie),
     });
     expect(notFound.statusCode).toBe(404);
     expectValid(
@@ -190,6 +383,7 @@ describe("OpenAPI contract", () => {
       method: "PUT",
       url: "/api/v1/projects/website/document",
       headers: {
+        ...authHeaders(superCookie),
         "content-type": "application/json",
         "if-match": '"999"',
       },
@@ -201,5 +395,12 @@ describe("OpenAPI contract", () => {
       json(conflict),
       "revision conflict",
     );
+  });
+
+  it("does not document password change or recovery endpoints", () => {
+    const paths = Object.keys(apiDoc.paths).join(" ");
+    expect(paths).not.toContain("password");
+    expect(paths).not.toContain("forgot");
+    expect(paths).not.toContain("reset-password");
   });
 });

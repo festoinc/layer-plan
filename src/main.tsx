@@ -1,16 +1,16 @@
 import { createRoot } from "react-dom/client";
-import { App } from "./app/App";
+import { AuthGate } from "./app/AuthGate";
 import { ErrorBoundary } from "./app/ErrorBoundary";
-import { ProjectsProvider } from "./store/ProjectsProvider";
+import { AuthProvider } from "./store/AuthProvider";
 import "./styles.css";
 
 const rootElement = document.getElementById("root");
 if (rootElement) {
   createRoot(rootElement).render(
     <ErrorBoundary>
-      <ProjectsProvider>
-        <App />
-      </ProjectsProvider>
+      <AuthProvider>
+        <AuthGate />
+      </AuthProvider>
     </ErrorBoundary>,
   );
 }

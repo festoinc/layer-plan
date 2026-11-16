@@ -1,25 +1,105 @@
 # Layers local API
 
-The API is a local, unauthenticated HTTP service for the Layers React client
-and local AI agents. It binds to `127.0.0.1:3001` by default and stores data in
-a SQLite file (`data/layers.sqlite` unless `LAYERS_DB_PATH` is set).
+The API is a local, authenticated HTTP service for the Layers React client and
+local AI agents. It binds to `127.0.0.1:3001` by default and stores data in a
+SQLite file (`data/layers.sqlite` unless `LAYERS_DB_PATH` is set).
 
 - Base URL: `http://127.0.0.1:3001/api/v1`
 - OpenAPI document: `server/api/openapi.yaml`
 - Interactive docs: `http://127.0.0.1:3001/api/v1/docs`
 - JSON contract: `http://127.0.0.1:3001/api/v1/openapi.json`
 
-There is no authentication. Do not expose the API beyond loopback unless you
-understand that any local process or browser origin could read and modify the
-data. For broader AI-agent working instructions, see
-[`AGENTS_template.md`](../AGENTS_template.md).
+Every project is private to its owner. Browser clients use an `HttpOnly` session
+cookie; local AI agents use bearer API tokens. For broader AI-agent working
+instructions, see [`AGENTS_template.md`](../AGENTS_template.md).
+
+## Sign in
+
+The super admin is configured in `.env` and can create member accounts at
+`#/users`. No email is sent. Passwords cannot be changed or recovered yet.
+
+```sh
+curl -c /tmp/layers-cookies.txt \
+  -X POST http://127.0.0.1:3001/api/v1/auth/login \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"admin@example.com","password":"your-password"}'
+```
+
+The response includes the current user and session. The cookie jar now holds
+`layers_session`. Use `-b /tmp/layers-cookies.txt` for browser-style calls.
+
+```sh
+curl -b /tmp/layers-cookies.txt \
+  http://127.0.0.1:3001/api/v1/auth/session
+```
+
+Sign out:
+
+```sh
+curl -b /tmp/layers-cookies.txt -X POST \
+  http://127.0.0.1:3001/api/v1/auth/logout
+```
+
+## Create an API token for an agent
+
+Sign in as the user the agent should act for, then create a token. The secret is
+returned once and cannot be shown again.
+
+```sh
+curl -b /tmp/layers-cookies.txt \
+  -X POST http://127.0.0.1:3001/api/v1/me/tokens \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"Local coding agent","scopes":["read","write"]}'
+```
+
+```json
+{
+  "token": "lrs_...",
+  "tokenInfo": {
+    "id": "tok_...",
+    "name": "Local coding agent",
+    "prefix": "lrs_abcd",
+    "scopes": ["read", "write"],
+    "createdAt": "2026-11-15T10:30:00.000Z",
+    "lastUsedAt": null,
+    "expiresAt": null,
+    "revokedAt": null
+  }
+}
+```
+
+Use the token directly:
+
+```sh
+export LAYERS_API_TOKEN=lrs_...
+curl -H "Authorization: Bearer $LAYERS_API_TOKEN" \
+  http://127.0.0.1:3001/api/v1/projects
+```
+
+`read` allows `GET`/`HEAD`. `write` allows mutations and implies `read`. Tokens
+cannot manage users, sessions or other tokens; those operations require a
+browser session. List and revoke tokens with `GET /me/tokens` and
+`DELETE /me/tokens/{id}`.
 
 ## Common flows
+
+The examples below use `$AUTH`, which is either:
+
+```sh
+AUTH="Authorization: Bearer $LAYERS_API_TOKEN"
+```
+
+or a cookie jar:
+
+```sh
+AUTH=""
+# add -b /tmp/layers-cookies.txt to each curl command
+```
 
 ### List projects
 
 ```sh
-curl http://127.0.0.1:3001/api/v1/projects
+curl -H "$AUTH" http://127.0.0.1:3001/api/v1/projects
 ```
 
 Response:
@@ -44,11 +124,15 @@ Response:
 }
 ```
 
+The list contains only the authenticated user's projects. Another user's
+project id returns `404`.
+
 ### Read a project and its document
 
 ```sh
-curl -D /tmp/project.headers http://127.0.0.1:3001/api/v1/projects/website
-curl -D /tmp/document.headers \
+curl -H "$AUTH" -D /tmp/project.headers \
+  http://127.0.0.1:3001/api/v1/projects/website
+curl -H "$AUTH" -D /tmp/document.headers \
   http://127.0.0.1:3001/api/v1/projects/website/document
 ```
 
@@ -64,7 +148,8 @@ by the next write.
 REVISION=$(awk 'tolower($1) == "etag:" { gsub(/"/, "", $2); print $2 }' \
   /tmp/document.headers)
 
-curl -X PUT http://127.0.0.1:3001/api/v1/projects/website/document \
+curl -H "$AUTH" \
+  -X PUT http://127.0.0.1:3001/api/v1/projects/website/document \
   -H 'Content-Type: application/json' \
   -H "If-Match: \"$REVISION\"" \
   --data @/tmp/document-body.json
@@ -88,8 +173,8 @@ The request body is:
 ```
 
 `activity` is optional and should contain only new entries. The server assigns
-timestamps, ignores duplicate `(projectId, eventId)` pairs and keeps the newest
-100 entries.
+timestamps, ignores duplicate `(projectId, eventId)` pairs, records the acting
+user and keeps the newest 100 entries.
 
 The response contains the saved document, `stats`, and the latest `activity`.
 Use the new `ETag` for the next write.
@@ -97,31 +182,38 @@ Use the new `ETag` for the next write.
 ### Append activity
 
 ```sh
-curl -X POST http://127.0.0.1:3001/api/v1/projects/website/activity \
+curl -H "$AUTH" \
+  -X POST http://127.0.0.1:3001/api/v1/projects/website/activity \
   -H 'Content-Type: application/json' \
   -d '{"message":"Reviewed AI verification instructions","chapterId":null,"chapterName":"Website project"}'
 ```
 
+Activity entries include `actorUserId` and `actorName` when they were created
+after phase 6.
+
 ### Coverage
 
 ```sh
-curl http://127.0.0.1:3001/api/v1/projects/website/coverage
+curl -H "$AUTH" \
+  http://127.0.0.1:3001/api/v1/projects/website/coverage
 ```
 
 ### Export and import
 
 ```sh
-curl -o layers-website.json \
+curl -H "$AUTH" -o layers-website.json \
   http://127.0.0.1:3001/api/v1/projects/website/export
 
-curl -X POST http://127.0.0.1:3001/api/v1/projects/import \
+curl -H "$AUTH" \
+  -X POST http://127.0.0.1:3001/api/v1/projects/import \
   -H 'Content-Type: application/json' \
   --data @layers-website.json
 ```
 
 The export includes a top-level `instructions` string that explains the file
 format and how to read it. Read that field before interpreting the rest of the
-file. Imports always create a new project and never overwrite an existing one.
+file. Imports always create a new project, never overwrite an existing one, and
+assign the importing user as owner. Actor fields are not included in exports.
 
 ## Revision rules
 
@@ -145,6 +237,11 @@ ETags are quoted decimal revisions such as `"12"`. Missing headers return
 }
 ```
 
-Common codes: `not_found`, `validation_failed`, `revision_conflict`,
-`precondition_required`, `project_limit`, `payload_too_large`,
-`stored_data_invalid`, `database_unavailable`, `internal_error`.
+Common codes: `unauthenticated`, `invalid_credentials`, `account_disabled`,
+`forbidden`, `invalid_origin`, `not_found`, `validation_failed`,
+`revision_conflict`, `precondition_required`, `email_taken`, `rate_limited`,
+`project_limit`, `payload_too_large`, `stored_data_invalid`,
+`database_unavailable`, `internal_error`.
+
+`401 unauthenticated` means the session or token is missing, expired or revoked.
+Sign in again or create a new token. Do not retry a `401` in a loop.

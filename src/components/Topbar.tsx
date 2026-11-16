@@ -1,6 +1,7 @@
 import { ChevronRight, CircleCheck, Menu } from "lucide-react";
 import type { WorkspaceStatus } from "../api/types";
 import { useWorkspaceStatus } from "../store/WorkspaceProvider";
+import { UserMenu } from "./UserMenu";
 
 export interface TopbarProps {
   projectName: string;
@@ -57,6 +58,7 @@ export function Topbar({
           label
         )}
       </div>
+      <UserMenu />
     </header>
   );
 }

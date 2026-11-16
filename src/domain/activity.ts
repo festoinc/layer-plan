@@ -4,6 +4,8 @@ export interface ActivityEntry {
   chapterId: string | null;
   chapterName: string;
   time: string; // ISO timestamp
+  actorUserId?: string | null;
+  actorName?: string | null;
 }
 
 export const MAX_ACTIVITY_ENTRIES = 100;
@@ -14,6 +16,8 @@ export interface CreateActivityInput {
   chapterId?: string | null;
   chapterName?: string;
   time?: string;
+  actorUserId?: string | null;
+  actorName?: string | null;
 }
 
 export function createActivityEntry(input: CreateActivityInput): ActivityEntry {
@@ -23,6 +27,10 @@ export function createActivityEntry(input: CreateActivityInput): ActivityEntry {
     chapterId: input.chapterId ?? null,
     chapterName: input.chapterName ?? "Untitled chapter",
     time: input.time ?? new Date().toISOString(),
+    ...(input.actorUserId === undefined
+      ? {}
+      : { actorUserId: input.actorUserId }),
+    ...(input.actorName === undefined ? {} : { actorName: input.actorName }),
   };
 }
 

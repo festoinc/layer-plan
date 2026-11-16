@@ -109,6 +109,8 @@ export interface paths {
             "application/json": components["schemas"]["ProjectList"];
           };
         };
+        401: components["responses"]["Unauthorized"];
+        403: components["responses"]["Forbidden"];
       };
     };
     put?: never;
@@ -136,6 +138,8 @@ export interface paths {
             "application/json": components["schemas"]["ProjectDetail"];
           };
         };
+        401: components["responses"]["Unauthorized"];
+        403: components["responses"]["Forbidden"];
         409: components["responses"]["Error"];
         422: components["responses"]["ValidationError"];
       };
@@ -177,6 +181,8 @@ export interface paths {
             "application/json": components["schemas"]["ProjectDetail"];
           };
         };
+        401: components["responses"]["Unauthorized"];
+        403: components["responses"]["Forbidden"];
         404: components["responses"]["Error"];
       };
     };
@@ -208,6 +214,8 @@ export interface paths {
             };
           };
         };
+        401: components["responses"]["Unauthorized"];
+        403: components["responses"]["Forbidden"];
         412: components["responses"]["Conflict"];
       };
     };
@@ -242,6 +250,8 @@ export interface paths {
             "application/json": components["schemas"]["ProjectDetail"];
           };
         };
+        401: components["responses"]["Unauthorized"];
+        403: components["responses"]["Forbidden"];
         412: components["responses"]["Conflict"];
         422: components["responses"]["ValidationError"];
       };
@@ -280,6 +290,8 @@ export interface paths {
             "application/json": components["schemas"]["ProjectDetail"];
           };
         };
+        401: components["responses"]["Unauthorized"];
+        403: components["responses"]["Forbidden"];
         409: components["responses"]["Error"];
       };
     };
@@ -323,6 +335,8 @@ export interface paths {
             };
           };
         };
+        401: components["responses"]["Unauthorized"];
+        403: components["responses"]["Forbidden"];
         404: components["responses"]["Error"];
       };
     };
@@ -363,6 +377,8 @@ export interface paths {
             "application/json": components["schemas"]["Document"];
           };
         };
+        401: components["responses"]["Unauthorized"];
+        403: components["responses"]["Forbidden"];
         404: components["responses"]["Error"];
       };
     };
@@ -395,6 +411,8 @@ export interface paths {
             "application/json": components["schemas"]["DocumentWriteResponse"];
           };
         };
+        401: components["responses"]["Unauthorized"];
+        403: components["responses"]["Forbidden"];
         412: components["responses"]["Conflict"];
         422: components["responses"]["ValidationError"];
       };
@@ -439,6 +457,8 @@ export interface paths {
             "application/json": components["schemas"]["ActivityList"];
           };
         };
+        401: components["responses"]["Unauthorized"];
+        403: components["responses"]["Forbidden"];
         404: components["responses"]["Error"];
       };
     };
@@ -468,6 +488,8 @@ export interface paths {
             "application/json": components["schemas"]["ActivityList"];
           };
         };
+        401: components["responses"]["Unauthorized"];
+        403: components["responses"]["Forbidden"];
         422: components["responses"]["ValidationError"];
       };
     };
@@ -507,6 +529,8 @@ export interface paths {
             "application/json": components["schemas"]["Coverage"];
           };
         };
+        401: components["responses"]["Unauthorized"];
+        403: components["responses"]["Forbidden"];
         404: components["responses"]["Error"];
       };
     };
@@ -549,6 +573,8 @@ export interface paths {
             "application/json": Record<string, never>;
           };
         };
+        401: components["responses"]["Unauthorized"];
+        403: components["responses"]["Forbidden"];
         404: components["responses"]["Error"];
       };
     };
@@ -595,6 +621,8 @@ export interface paths {
             };
           };
         };
+        401: components["responses"]["Unauthorized"];
+        403: components["responses"]["Forbidden"];
         422: components["responses"]["ValidationError"];
       };
     };
@@ -602,6 +630,481 @@ export interface paths {
     options?: never;
     head?: never;
     patch?: never;
+    trace?: never;
+  };
+  "/auth/login": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Sign in with email and password */
+    post: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody: {
+        content: {
+          "application/json": components["schemas"]["LoginRequest"];
+        };
+      };
+      responses: {
+        /** @description Signed in and session cookie set */
+        200: {
+          headers: {
+            "Set-Cookie"?: string;
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": components["schemas"]["LoginResponse"];
+          };
+        };
+        401: components["responses"]["Unauthorized"];
+        403: components["responses"]["Forbidden"];
+        422: components["responses"]["ValidationError"];
+        429: components["responses"]["RateLimited"];
+      };
+    };
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/auth/logout": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Sign out and clear the session cookie */
+    post: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody?: never;
+      responses: {
+        /** @description Signed out */
+        204: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content?: never;
+        };
+      };
+    };
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/auth/session": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Read the current browser session */
+    get: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody?: never;
+      responses: {
+        /** @description Current user and session */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": components["schemas"]["LoginResponse"];
+          };
+        };
+        401: components["responses"]["Unauthorized"];
+        403: components["responses"]["Forbidden"];
+      };
+    };
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/me": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Read the current user */
+    get: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody?: never;
+      responses: {
+        /** @description Current user */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": components["schemas"]["MeResponse"];
+          };
+        };
+        401: components["responses"]["Unauthorized"];
+        403: components["responses"]["Forbidden"];
+      };
+    };
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/auth/sessions": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** List the current user sessions */
+    get: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody?: never;
+      responses: {
+        /** @description Browser sessions */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": components["schemas"]["SessionsResponse"];
+          };
+        };
+        401: components["responses"]["Unauthorized"];
+        403: components["responses"]["Forbidden"];
+      };
+    };
+    put?: never;
+    post?: never;
+    /** Revoke all sessions except the current one */
+    delete: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody?: never;
+      responses: {
+        /** @description Other sessions revoked */
+        204: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content?: never;
+        };
+        401: components["responses"]["Unauthorized"];
+        403: components["responses"]["Forbidden"];
+      };
+    };
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/auth/sessions/{sessionId}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        sessionId: string;
+      };
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post?: never;
+    /** Revoke one of the current user sessions */
+    delete: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path: {
+          sessionId: string;
+        };
+        cookie?: never;
+      };
+      requestBody?: never;
+      responses: {
+        /** @description Session revoked */
+        204: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content?: never;
+        };
+        401: components["responses"]["Unauthorized"];
+        403: components["responses"]["Forbidden"];
+        404: components["responses"]["Error"];
+      };
+    };
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/me/tokens": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** List API tokens */
+    get: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody?: never;
+      responses: {
+        /** @description API tokens without secrets */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": components["schemas"]["TokensResponse"];
+          };
+        };
+        401: components["responses"]["Unauthorized"];
+        403: components["responses"]["Forbidden"];
+      };
+    };
+    put?: never;
+    /** Create an API token */
+    post: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody: {
+        content: {
+          "application/json": components["schemas"]["CreateToken"];
+        };
+      };
+      responses: {
+        /** @description Token created; the secret is returned once */
+        201: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": components["schemas"]["CreateTokenResponse"];
+          };
+        };
+        401: components["responses"]["Unauthorized"];
+        403: components["responses"]["Forbidden"];
+        409: components["responses"]["Error"];
+        422: components["responses"]["ValidationError"];
+      };
+    };
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/me/tokens/{tokenId}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        tokenId: string;
+      };
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post?: never;
+    /** Revoke an API token */
+    delete: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path: {
+          tokenId: string;
+        };
+        cookie?: never;
+      };
+      requestBody?: never;
+      responses: {
+        /** @description Token revoked */
+        204: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content?: never;
+        };
+        401: components["responses"]["Unauthorized"];
+        403: components["responses"]["Forbidden"];
+        404: components["responses"]["Error"];
+      };
+    };
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/users": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** List users */
+    get: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody?: never;
+      responses: {
+        /** @description Users */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": components["schemas"]["UsersResponse"];
+          };
+        };
+        401: components["responses"]["Unauthorized"];
+        403: components["responses"]["Forbidden"];
+      };
+    };
+    put?: never;
+    /** Create a member user */
+    post: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody: {
+        content: {
+          "application/json": components["schemas"]["CreateUser"];
+        };
+      };
+      responses: {
+        /** @description User created */
+        201: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": components["schemas"]["UserResponse"];
+          };
+        };
+        401: components["responses"]["Unauthorized"];
+        403: components["responses"]["Forbidden"];
+        409: components["responses"]["Error"];
+        422: components["responses"]["ValidationError"];
+      };
+    };
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/users/{userId}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        userId: string;
+      };
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    /** Enable or disable a user */
+    patch: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path: {
+          userId: string;
+        };
+        cookie?: never;
+      };
+      requestBody: {
+        content: {
+          "application/json": components["schemas"]["UpdateUser"];
+        };
+      };
+      responses: {
+        /** @description Updated user */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": components["schemas"]["UserResponse"];
+          };
+        };
+        401: components["responses"]["Unauthorized"];
+        403: components["responses"]["Forbidden"];
+        404: components["responses"]["Error"];
+        422: components["responses"]["ValidationError"];
+      };
+    };
     trace?: never;
   };
 }
@@ -743,6 +1246,8 @@ export interface components {
       chapterName: string;
       /** Format: date-time */
       time: string;
+      actorUserId?: string | null;
+      actorName?: string | null;
     };
     ActivityList: {
       events: components["schemas"]["ActivityEntry"][];
@@ -782,6 +1287,87 @@ export interface components {
       rows: components["schemas"]["CoverageRow"][];
       testGuidelines: string;
     };
+    AuthUser: {
+      id: string;
+      /** Format: email */
+      email: string;
+      displayName: string;
+      /** @enum {string} */
+      role: "super_admin" | "member";
+      /** Format: date-time */
+      createdAt: string;
+      /** Format: date-time */
+      updatedAt: string;
+      /** Format: date-time */
+      disabledAt: string | null;
+    };
+    SessionInfo: {
+      id: string;
+      /** Format: date-time */
+      createdAt: string;
+      /** Format: date-time */
+      lastSeenAt: string;
+      /** Format: date-time */
+      expiresAt: string;
+      userAgent?: string | null;
+      current?: boolean;
+    };
+    LoginRequest: {
+      /** Format: email */
+      email: string;
+      password: string;
+    };
+    LoginResponse: {
+      user: components["schemas"]["AuthUser"];
+      session: components["schemas"]["SessionInfo"];
+    };
+    MeResponse: {
+      user: components["schemas"]["AuthUser"];
+    };
+    SessionsResponse: {
+      sessions: components["schemas"]["SessionInfo"][];
+    };
+    CreateUser: {
+      /** Format: email */
+      email: string;
+      password: string;
+      displayName?: string;
+    };
+    UpdateUser: {
+      disabled: boolean;
+    };
+    UserResponse: {
+      user: components["schemas"]["AuthUser"];
+    };
+    UsersResponse: {
+      users: components["schemas"]["AuthUser"][];
+    };
+    ApiTokenInfo: {
+      id: string;
+      name: string;
+      prefix: string;
+      scopes: ("read" | "write")[];
+      /** Format: date-time */
+      createdAt: string;
+      /** Format: date-time */
+      lastUsedAt: string | null;
+      /** Format: date-time */
+      expiresAt: string | null;
+      /** Format: date-time */
+      revokedAt: string | null;
+    };
+    CreateToken: {
+      name: string;
+      scopes: ("read" | "write")[];
+      expiresInDays?: number;
+    };
+    CreateTokenResponse: {
+      token: string;
+      tokenInfo: components["schemas"]["ApiTokenInfo"];
+    };
+    TokensResponse: {
+      tokens: components["schemas"]["ApiTokenInfo"][];
+    };
   };
   responses: {
     /** @description API error */
@@ -804,6 +1390,33 @@ export interface components {
     };
     /** @description The resource changed since it was loaded */
     Conflict: {
+      headers: {
+        [name: string]: unknown;
+      };
+      content: {
+        "application/json": components["schemas"]["Error"];
+      };
+    };
+    /** @description Authentication is required */
+    Unauthorized: {
+      headers: {
+        [name: string]: unknown;
+      };
+      content: {
+        "application/json": components["schemas"]["Error"];
+      };
+    };
+    /** @description The authenticated user is not allowed to perform this action */
+    Forbidden: {
+      headers: {
+        [name: string]: unknown;
+      };
+      content: {
+        "application/json": components["schemas"]["Error"];
+      };
+    };
+    /** @description Too many authentication attempts */
+    RateLimited: {
       headers: {
         [name: string]: unknown;
       };

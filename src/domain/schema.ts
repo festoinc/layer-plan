@@ -621,6 +621,8 @@ export function normalizeActivity(
           ? item.chapterName
           : "Untitled chapter",
       time,
+      ...(isString(item.actorUserId) ? { actorUserId: item.actorUserId } : {}),
+      ...(isString(item.actorName) ? { actorName: item.actorName } : {}),
     });
   }
 
@@ -756,7 +758,9 @@ export function serializeProjectExport(
     project,
     testGuidelines: normalizeTestGuidelines(testGuidelines),
     chapters: workspace.chapters,
-    activity: workspace.events,
+    activity: workspace.events.map(
+      ({ actorUserId: _actorUserId, actorName: _actorName, ...event }) => event,
+    ),
     ui: { selectedId: workspace.selectedId },
   };
 }

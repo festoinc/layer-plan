@@ -50,6 +50,17 @@ export interface ApiResponse<T> {
   etag: number | null;
 }
 
+export const UNAUTHORIZED_EVENT = "layers:unauthorized";
+
+function notifyUnauthorized(path: string): void {
+  if (path.startsWith("/auth/login") || path.startsWith("/auth/session")) {
+    return;
+  }
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new Event(UNAUTHORIZED_EVENT));
+  }
+}
+
 function revisionFromEtag(etag: string | null): number | null {
   if (!etag) return null;
   const match = /^"(\d+)"$/.exec(etag.trim());
@@ -90,13 +101,17 @@ export async function apiRequest<T>(
     const response = await fetch(`${API_BASE}${path}`, {
       method: options.method ?? "GET",
       headers,
+      credentials: "include",
       body:
         options.body === undefined ? undefined : JSON.stringify(options.body),
       keepalive: options.keepalive,
       signal: controller.signal,
     });
 
-    if (!response.ok) throw await parseError(response);
+    if (!response.ok) {
+      if (response.status === 401) notifyUnauthorized(path);
+      throw await parseError(response);
+    }
 
     if (response.status === 204) {
       return {
@@ -121,6 +136,47 @@ export async function apiRequest<T>(
     clearTimeout(timeout);
     options.signal?.removeEventListener("abort", abortFromCaller);
   }
+}
+
+export async function apiRequestText(
+  path: string,
+  options: RequestOptions = {},
+): Promise<string> {
+  const controller = new AbortController();
+  const timeout = setTimeout(
+    () => controller.abort(),
+    options.timeoutMs ?? REQUEST_TIMEOUT_MS,
+  );
+  const headers: Record<string, string> = {};
+  if (options.body !== undefined) headers["Content-Type"] = "application/json";
+  if (options.etag !== undefined) headers["If-Match"] = `"${options.etag}"`;
+  try {
+    const response = await fetch(`${API_BASE}${path}`, {
+      method: options.method ?? "GET",
+      headers,
+      credentials: "include",
+      body:
+        options.body === undefined ? undefined : JSON.stringify(options.body),
+      signal: controller.signal,
+    });
+    if (!response.ok) {
+      if (response.status === 401) notifyUnauthorized(path);
+      throw await parseError(response);
+    }
+    return await response.text();
+  } catch (error) {
+    if (error instanceof ApiError) throw error;
+    if (error instanceof DOMException && error.name === "AbortError") {
+      throw new ApiUnavailableError("The API request timed out.");
+    }
+    throw new ApiUnavailableError();
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+export function isUnauthenticated(error: unknown): boolean {
+  return error instanceof ApiError && error.status === 401;
 }
 
 export function errorMessage(error: unknown): string {
