@@ -58,13 +58,15 @@ describe("remote MCP", () => {
       body: { name: "MCP test" },
     });
     expect(created.envelope.status).toBe(201);
-    const id = created.envelope.body.id;
-    const doc = (await call(read, "get_document", { projectId: id })).envelope;
+    const doc = (await call(read, "get_document", { projectId: "website" }))
+      .envelope;
+    const chapters = structuredClone(doc.body.chapters);
+    chapters.byId["password-reset"].title = "Updated through MCP";
     const body = {
-      chapters: doc.body.chapters,
+      chapters,
       selectedId: doc.body.selectedId,
     };
-    const args = { projectId: id, ifMatch: doc.etag, body };
+    const args = { projectId: "website", ifMatch: doc.etag, body };
     expect((await call(write, "replace_document", args)).envelope.status).toBe(
       200,
     );
