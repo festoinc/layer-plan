@@ -138,10 +138,11 @@ describe("MCP internal dispatch auth", () => {
 
   it("rejects expired and malformed contexts", () => {
     const auth = createInternalAuth(Buffer.from("unit-test-secret"));
+    const value = auth.sign(context);
     const now = Date.now;
     Date.now = () => now() + 31_000;
     try {
-      expect(auth.verify(auth.sign(context))).toBeNull();
+      expect(auth.verify(value)).toBeNull();
     } finally {
       Date.now = now;
     }
