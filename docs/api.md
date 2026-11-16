@@ -179,6 +179,46 @@ user and keeps the newest 100 entries.
 The response contains the saved document, `stats`, and the latest `activity`.
 Use the new `ETag` for the next write.
 
+### Commit references
+
+Each chapter has a `commits` array. It records the git commits that implemented
+the document, newest first. It is informational: linking or removing a commit
+never changes criteria or verification.
+
+```json
+{
+  "id": "password-reset",
+  "commits": ["4f2a9c1", "9d0be7a1c2f34d5e6f708192a3b4c5d6e7f80912"]
+}
+```
+
+Rules:
+
+- hashes are 7–40 hexadecimal characters, case-insensitive on input and stored
+  lowercase;
+- missing `commits` is accepted and normalized to `[]`;
+- invalid hashes return `422 validation_failed`;
+- duplicates are removed and the list is capped at 50;
+- links are manual; the API never contacts a git repository or host.
+
+Send commit changes with the normal full-document `PUT`. Include a matching
+activity entry if the change should appear on the activity page:
+
+```json
+{
+  "chapters": { "byId": {}, "rootIds": [] },
+  "selectedId": "password-reset",
+  "activity": [
+    {
+      "id": "event-commit-1",
+      "message": "Linked commit 4f2a9c1",
+      "chapterId": "password-reset",
+      "chapterName": "Password reset"
+    }
+  ]
+}
+```
+
 ### Append activity
 
 ```sh
@@ -198,6 +238,9 @@ curl -H "$AUTH" \
   http://127.0.0.1:3001/api/v1/projects/website/coverage
 ```
 
+Each coverage row includes the chapter's `commits` array in addition to the
+verification mode and criterion counts.
+
 ### Export and import
 
 ```sh
@@ -212,8 +255,10 @@ curl -H "$AUTH" \
 
 The export includes a top-level `instructions` string that explains the file
 format and how to read it. Read that field before interpreting the rest of the
-file. Imports always create a new project, never overwrite an existing one, and
-assign the importing user as owner. Actor fields are not included in exports.
+file. Exports use `layers-project` format version 4 and include each chapter's
+`commits`; version 3 files without commits still import with empty lists.
+Imports always create a new project, never overwrite an existing one, and assign
+the importing user as owner. Actor fields are not included in exports.
 
 ## Revision rules
 

@@ -69,6 +69,7 @@ export interface CoverageRow {
   incompleteAuto: boolean;
   criterionCount: number;
   checkedCount: number;
+  commits: string[];
 }
 
 export function getCoverageRows(document: ChapterDocument): CoverageRow[] {
@@ -87,5 +88,6 @@ export function getCoverageRows(document: ChapterDocument): CoverageRow[] {
     criterionCount: chapter.criteria.length,
     checkedCount: chapter.criteria.filter((criterion) => criterion.checked)
       .length,
+    commits: [...chapter.commits],
   }));
 }

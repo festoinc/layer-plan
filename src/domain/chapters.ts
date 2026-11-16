@@ -1,3 +1,4 @@
+import { normalizeCommits } from "./commits";
 import {
   createDefaultVerification,
   type VerificationRule,
@@ -26,6 +27,7 @@ export interface Chapter {
   finalLevel: boolean;
   verification: VerificationRule;
   criteria: Criterion[];
+  commits: string[]; // Lowercase hex hashes, newest first.
   childIds: string[];
 }
 
@@ -49,6 +51,7 @@ export function createChapter(
     finalLevel: Boolean(input.finalLevel),
     verification: input.verification ?? createDefaultVerification(),
     criteria: input.criteria ? [...input.criteria] : [],
+    commits: normalizeCommits(input.commits),
     childIds: input.childIds ? [...input.childIds] : [],
   };
 }

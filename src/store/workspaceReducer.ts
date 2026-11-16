@@ -13,6 +13,11 @@ import {
   patchChapter,
 } from "../domain/chapters";
 import {
+  addCommit as addCommitToChapter,
+  normalizeCommitHash,
+  removeCommit as removeCommitFromChapter,
+} from "../domain/commits";
+import {
   addCriterion as addCriterionToDocument,
   createCriterion,
   createSubchapterFromCriterion,
@@ -40,6 +45,8 @@ export const IMMEDIATE_ACTIONS = new Set<string>([
   "addCriterion",
   "setCriterionText",
   "setChapterVerificationMode",
+  "addCommit",
+  "removeCommit",
   "toggleCriterion",
   "removeCriterion",
   "logActivity",
@@ -94,6 +101,20 @@ export type WorkspaceAction =
   | {
       type: "deleteChapter";
       id: string;
+      activityId?: string;
+      time?: string;
+    }
+  | {
+      type: "addCommit";
+      id: string;
+      hash: string;
+      activityId?: string;
+      time?: string;
+    }
+  | {
+      type: "removeCommit";
+      id: string;
+      hash: string;
       activityId?: string;
       time?: string;
     }
@@ -229,6 +250,44 @@ export function workspaceReducer(
         [action.field]: value,
       });
       return { ...state, chapters };
+    }
+
+    case "addCommit": {
+      const current = chapterOf(state, action.id);
+      const hash = normalizeCommitHash(action.hash);
+      if (!current || !hash) return state;
+      const commits = addCommitToChapter(current.commits, hash);
+      if (commits === current.commits) return state;
+      const chapters = patchChapter(state.chapters, action.id, { commits });
+      return withActivity(
+        { ...state, chapters },
+        {
+          id: action.activityId,
+          message: `Linked commit ${hash}`,
+          chapterId: action.id,
+          chapterName: current.title,
+          time: action.time,
+        },
+      );
+    }
+
+    case "removeCommit": {
+      const current = chapterOf(state, action.id);
+      const hash = normalizeCommitHash(action.hash);
+      if (!current || !hash) return state;
+      const commits = removeCommitFromChapter(current.commits, hash);
+      if (commits === current.commits) return state;
+      const chapters = patchChapter(state.chapters, action.id, { commits });
+      return withActivity(
+        { ...state, chapters },
+        {
+          id: action.activityId,
+          message: `Removed commit ${hash}`,
+          chapterId: action.id,
+          chapterName: current.title,
+          time: action.time,
+        },
+      );
     }
 
     case "logActivity":

@@ -1,6 +1,6 @@
 # Phase 7 — Commit references on documents
 
-Status: planned  
+Status: delivered  
 Date: 2026-11-16
 
 ## Goal
@@ -16,7 +16,7 @@ Phase 7 delivers:
 - manual entry through the UI or the API — no git binary, no repository
   configuration and no provider integration;
 - activity entries when a commit is linked or removed;
-- a commit column on the test-coverage page;
+- commit references on the test-coverage page;
 - commits included in `layers-project` exports and accepted on import;
 - OpenAPI, Zod, generated types, contract tests and browser coverage for the new
   field.
@@ -39,7 +39,7 @@ repository, and it does not change success-criteria or verification state.
 | UI | One compact commit row in the document view, with chips and an add form |
 | Bulk operations | None; every document is edited on its own |
 | Activity | Linking and removing a commit writes an activity entry |
-| Coverage | A commit column in the eligible-chapters table |
+| Coverage | Commit references on each eligible-chapter row |
 | Export/import | Included in `layers-project` v4; v3 and older imports still work |
 | Search | Out of scope; P-16 remains separate and builds on this field |
 | Authorization | Phase 6 rules unchanged: owner-only access, session or bearer token |
@@ -369,14 +369,14 @@ keeps the editor file from growing further.
 
 ### Coverage page
 
-`src/components/TestCoverageView.tsx` adds a `Commit` column to the eligible-
-chapters table.
+`src/components/TestCoverageView.tsx` adds commit references to each eligible-
+chapter row.
 
 - It renders the newest commit as a chip and `+N` when more exist, with a title
   listing all hashes.
-- Chapters without commits show a muted `—`.
-- The column does not affect sorting, counts, percentages or filters.
-- The table remains horizontally scrollable on narrow screens if needed.
+- Chapters without commits show nothing extra.
+- The references do not affect counts, percentages, eligibility or ordering.
+- Long hashes wrap with the rest of the row on narrow screens.
 
 ### Activity view
 
@@ -474,7 +474,7 @@ Add scenarios to `tests/verification.spec.js` or a new
 7. Submit a duplicate; confirm the "already linked" message.
 8. Add and remove a commit using only the keyboard; confirm focus order and
    `aria-label`s.
-9. Open the coverage page and confirm the commit column shows the hash.
+9. Open the coverage page and confirm the row shows the commit hash.
 10. Export the project, inspect the downloaded file for `commits`, import it
     into a fresh project and confirm the values.
 11. Repeat add/remove on a final-level chapter whose criteria did not create
@@ -520,7 +520,8 @@ CI needs no new secrets or services.
 - [ ] OpenAPI, Zod and generated types agree; an invalid hash is a `422`.
 - [ ] Authorization is unchanged: foreign projects stay `404` and token scopes
       are enforced.
-- [ ] Keyboard and axe checks pass for the new row, chips and coverage column.
+- [ ] Keyboard and axe checks pass for the new row, chips and coverage
+      references.
 - [ ] README, `docs/api.md` and `AGENTS_template.md` describe the field, format
       and its reference-only meaning.
 
@@ -565,7 +566,7 @@ CI needs no new secrets or services.
 3. API: Zod `commits`, OpenAPI `Chapter`/`CoverageRow`, regenerate generated
    types, coverage serialization.
 4. State: reducer actions, immediate persistence, activity, provider wiring.
-5. UI: `ChapterCommits` in `ChapterEditor`, coverage column, styles.
+5. UI: `ChapterCommits` in `ChapterEditor`, coverage references, styles.
 6. Documentation: README, `docs/api.md`, `AGENTS_template.md`, phase ideas.
 7. Tests: unit, API, contract, Playwright, accessibility; run the full gate.
 
@@ -589,8 +590,8 @@ src/domain/verification.ts          CoverageRow.commits
 src/store/workspaceReducer.ts       addCommit/removeCommit actions and activity
 src/store/WorkspaceProvider.tsx     commit action wiring
 src/components/ChapterEditor.tsx    compact commit row
-src/components/TestCoverageView.tsx Commit column
-src/styles.css                      commit chips, row, coverage column
+src/components/TestCoverageView.tsx commit references on coverage rows
+src/styles.css                      commit chips, row, coverage references
 server/api/schemas.ts               commitHashSchema, chapterSchema.commits
 server/api/openapi.yaml             Chapter.commits, CoverageRow.commits
 server/api/generated.d.ts           regenerated
@@ -601,7 +602,7 @@ tests/unit/verification.test.js     coverage commits
 tests/api/document.test.ts          document and coverage responses
 tests/contract/openapi.test.ts      new fields
 tests/fixtures.js                   commit-bearing fixtures if needed
-tests/verification.spec.js          coverage column
+tests/verification.spec.js          coverage references
 tests/commits.spec.js               browser flows (or extend workspace spec)
 tests/accessibility.spec.js         axe coverage for commit states
 README.md                           field meaning and format
@@ -621,3 +622,41 @@ phases/phase-ideas.md               P-13 promoted, P-16 updated
   must include normalized commit arrays once phase 7 lands.
 - No commit metadata is added to the activity schema, so P-04 (durable audit
   log) is unchanged.
+
+## 13. Delivery notes
+
+Implemented as planned:
+
+- `Chapter.commits` is a normalized array of lowercase 7–40 character hex
+  hashes, newest first, capped at 50. The field lives in the existing
+  `project_documents.chapters_json`, so no SQLite migration was needed.
+- `SCHEMA_VERSION` is 7 and `PROJECT_EXPORT_VERSION` is 4. Version 3 imports
+  still load with empty commit lists, and invalid hashes in an import are
+  dropped with an issue instead of failing the import.
+- The API accepts short, full and uppercase hex input and stores it lowercase.
+  Invalid values return `422 validation_failed`; duplicates in a request are
+  removed before storage; more than 50 values are rejected.
+- The document view has a compact **Commits** row with chips, removal and an
+  inline add form. It validates format, duplicates and the limit, clears errors
+  on the next edit and is fully keyboard operable.
+- Linking and removing a commit are immediate actions and append `Linked
+  commit …` / `Removed commit …` activity entries attributed to the acting
+  user.
+- Coverage references are rendered inside each eligible-chapter row as the
+  newest hash plus a `+N` count, rather than a separate table column. The
+  coverage page is a list, so this matches the existing layout.
+- README, `docs/api.md` and `AGENTS_template.md` document the field, format,
+  export version and reference-only semantics.
+
+Small deviations from the plan:
+
+- Two existing low-contrast labels surfaced during accessibility checks: the
+  new commits label and the activity actor line. Both were darkened to pass
+  WCAG AA.
+- The contract test now writes a commit through the documented document write
+  path, so the new field is covered by the OpenAPI validation in addition to
+  the dedicated API tests.
+
+Verification: `format:check`, `lint`, `typecheck`, `test:unit`, `test:api`,
+`test:contract`, `api:lint`, `build`, `test:e2e` (45 browser tests) and
+`test:prod` all pass.

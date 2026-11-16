@@ -49,13 +49,20 @@ test("export and import round-trip a whole project through the API", async ({
     "All changes saved",
   );
 
+  await page.getByLabel("Add commit hash for this document").fill("4f2a9c1");
+  await page.locator(".add-commit button").click();
+  await expect(page.locator(".commit-chip code")).toHaveText("4f2a9c1");
+  await expect(page.getByRole("status").first()).toContainText(
+    "All changes saved",
+  );
+
   const downloadPromise = page.waitForEvent("download");
   await page.getByRole("button", { name: "Export project" }).click();
   const download = await downloadPromise;
   const file = await download.path();
   const exported = JSON.parse(readFileSync(file, "utf8"));
   expect(exported.format).toBe("layers-project");
-  expect(exported.formatVersion).toBe(3);
+  expect(exported.formatVersion).toBe(4);
   expect(exported.instructions).toContain("# Layers project export");
   expect(exported.instructions).toContain("Reading chapters");
   expect(exported.project.name).toBe("Website project");
@@ -64,6 +71,7 @@ test("export and import round-trip a whole project through the API", async ({
   expect(exported.chapters.byId["password-reset"].title).toBe(
     "Exportable title",
   );
+  expect(exported.chapters.byId["password-reset"].commits).toEqual(["4f2a9c1"]);
   expect(exported.activity).toBeDefined();
   expect(exported.ui.selectedId).toBe("password-reset");
 
@@ -76,6 +84,7 @@ test("export and import round-trip a whole project through the API", async ({
   await expect(
     page.getByRole("textbox", { name: "Chapter title", exact: true }),
   ).toHaveValue("Imported title");
+  await expect(page.locator(".commit-chip code")).toHaveText("4f2a9c1");
   await expect(page.locator(".project-switcher-trigger")).toContainText(
     "Website project (imported)",
   );

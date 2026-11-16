@@ -123,6 +123,21 @@ criterion. Manually created subchapters do not add checklist items. Press Enter
 to add a criterion and Shift+Enter for a new line. Changes save automatically to
 the local API.
 
+### Commit references
+
+Every document has a compact **Commits** row under its title. Paste a git commit
+hash and choose **Add** to record that the commit implemented the document. A
+document can reference several commits, for example when it is improved over
+time. Commits are shown newest first and each chip can be removed. Removing a
+commit never changes success criteria or verification state.
+
+Hashes are 7–40 hexadecimal characters. Input is case-insensitive and stored in
+lowercase. Invalid hashes are rejected, duplicate hashes are ignored, and a
+document can reference at most 50 commits. Links are manual only: Layers never
+reads a git repository or contacts a git host, and it does not store commit
+messages, authors, dates or URLs. The **Test coverage** page shows each
+chapter's newest commit.
+
 ### Verification and coverage
 
 Subchapters get a **Verification Rules** section between Description and Success
@@ -138,8 +153,9 @@ verification rules and are excluded from coverage.
 
 The **Test coverage** page lists every verification-eligible chapter, but only
 Auto-test chapters with a command count as covered. Human and AI chapters are
-shown as uncovered context. Each project has a shared **Test guidelines** field
-that is editable directly on the coverage page and is included in exports.
+shown as uncovered context. Each row shows the chapter's linked commits. Each
+project has a shared **Test guidelines** field that is editable directly on the
+coverage page and is included in exports.
 
 Each document header has a delete action. Deleting asks for confirmation and
 removes the chapter, every subchapter beneath it, and any success criterion in
@@ -149,7 +165,7 @@ its parent that created it.
 
 ```text
 server/          Fastify API, SQLite store, migrations, seed, OpenAPI routes
-src/domain/      Pure models: projects, chapters, criteria, verification, schema
+src/domain/      Pure models: projects, chapters, criteria, commits, verification, schema
 src/api/         Fetch client and typed project/document/activity calls
 src/store/       Auth, project catalog and active workspace providers
 src/hooks/       Hash router, memoized chapter tree, focus trap

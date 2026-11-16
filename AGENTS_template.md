@@ -15,8 +15,8 @@ project the person asked about.
 Your normal responsibilities are:
 
 - read and understand the current project structure before changing it;
-- create or edit chapters, descriptions, success criteria and verification
-  rules through the Layers API;
+- create or edit chapters, descriptions, success criteria, verification rules
+  and commit references through the Layers API;
 - help discuss and improve wording, scope, acceptance criteria and test
   coverage;
 - prepare tests or verification steps when asked;
@@ -183,7 +183,7 @@ The document is a normalized tree:
 
 ```json
 {
-  "schemaVersion": 6,
+  "schemaVersion": 7,
   "projectId": "website",
   "revision": 12,
   "updatedAt": "2026-11-11T18:00:00.000Z",
@@ -208,6 +208,7 @@ The document is a normalized tree:
             "checked": true
           }
         ],
+        "commits": ["4f2a9c1"],
         "childIds": []
       }
     },
@@ -221,12 +222,16 @@ Rules to preserve:
 
 - `byId` keys are chapter IDs.
 - `rootIds` contains top-level chapter IDs in display order.
-- Every chapter has `parentId`, `childIds`, `criteria` and `verification`.
+- Every chapter has `parentId`, `childIds`, `criteria`, `commits` and
+  `verification`.
 - Every criterion has `id`, `text` and `checked`.
 - A criterion may have `chapterId` when it created a subchapter. Keep that link
   consistent.
 - `verification.mode` is exactly `auto`, `human` or `ai`.
 - Each mode keeps its own text, even when inactive.
+- `commits` lists the git commits that implemented the document, newest first.
+  Each value is a lowercase 7–40 character hexadecimal hash. Commit references
+  are informational and never change criterion or verification state.
 - Root chapters may have criteria but are excluded from verification coverage.
 - `selectedId` must be `null` or an existing chapter ID.
 - Do not add unknown fields. The API validates the contract strictly.
@@ -316,6 +321,36 @@ curl -sS -H "$AUTH" -X POST \
 
 Do not attempt to edit or delete activity. There is no endpoint for that.
 
+## Commit references
+
+Every chapter has a `commits` array. Add a hash when a commit implemented the
+document, and keep several hashes when the document was improved over time.
+Newest is first.
+
+Rules:
+
+- use lowercase 7–40 character hexadecimal hashes; uppercase input is
+  normalized by the API;
+- do not invent hashes; use the value supplied by the person or committed in the
+  repository;
+- do not link a commit to a success criterion — commits belong to documents
+  only;
+- do not add commit messages, authors, dates, branches or URLs;
+- never claim that a commit verifies a criterion; the field is a reference only;
+- removing a commit is done by omitting it from the full-document write.
+
+Example chapter field:
+
+```json
+{
+  "id": "password-reset",
+  "commits": ["4f2a9c1", "9d0be7a1c2f34d5e6f708192a3b4c5d6e7f80912"]
+}
+```
+
+Record the change in `activity` when a commit is linked or removed, for example
+`Linked commit 4f2a9c1` or `Removed commit 4f2a9c1`.
+
 ## Verification and coverage
 
 Verification rules belong to chapters, not criteria.
@@ -329,7 +364,8 @@ Coverage is declaration-based:
 - only non-root chapters are eligible;
 - only `auto` chapters with a non-empty command count as covered;
 - Human, AI and empty Auto-test chapters count as uncovered context;
-- the API does not execute commands or record test results.
+- the API does not execute commands or record test results;
+- coverage rows include the chapter's `commits` array.
 
 Read coverage with:
 

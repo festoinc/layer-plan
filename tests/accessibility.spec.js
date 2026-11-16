@@ -24,6 +24,21 @@ test("specifications, activity and coverage pages are accessible", async ({
   await page.goto("/");
   await expectNoViolations(page, "specifications");
 
+  const commitInput = page.getByLabel("Add commit hash for this document");
+  await commitInput.fill("not-a-hash");
+  await page.locator(".add-commit button").click();
+  await expect(page.getByRole("alert")).toContainText("7–40");
+  await expectNoViolations(page, "commit error");
+
+  await commitInput.fill("4f2a9c1");
+  await page.locator(".add-commit button").click();
+  await expect(page.locator(".commit-chip code")).toHaveText("4f2a9c1");
+  await expectNoViolations(page, "commit linked");
+  await page
+    .getByRole("button", { name: "Remove commit 4f2a9c1", exact: true })
+    .click();
+  await expect(page.locator(".commit-chip")).toHaveCount(0);
+
   await page.getByRole("button", { name: /^Delete chapter:/ }).click();
   await expect(page.getByRole("alertdialog")).toBeVisible();
   await expectNoViolations(page, "delete chapter dialog");
@@ -31,8 +46,11 @@ test("specifications, activity and coverage pages are accessible", async ({
 
   await page.getByRole("button", { name: "Activity", exact: true }).click();
   await expect(
-    page.getByRole("heading", { name: "No activity yet" }),
+    page.getByRole("heading", { name: "Activity", exact: true }),
   ).toBeVisible();
+  await expect(page.locator(".activity-list")).toContainText(
+    "Linked commit 4f2a9c1",
+  );
   await expectNoViolations(page, "activity");
 
   await page

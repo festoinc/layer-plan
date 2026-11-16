@@ -1,4 +1,8 @@
 import { z } from "zod";
+import {
+  COMMIT_HASH_PATTERN,
+  MAX_COMMITS_PER_CHAPTER,
+} from "../../src/domain/commits";
 import { PROJECT_COLORS } from "../../src/domain/projects";
 import { VERIFICATION_MODES } from "../../src/domain/verificationTypes";
 import { ApiError, zodDetails } from "./errors";
@@ -23,6 +27,12 @@ export const criterionSchema = z
   })
   .strict();
 
+export const commitHashSchema = z
+  .string()
+  .trim()
+  .toLowerCase()
+  .pipe(z.string().regex(COMMIT_HASH_PATTERN));
+
 export const chapterSchema = z
   .object({
     id: idSchema,
@@ -32,6 +42,11 @@ export const chapterSchema = z
     finalLevel: z.boolean(),
     verification: verificationSchema,
     criteria: z.array(criterionSchema).max(500),
+    commits: z
+      .array(commitHashSchema)
+      .max(MAX_COMMITS_PER_CHAPTER)
+      .transform((commits) => Array.from(new Set(commits)))
+      .default([]),
     childIds: z.array(z.string().min(1).max(128)).max(5000),
   })
   .strict();

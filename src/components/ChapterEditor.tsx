@@ -11,6 +11,7 @@ import { AutoTextarea, EditableMarkdown } from "../Markdown";
 import { Chapter } from "../domain/chapters";
 import { criterionProgress } from "../domain/criteria";
 import { useWorkspaceActions } from "../store/WorkspaceProvider";
+import { ChapterCommits } from "./ChapterCommits";
 import { VerificationRules } from "./VerificationRules";
 import { DeleteChapterDialog } from "./DeleteChapterDialog";
 
@@ -44,6 +45,8 @@ export function ChapterEditor({
   const {
     setChapterField,
     addCriterion,
+    addCommit,
+    removeCommit,
     setCriterionText,
     toggleCriterion,
     removeCriterion,
@@ -152,6 +155,11 @@ export function ChapterEditor({
             setChapterField(chapter.id, "title", "Untitled chapter");
           }
         }}
+      />
+      <ChapterCommits
+        commits={chapter.commits}
+        onAdd={(hash) => addCommit(chapter.id, hash)}
+        onRemove={(hash) => removeCommit(chapter.id, hash)}
       />
       <section
         className="description-section"

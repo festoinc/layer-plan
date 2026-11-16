@@ -1010,6 +1010,17 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/Criterion"
+        commits:
+          type: array
+          maxItems: 50
+          description: >-
+            Git commits that implemented the document, newest first. Hashes are
+            lowercase 7-40 character hexadecimal strings. References only; they
+            do not change criterion or verification state.
+          items:
+            type: string
+            pattern: "^[0-9a-f]{7,40}$"
+            maxLength: 40
         childIds:
           type: array
           items:
@@ -1197,6 +1208,7 @@ components:
         - incompleteAuto
         - criterionCount
         - checkedCount
+        - commits
       properties:
         chapterId:
           type: string
@@ -1220,6 +1232,13 @@ components:
           type: integer
         checkedCount:
           type: integer
+        commits:
+          type: array
+          description: Commits linked to the chapter, newest first.
+          items:
+            type: string
+            pattern: "^[0-9a-f]{7,40}$"
+            maxLength: 40
     Coverage:
       type: object
       required:

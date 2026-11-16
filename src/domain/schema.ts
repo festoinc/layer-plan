@@ -14,6 +14,7 @@ import {
   Project,
   ProjectSummary,
 } from "./projects";
+import { normalizeCommits } from "./commits";
 import {
   hasVerificationContent,
   normalizeVerification,
@@ -23,7 +24,7 @@ export type { Chapter, Criterion, ChapterDocument, ActivityEntry };
 export type { Project, ProjectSummary };
 export { createId };
 
-export const SCHEMA_VERSION = 6;
+export const SCHEMA_VERSION = 7;
 
 export interface Workspace {
   schemaVersion: number;
@@ -78,7 +79,7 @@ export function serializeProjectSettings(settings: ProjectSettings): {
 }
 
 export const PROJECT_EXPORT_FORMAT = "layers-project";
-export const PROJECT_EXPORT_VERSION = 3;
+export const PROJECT_EXPORT_VERSION = 4;
 
 export const PROJECT_EXPORT_INSTRUCTIONS = [
   "# Layers project export",
@@ -103,9 +104,13 @@ export const PROJECT_EXPORT_INSTRUCTIONS = [
   "- chapters.byId maps chapter ids to chapter records.",
   "- chapters.rootIds lists top-level chapters in display order.",
   "- Each chapter has id, parentId, title, description, finalLevel,",
-  "  verification, criteria and childIds.",
+  "  verification, criteria, commits and childIds.",
   "- criteria are checklist items with id, text and checked. A criterion may",
   "  also have chapterId when it created a subchapter.",
+  "- commits lists the git commits that implemented the document, newest",
+  "  first. Each value is a lowercase 7-40 character hexadecimal hash. Commit",
+  "  references are informational and do not change criterion or verification",
+  "  state.",
   "- Markdown is used in descriptions and criterion text.",
   "",
   "## Verification rules",
@@ -312,6 +317,7 @@ function coerceChapter(
     finalLevel: raw.finalLevel === true,
     verification: normalizeVerification(verificationSource),
     criteria,
+    commits: normalizeCommits(raw.commits, { issues }),
     childIds: [],
   };
 }

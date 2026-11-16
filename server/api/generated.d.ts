@@ -1210,6 +1210,8 @@ export interface components {
       finalLevel: boolean;
       verification: components["schemas"]["Verification"];
       criteria: components["schemas"]["Criterion"][];
+      /** @description Git commits that implemented the document, newest first. Hashes are lowercase 7-40 character hexadecimal strings. References only; they do not change criterion or verification state. */
+      commits?: string[];
       childIds: string[];
     };
     ChapterDocument: {
@@ -1281,6 +1283,8 @@ export interface components {
       incompleteAuto: boolean;
       criterionCount: number;
       checkedCount: number;
+      /** @description Commits linked to the chapter, newest first. */
+      commits: string[];
     };
     Coverage: {
       summary: components["schemas"]["VerificationSummary"];

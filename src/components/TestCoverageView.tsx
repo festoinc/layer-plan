@@ -4,6 +4,7 @@ import {
   CircleCheck,
   Circle,
   ArrowRight,
+  GitCommitHorizontal,
 } from "lucide-react";
 import {
   getCoverageRows,
@@ -185,6 +186,21 @@ export default function TestCoverageView({
                     <span className="coverage-chapter-progress">
                       {row.checkedCount}/{row.criterionCount} criteria complete
                     </span>
+                    {row.commits.length > 0 && (
+                      <span
+                        className="coverage-commits"
+                        title={row.commits.join("\n")}
+                      >
+                        <GitCommitHorizontal size={12} aria-hidden="true" />
+                        <code>{row.commits[0]}</code>
+                        {row.commits.length > 1 && (
+                          <span>+{row.commits.length - 1}</span>
+                        )}
+                        <span className="visually-hidden">
+                          Commits: {row.commits.join(", ")}
+                        </span>
+                      </span>
+                    )}
                     {row.automated && (
                       <code className="coverage-command">{row.command}</code>
                     )}

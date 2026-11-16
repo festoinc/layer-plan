@@ -5,7 +5,10 @@ import {
   createChapter,
   createEmptyDocument,
 } from "../../src/domain/chapters.js";
-import { workspaceReducer } from "../../src/store/workspaceReducer.js";
+import {
+  IMMEDIATE_ACTIONS,
+  workspaceReducer,
+} from "../../src/store/workspaceReducer.js";
 
 const time = "2026-01-01T12:00:00.000Z";
 
@@ -21,6 +24,98 @@ function baseState() {
   );
   return createWorkspace({ chapters, selectedId: "parent" });
 }
+
+describe("workspace reducer: commits", () => {
+  it("links a commit newest first and records activity", () => {
+    const state = baseState();
+    const next = workspaceReducer(state, {
+      type: "addCommit",
+      id: "parent",
+      hash: "ABC1234",
+      activityId: "a1",
+      time,
+    });
+
+    expect(next.chapters.byId.parent.commits).toEqual(["abc1234"]);
+    expect(next.events[0]).toMatchObject({
+      id: "a1",
+      message: "Linked commit abc1234",
+      chapterId: "parent",
+      chapterName: "Parent",
+      time,
+    });
+    expect(state.chapters.byId.parent.commits).toEqual([]);
+  });
+
+  it("ignores invalid, duplicate and missing-chapter commits", () => {
+    const state = baseState();
+    expect(
+      workspaceReducer(state, {
+        type: "addCommit",
+        id: "parent",
+        hash: "not-a-hash",
+      }),
+    ).toBe(state);
+    expect(
+      workspaceReducer(state, {
+        type: "addCommit",
+        id: "missing",
+        hash: "abc1234",
+      }),
+    ).toBe(state);
+
+    const linked = workspaceReducer(state, {
+      type: "addCommit",
+      id: "parent",
+      hash: "abc1234",
+    });
+    expect(
+      workspaceReducer(linked, {
+        type: "addCommit",
+        id: "parent",
+        hash: "ABC1234",
+      }),
+    ).toBe(linked);
+  });
+
+  it("removes a commit and records activity", () => {
+    const linked = workspaceReducer(baseState(), {
+      type: "addCommit",
+      id: "parent",
+      hash: "abc1234",
+      activityId: "a1",
+      time,
+    });
+    const next = workspaceReducer(linked, {
+      type: "removeCommit",
+      id: "parent",
+      hash: "ABC1234",
+      activityId: "a2",
+      time,
+    });
+
+    expect(next.chapters.byId.parent.commits).toEqual([]);
+    expect(next.events[0]).toMatchObject({
+      id: "a2",
+      message: "Removed commit abc1234",
+      chapterId: "parent",
+      chapterName: "Parent",
+      time,
+    });
+    expect(
+      workspaceReducer(next, {
+        type: "removeCommit",
+        id: "parent",
+        hash: "abc1234",
+      }),
+    ).toBe(next);
+  });
+
+  it("persists commit actions immediately", () => {
+    expect(IMMEDIATE_ACTIONS.has("addCommit")).toBe(true);
+    expect(IMMEDIATE_ACTIONS.has("removeCommit")).toBe(true);
+  });
+});
 
 describe("workspace reducer", () => {
   it("creates chapters with an activity entry and selects them", () => {

@@ -43,6 +43,8 @@ export interface WorkspaceActions {
     value: string | boolean,
   ) => void;
   addCriterion: (chapterId: string, text: string) => void;
+  addCommit: (chapterId: string, hash: string) => void;
+  removeCommit: (chapterId: string, hash: string) => void;
   setCriterionText: (
     chapterId: string,
     criterionId: string,
@@ -471,6 +473,22 @@ export function WorkspaceProvider({
         }),
       setCriterionText: (chapterId, criterionId, text) =>
         dispatch({ type: "setCriterionText", chapterId, criterionId, text }),
+      addCommit: (chapterId, hash) =>
+        dispatch({
+          type: "addCommit",
+          id: chapterId,
+          hash,
+          activityId: createId(),
+          time: new Date().toISOString(),
+        }),
+      removeCommit: (chapterId, hash) =>
+        dispatch({
+          type: "removeCommit",
+          id: chapterId,
+          hash,
+          activityId: createId(),
+          time: new Date().toISOString(),
+        }),
       setChapterVerificationMode: (chapterId, mode) =>
         dispatch({
           type: "setChapterVerificationMode",

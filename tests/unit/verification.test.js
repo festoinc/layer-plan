@@ -38,6 +38,7 @@ function documentWithVerification() {
       title: "Automated",
       parentId: "root",
       verification: rule("auto", "npm test child"),
+      commits: ["4f2a9c1"],
     }),
   );
   document = insertChapter(
@@ -149,8 +150,10 @@ describe("verification coverage", () => {
       automated: true,
       incompleteAuto: false,
       criterionCount: 0,
+      commits: ["4f2a9c1"],
     });
     expect(rows[1].incompleteAuto).toBe(true);
+    expect(rows[1].commits).toEqual([]);
     expect(rows[2].mode).toBe("human");
     expect(rows[3].mode).toBe("ai");
   });

@@ -254,7 +254,16 @@ describe("OpenAPI contract", () => {
     );
 
     const writeBody = {
-      chapters: documentBody.chapters,
+      chapters: {
+        ...documentBody.chapters,
+        byId: {
+          ...documentBody.chapters.byId,
+          "password-reset": {
+            ...documentBody.chapters.byId["password-reset"],
+            commits: ["4f2a9c1"],
+          },
+        },
+      },
       selectedId: documentBody.selectedId,
     };
     expectValid(

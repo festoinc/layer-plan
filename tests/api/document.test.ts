@@ -234,7 +234,7 @@ describe("document API", () => {
     expect(exported.statusCode).toBe(200);
     const payload = json(exported);
     expect(payload.format).toBe("layers-project");
-    expect(payload.formatVersion).toBe(3);
+    expect(payload.formatVersion).toBe(4);
     expect(payload.instructions).toContain("# Layers project export");
     expect(payload.instructions).toContain("POST /api/v1/projects/import");
     expect(

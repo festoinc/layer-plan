@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   MAX_TEST_GUIDELINES,
+  PROJECT_EXPORT_VERSION,
   SCHEMA_VERSION,
   createEmptyProjectIndex,
   createProjectSettings,
@@ -313,6 +314,7 @@ describe("projects", () => {
         id: "one",
         title: "One",
         criteria: [{ id: "c1", text: "a", checked: true }],
+        commits: ["4f2a9c1", "9d0be7a1c2f34d5e6f708192a3b4c5d6e7f80912"],
       }),
     );
     const workspace = createWorkspace({
@@ -332,7 +334,7 @@ describe("projects", () => {
       fixedNow(),
     );
     expect(exported.format).toBe("layers-project");
-    expect(exported.formatVersion).toBe(3);
+    expect(exported.formatVersion).toBe(PROJECT_EXPORT_VERSION);
     expect(exported.instructions).toContain("# Layers project export");
     expect(exported.instructions).toContain("chapters.rootIds");
     expect(exported.testGuidelines).toBe("Run the tests");
@@ -352,6 +354,10 @@ describe("projects", () => {
       "verification",
     );
     expect(imported.workspace.selectedId).toBe("one");
+    expect(imported.workspace.chapters.byId.one.commits).toEqual([
+      "4f2a9c1",
+      "9d0be7a1c2f34d5e6f708192a3b4c5d6e7f80912",
+    ]);
     expect(imported.issues).toEqual([]);
 
     const legacy = normalizeProjectExport(
@@ -375,6 +381,7 @@ describe("projects", () => {
     expect(legacy.workspace.chapters.byId.one.title).toBe("Legacy");
     expect(legacy.testGuidelines).toBe("");
     expect(legacy.workspace.chapters.byId.one.verification.mode).toBe("human");
+    expect(legacy.workspace.chapters.byId.one.commits).toEqual([]);
   });
 
   it("moves legacy criterion verification onto the chapter", () => {
