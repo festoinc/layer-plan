@@ -116,4 +116,83 @@ describe("remote MCP", () => {
     });
     expect(badHost.statusCode).toBe(403);
   });
+
+  it("supports the project lifecycle and rejects revoked tokens", async () => {
+    api = await createTestApi();
+    const { cookie, user } = await api.login(
+      TEST_SUPER_ADMIN.email,
+      TEST_SUPER_ADMIN.password,
+    );
+    const token = await api.createToken(cookie, { scopes: ["read", "write"] });
+    const created = (
+      await call(token, "create_project", { body: { name: "Lifecycle" } })
+    ).envelope;
+    const projectId = created.body.id;
+    expect((await call(token, "list_projects")).envelope.status).toBe(200);
+    const project = (await call(token, "get_project", { projectId })).envelope;
+    const updated = (
+      await call(token, "update_project", {
+        projectId,
+        ifMatch: project.etag,
+        body: { name: "Renamed" },
+      })
+    ).envelope;
+    expect(updated.status).toBe(200);
+    expect(
+      (
+        await call(token, "update_project", {
+          projectId,
+          ifMatch: project.etag,
+          body: { name: "Stale" },
+        })
+      ).envelope.status,
+    ).toBe(412);
+    expect(
+      (await call(token, "activate_project", { projectId })).envelope.status,
+    ).toBe(200);
+    expect(
+      (await call(token, "duplicate_project", { projectId })).envelope.status,
+    ).toBe(201);
+    expect(
+      (
+        await call(token, "append_activity", {
+          projectId,
+          body: { message: "Reviewed" },
+        })
+      ).envelope.status,
+    ).toBe(201);
+    expect(
+      (await call(token, "list_activity", { projectId, limit: 1 })).envelope
+        .status,
+    ).toBe(200);
+    expect(
+      (await call(token, "get_coverage", { projectId })).envelope.status,
+    ).toBe(200);
+    const exported = (await call(token, "export_project", { projectId }))
+      .envelope;
+    expect(exported.status).toBe(200);
+    expect(
+      (await call(token, "import_project", { body: exported.body })).envelope
+        .status,
+    ).toBe(201);
+    expect(
+      (
+        await call(token, "delete_project", {
+          projectId,
+          ifMatch: project.etag,
+        })
+      ).envelope.status,
+    ).toBe(412);
+    expect(
+      (
+        await call(token, "delete_project", {
+          projectId,
+          ifMatch: updated.etag,
+        })
+      ).envelope.status,
+    ).toBe(200);
+    const [storedToken] = api.authStore.listApiTokens(user.id);
+    api.authStore.revokeApiToken(user.id, storedToken.id);
+    expect((await rpc(token, "tools/list")).status).toBe(401);
+  });
 });
