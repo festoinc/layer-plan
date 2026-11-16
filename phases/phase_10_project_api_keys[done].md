@@ -1,7 +1,32 @@
 # Phase 10 — Project-scoped API keys for MCP
 
-Status: in progress  
+Status: delivered  
 Updated: 2026-11-16
+
+## Delivery and verification
+
+- CI `verify` passed on the merge commit, including unit, API, contract, build
+  and Playwright suites. The Docker job published `latest` and `sha-6ed8303`
+  with the same digest:
+  `sha256:6b0f2f5bcb6c5219c5573d809a8cc6684c85ec4e32aec3684238d34050573d9b`.
+- The image was deployed on the shared test host with a temporary checkout,
+  loopback-only port, temporary super-admin credentials and the test domain's
+  existing HTTPS proxy. Root, health, OpenAPI and MCP initialization returned
+  `200`; the test reset endpoint returned `404`.
+- Raw MCP checks over public HTTPS confirmed the exact ten-tool list, one project
+  in `list_projects`, `404` for another project id, a successful document edit,
+  a stale-write `412 revision_conflict`, and `403` for the same key on a direct
+  REST request. Deleting the bound project through MCP returned `200`; the key
+  then returned `401`.
+- Codex CLI 0.169.0 connected from the developer machine through the public
+  HTTPS endpoint, listed the project, read project metadata and the document,
+  and reported revision 2 without modifying anything. It used
+  `list_projects`, `get_project` and `get_document`.
+- Cleanup removed the test container, volume, network and checkout; test ports
+  were free, nginx and the other host services were running, and the untagged
+  image created during the pull was removed.
+- P-20 remains open: this phase did not run an interactive destructive-approval
+  scenario. The raw MCP deletion verified server behavior, not client approval.
 
 ## Relationship to phase 9
 
