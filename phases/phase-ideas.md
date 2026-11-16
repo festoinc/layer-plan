@@ -163,4 +163,7 @@ add fields where we can save commit id to every document so we can then review w
 create doker image where whole app will run db is attached volume to persist restat 
 
 ### P-15 — MCP
-make docker api be avalible though mcp
+make docker api be avalible though mcplet's
+
+### P-16 — Search
+MCP search by keyword or commit id 
