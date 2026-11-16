@@ -1,9 +1,9 @@
 # Phase 9 — Remote MCP access
 
-Status: planned  
+Status: delivered (with follow-up P-20)  
 Updated: 2026-11-16
 
-## Verification in progress
+## Delivery and verification
 
 - CI passed the implementation and project lifecycle tests. An isolated Docker
   image passed a loopback smoke test and was cleaned up.
@@ -15,8 +15,8 @@ Updated: 2026-11-16
   without first asking in chat. The client blocked the tool call because the
   session approval policy was `never`. An activity-write call was likewise
   blocked by that policy. The server's instructions are guidance rather than
-  an enforced confirmation mechanism. A usable approval flow and a successful
-  Codex write still need verification before this phase can be marked delivered.
+  an enforced confirmation mechanism. At the user's direction this phase is
+  marked delivered with these checks outstanding; they are tracked as P-20.
 
 ## Goal
 
@@ -119,6 +119,6 @@ Explain that the variable must be available to the Codex process and that the to
 
 ## 8. Boundaries and research
 
-User management, session and token management through MCP, OAuth, project sharing, search (P-16), and additional MCP clients are out of scope. P-15 is complete only after the acceptance criteria pass. The exact HTTPS terminator depends on the test server's existing configuration; no TLS vendor is mandated.
+User management, session and token management through MCP, OAuth, project sharing, search (P-16), and additional MCP clients are out of scope. P-15 is delivered; the unmet Codex approval and write checks are tracked separately as P-20. The exact HTTPS terminator depends on the test server's existing configuration; no TLS vendor is mandated.
 
 The TypeScript SDK is selected because it allows Layers to preserve per-user authorization and document concurrency in the existing process. The [mcp-openapi bridge](https://github.com/dx-corp/mcp-openapi) documents static environment-based upstream bearer credentials and a configured inbound token; that does not establish the required per-user identity isolation. [ContextForge](https://github.com/IBM/mcp-context-forge) adds a separate gateway for a single Layers service. These are research references, not implementation options for this phase. See the [official MCP TypeScript SDK](https://github.com/modelcontextprotocol/typescript-sdk), [MCP remote authorization guidance](https://github.com/modelcontextprotocol/modelcontextprotocol/blob/main/docs/docs/2026-07-28/tutorials/security/authorization.mdx), and [OpenAI MCP server guidance](https://developers.openai.com/plugins/build/mcp-server).
