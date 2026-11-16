@@ -57,6 +57,8 @@ jobs:
           context: .
           load: true
           tags: layers-ci:smoke
+          provenance: false
+          sbom: false
           cache-from: type=gha
           cache-to: type=gha,mode=max
           build-args: |
@@ -82,6 +84,8 @@ jobs:
           tags: |
             ghcr.io/festoinc/layer-plan:latest
             ghcr.io/festoinc/layer-plan:sha-${{ steps.short.outputs.sha }}
+          provenance: false
+          sbom: false
           cache-from: type=gha
           build-args: |
             VERSION=${{ github.sha }}
@@ -97,11 +101,18 @@ jobs:
           image="ghcr.io/festoinc/layer-plan"
           latest="$(docker buildx imagetools inspect "$image:latest" --format '{{.Manifest.Digest}}')"
           sha="$(docker buildx imagetools inspect "$image:sha-$SHORT_SHA" --format '{{.Manifest.Digest}}')"
-          echo "pushed=$DIGEST latest=$latest sha=$sha"
+          media_type="$(docker buildx imagetools inspect "$image:latest" --format '{{.Manifest.MediaType}}')"
+          echo "pushed=$DIGEST latest=$latest sha=$sha media_type=$media_type"
           if [ "$latest" != "$DIGEST" ] || [ "$sha" != "$DIGEST" ]; then
             echo "::error::Published tags do not share the pushed digest."
             exit 1
           fi
+          case "$media_type" in
+            *index*|*manifest.list*)
+              echo "::error::Pushed image is a manifest index; retention would delete its child manifests."
+              exit 1
+              ;;
+          esac
 
       - name: Delete older package versions
         uses: actions/delete-package-versions@v5

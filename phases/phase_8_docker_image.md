@@ -70,6 +70,12 @@ before implementation if they are wrong.
 - **Two tags are pushed in one registry operation.** `latest` and
   `sha-<short>` point at the same manifest digest. The cleanup step verifies the
   digests before deleting older versions.
+- **Provenance and SBOM attestations are disabled.** Buildx otherwise pushes a
+  manifest index with separate image and attestation manifests. GHCR treats
+  those children as package versions, so `min-versions-to-keep: 1` can delete
+  the image manifest while keeping the index and its tags. A single manifest per
+  push is required for safe version pruning; a guard step fails the job before
+  cleanup if the pushed artefact is an index.
 - **Tags are not semver.** The repo has no release/tag workflow; the commit SHA
   is the reliable identifier. A `v*` scheme can be added later.
 - **`latest` moves on every main push.** The remote server should run
@@ -418,6 +424,8 @@ jobs:
           context: .
           load: true
           tags: layers-ci:smoke
+          provenance: false
+          sbom: false
           cache-from: type=gha
           cache-to: type=gha,mode=max
           build-args: |
@@ -439,6 +447,8 @@ jobs:
           tags: |
             ghcr.io/festoinc/layer-plan:latest
             ghcr.io/festoinc/layer-plan:sha-${{ steps.short.outputs.sha }}
+          provenance: false
+          sbom: false
           cache-from: type=gha
           build-args: |
             VERSION=${{ github.sha }}
@@ -467,9 +477,10 @@ Implementation details for the final workflow:
   The push step rebuilds from the same context and warm cache, then pushes both
   tags in one operation. This is what keeps the package to one version.
 - `latest` and `sha-<short>` must resolve to the digest reported by the push
-  step. If they do not, the job fails before cleanup, so older versions are not
-  deleted and the broken state is visible. The same digest check runs again
-  after cleanup to prove that pruning did not remove a retained tag.
+  step, and the pushed artefact must be a single image manifest rather than an
+  index. If either check fails, the job stops before cleanup, so older versions
+  are not deleted and the broken state is visible. The same digest check runs
+  again after cleanup to prove that pruning did not remove a retained tag.
 - The cleanup action handles both user-owned and organization-owned packages,
   which avoids hard-coding `/users/` or `/orgs/` REST paths.
 - Concurrency serializes Docker jobs: a newer main push waits for the running
@@ -665,9 +676,9 @@ Run once on the provided server after the first public push:
 - [ ] The image is public at `ghcr.io/festoinc/layer-plan` and pulls anonymously
       on the remote server.
 - [ ] Every main push publishes `latest` and `sha-<7>`, both resolving to the
-      same digest.
+      same single image manifest (not an index), on the same digest.
 - [ ] Only the newest package version remains after the workflow finishes; older
-      versions are deleted automatically.
+      versions are deleted automatically and both retained tags still pull.
 - [ ] The image starts with runtime env only, runs migrations, creates the super
       admin and serves the built UI, API and OpenAPI document on `:3001`.
 - [ ] `GET /api/v1/health` returns `{"status":"ok","database":"ok"}` and the
@@ -696,6 +707,7 @@ Run once on the provided server after the first public push:
 | A secret or local database ends up in the image | `.dockerignore` excludes `.env*`, `data/`, `dist/`, `dist-server/`; acceptance check inspects `/app` |
 | GHCR package stays private | One-time visibility toggle documented; anonymous pull is an acceptance test |
 | Cleanup deletes a tag that `latest` still needs | Push both tags in one operation, verify both resolve to the pushed digest before cleanup, then keep one version; fall back to keeping two if GHCR splits versions |
+| Cleanup deletes child manifests of an index and breaks the tags | Disable provenance/SBOM attestations so each push is one image manifest; fail before cleanup if the artefact is an index |
 | Old image versions are lost unexpectedly | This is the requested behaviour; the OCI revision label identifies the remaining image and a rollback is a new commit |
 | Cleanup step fails after a successful push | The image is already published; rerun the cleanup or delete versions manually; the job fails loudly |
 | Host port 80 is occupied | `LAYERS_HTTP_PORT` in `.env` selects another host port; the container port stays 3001 |
