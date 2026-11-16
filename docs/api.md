@@ -326,4 +326,8 @@ Project and document updates use separate ETags, exposed in tool results. On a
 revision conflict, fetch the latest content and reapply the intended change.
 MCP requests and responses are limited to 2 MiB; larger documents must be
 handled through the existing API. The agent is instructed to seek confirmation
-before destructive actions, but this is not a server-side approval guarantee.
+before destructive actions, but instructions are not a server-side approval
+guarantee. In a Codex CLI 0.169.0 test, Codex attempted deletion after a direct
+request without first asking in chat; the client blocked the tool call because
+its approval policy did not allow approval requests. Configure and verify the
+client's approval behavior before relying on MCP for writes.

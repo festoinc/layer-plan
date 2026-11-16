@@ -3,6 +3,21 @@
 Status: planned  
 Updated: 2026-11-16
 
+## Verification in progress
+
+- CI passed the implementation and project lifecycle tests. An isolated Docker
+  image passed a loopback smoke test and was cleaned up.
+- A separate isolated deployment passed public HTTPS protocol checks from the
+  developer machine, including two-user project isolation and read-only token
+  enforcement. Codex CLI 0.169.0 connected and listed a project over HTTPS.
+- The destructive-action acceptance criterion is **not yet met**: after a
+  direct request to delete the disposable project, Codex attempted the tool
+  without first asking in chat. The client blocked the tool call because the
+  session approval policy was `never`. An activity-write call was likewise
+  blocked by that policy. The server's instructions are guidance rather than
+  an enforced confirmation mechanism. A usable approval flow and a successful
+  Codex write still need verification before this phase can be marked delivered.
+
 ## Goal
 
 Connect Codex on a remote machine to a user's Layers projects over HTTPS. Users create their own Layers API token, configure it in Codex, and use MCP tools to manage projects and edit their documents. Send the adapted Layers agent instructions during MCP initialization.
