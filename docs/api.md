@@ -290,3 +290,40 @@ Common codes: `unauthenticated`, `invalid_credentials`, `account_disabled`,
 
 `401 unauthenticated` means the session or token is missing, expired or revoked.
 Sign in again or create a new token. Do not retry a `401` in a loop.
+
+## Remote Codex MCP access
+
+The app serves a stateless MCP endpoint at `/mcp` in the same process as the API.
+It exposes project and document operations; account, user, session, and token
+administration are not MCP tools. Calls use the existing API authorization and
+revision rules. The server supplies agent instructions on initialization.
+
+1. Sign in to Layers and create an API token on `#/account`. Choose read-only
+   for inspection or read-write for edits. Never send a token in chat.
+2. Set `LAYERS_MCP_ALLOWED_HOSTS` in the server environment to a comma-separated
+   list of permitted hostnames, for example `layers.example.com,localhost`.
+   Ports are omitted. The default permits only `localhost`, `127.0.0.1`, and
+   `[::1]`. If browser-based MCP clients are used, their exact origin must also
+   be configured through `LAYERS_UI_ORIGIN`; Codex does not need an Origin.
+3. Put the app behind an HTTPS reverse proxy that preserves the original Host
+   header and supports Streamable HTTP. Keep the plain HTTP port private. The
+   included Compose file publishes on all interfaces by default; override its
+   port binding to `127.0.0.1:3001:3001` (or another unused loopback port) when
+   the proxy runs on the same host. Restrict access to the proxy's backend on
+   other deployments. Disable logging of Authorization headers. Do not use a
+   real token over public HTTP.
+4. On the machine running Codex, make the token available to the Codex process:
+
+   ```sh
+   export LAYERS_API_TOKEN='<token created in Layers>'
+   codex mcp add layers --url https://<domain>/mcp --bearer-token-env-var LAYERS_API_TOKEN
+   codex mcp list
+   ```
+
+A user's token is checked on each request; revoking it on the account page
+blocks future requests. Never place tokens in URLs or commit them to files.
+Project and document updates use separate ETags, exposed in tool results. On a
+revision conflict, fetch the latest content and reapply the intended change.
+MCP requests and responses are limited to 2 MiB; larger documents must be
+handled through the existing API. The agent is instructed to seek confirmation
+before destructive actions, but this is not a server-side approval guarantee.

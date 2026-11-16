@@ -20,6 +20,7 @@ export interface ServerConfig {
   uiOrigins: string[];
   loginRateLimit: number;
   loginRateWindowMinutes: number;
+  mcpAllowedHosts: string[];
 }
 
 export interface LoadConfigOptions {
@@ -131,5 +132,11 @@ export function loadConfig(
       env.LAYERS_LOGIN_RATE_WINDOW_MINUTES,
       15,
     ),
+    mcpAllowedHosts: (
+      env.LAYERS_MCP_ALLOWED_HOSTS ?? "localhost,127.0.0.1,[::1]"
+    )
+      .split(",")
+      .map((value) => value.trim().toLowerCase())
+      .filter(Boolean),
   };
 }

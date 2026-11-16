@@ -405,3 +405,12 @@ accessibility (axe) and focus management.
   pull requests. On a push to `main` it also builds the Docker image,
   smoke-tests the container and publishes `latest` and `sha-<7>` to GHCR,
   deleting older package versions.
+
+### Remote Codex access
+
+Layers exposes its project and document operations to Codex over MCP at `/mcp`.
+Each user connects with their own Layers API token. Before remote access, set
+`LAYERS_MCP_ALLOWED_HOSTS` and configure HTTPS with a private backend; the
+default Docker Compose port is publicly bound and needs a loopback override
+behind a local reverse proxy. See [Remote Codex MCP access](docs/api.md#remote-codex-mcp-access)
+for setup, token handling, and limits.

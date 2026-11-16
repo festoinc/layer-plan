@@ -42,6 +42,7 @@ COPY --from=build --chown=node:node /app/node_modules ./node_modules
 COPY --from=build --chown=node:node /app/dist ./dist
 COPY --from=build --chown=node:node /app/dist-server ./dist-server
 COPY --from=build --chown=node:node /app/server/api/openapi.yaml ./server/api/openapi.yaml
+COPY --from=build --chown=node:node /app/server/mcp/instructions.md ./server/mcp/instructions.md
 COPY --from=build --chown=node:node /app/server/db/migrations ./server/db/migrations
 COPY --from=build --chown=node:node /app/package.json ./package.json
 
