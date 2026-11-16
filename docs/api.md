@@ -10,8 +10,9 @@ SQLite file (`data/layers.sqlite` unless `LAYERS_DB_PATH` is set).
 - JSON contract: `http://127.0.0.1:3001/api/v1/openapi.json`
 
 Every project is private to its owner. Browser clients use an `HttpOnly` session
-cookie; local AI agents use bearer API tokens. For broader AI-agent working
-instructions, see [`AGENTS_template.md`](../AGENTS_template.md).
+cookie. MCP clients use a project API key that is accepted only by `/mcp`. For
+AI-agent working instructions, see
+[`LAYERS_AGENT_GUIDE.md`](../LAYERS_AGENT_GUIDE.md).
 
 ## Sign in
 
@@ -40,16 +41,17 @@ curl -b /tmp/layers-cookies.txt -X POST \
   http://127.0.0.1:3001/api/v1/auth/logout
 ```
 
-## Create an API token for an agent
+## Create an MCP API key for a project
 
-Sign in as the user the agent should act for, then create a token. The secret is
-returned once and cannot be shown again.
+An MCP client needs an API key bound to one project. Keys are accepted only by
+`/mcp`; they cannot call the REST API. Create keys from the project actions menu
+(**API keys**) or with a browser session:
 
 ```sh
 curl -b /tmp/layers-cookies.txt \
-  -X POST http://127.0.0.1:3001/api/v1/me/tokens \
+  -X POST http://127.0.0.1:3001/api/v1/projects/website/tokens \
   -H 'Content-Type: application/json' \
-  -d '{"name":"Local coding agent","scopes":["read","write"]}'
+  -d '{"name":"Codex on my laptop"}'
 ```
 
 ```json
@@ -57,49 +59,49 @@ curl -b /tmp/layers-cookies.txt \
   "token": "lrs_...",
   "tokenInfo": {
     "id": "tok_...",
-    "name": "Local coding agent",
+    "projectId": "website",
+    "name": "Codex on my laptop",
     "prefix": "lrs_abcd",
     "scopes": ["read", "write"],
-    "createdAt": "2026-11-15T10:30:00.000Z",
+    "createdAt": "2026-11-16T10:30:00.000Z",
     "lastUsedAt": null,
-    "expiresAt": null,
+    "expiresAt": "2035-12-30T10:30:00.000Z",
     "revokedAt": null
   }
 }
 ```
 
-Use the token directly:
+The secret is returned once and cannot be shown again. `scopes` defaults to
+`["read", "write"]`; omit it for read-only inspection. `expiresInDays` defaults
+to `3650` and must be between 1 and 3650. A person can have at most 20 active
+keys across all projects. Project deletion deletes the project's keys.
+
+List and revoke keys with:
 
 ```sh
-export LAYERS_API_TOKEN=lrs_...
-curl -H "Authorization: Bearer $LAYERS_API_TOKEN" \
-  http://127.0.0.1:3001/api/v1/projects
+curl -b /tmp/layers-cookies.txt \
+  http://127.0.0.1:3001/api/v1/projects/website/tokens
+
+curl -b /tmp/layers-cookies.txt -X DELETE \
+  http://127.0.0.1:3001/api/v1/projects/website/tokens/<tokenId>
 ```
 
-`read` allows `GET`/`HEAD`. `write` allows mutations and implies `read`. Tokens
-cannot manage users, sessions or other tokens; those operations require a
-browser session. List and revoke tokens with `GET /me/tokens` and
-`DELETE /me/tokens/{id}`.
+Key management requires a browser session. A project key cannot manage users,
+sessions, keys or other projects. A valid key sent to a REST endpoint returns
+`403 forbidden`.
 
 ## Common flows
 
-The examples below use `$AUTH`, which is either:
+The examples below use a browser session cookie:
 
 ```sh
-AUTH="Authorization: Bearer $LAYERS_API_TOKEN"
-```
-
-or a cookie jar:
-
-```sh
-AUTH=""
-# add -b /tmp/layers-cookies.txt to each curl command
+AUTH="-b /tmp/layers-cookies.txt"
 ```
 
 ### List projects
 
 ```sh
-curl -H "$AUTH" http://127.0.0.1:3001/api/v1/projects
+curl $AUTH http://127.0.0.1:3001/api/v1/projects
 ```
 
 Response:
@@ -130,9 +132,9 @@ project id returns `404`.
 ### Read a project and its document
 
 ```sh
-curl -H "$AUTH" -D /tmp/project.headers \
+curl $AUTH -D /tmp/project.headers \
   http://127.0.0.1:3001/api/v1/projects/website
-curl -H "$AUTH" -D /tmp/document.headers \
+curl $AUTH -D /tmp/document.headers \
   http://127.0.0.1:3001/api/v1/projects/website/document
 ```
 
@@ -148,7 +150,7 @@ by the next write.
 REVISION=$(awk 'tolower($1) == "etag:" { gsub(/"/, "", $2); print $2 }' \
   /tmp/document.headers)
 
-curl -H "$AUTH" \
+curl $AUTH \
   -X PUT http://127.0.0.1:3001/api/v1/projects/website/document \
   -H 'Content-Type: application/json' \
   -H "If-Match: \"$REVISION\"" \
@@ -222,7 +224,7 @@ activity entry if the change should appear on the activity page:
 ### Append activity
 
 ```sh
-curl -H "$AUTH" \
+curl $AUTH \
   -X POST http://127.0.0.1:3001/api/v1/projects/website/activity \
   -H 'Content-Type: application/json' \
   -d '{"message":"Reviewed AI verification instructions","chapterId":null,"chapterName":"Website project"}'
@@ -234,7 +236,7 @@ after phase 6.
 ### Coverage
 
 ```sh
-curl -H "$AUTH" \
+curl $AUTH \
   http://127.0.0.1:3001/api/v1/projects/website/coverage
 ```
 
@@ -244,10 +246,10 @@ verification mode and criterion counts.
 ### Export and import
 
 ```sh
-curl -H "$AUTH" -o layers-website.json \
+curl $AUTH -o layers-website.json \
   http://127.0.0.1:3001/api/v1/projects/website/export
 
-curl -H "$AUTH" \
+curl $AUTH \
   -X POST http://127.0.0.1:3001/api/v1/projects/import \
   -H 'Content-Type: application/json' \
   --data @layers-website.json
@@ -288,18 +290,19 @@ Common codes: `unauthenticated`, `invalid_credentials`, `account_disabled`,
 `project_limit`, `payload_too_large`, `stored_data_invalid`,
 `database_unavailable`, `internal_error`.
 
-`401 unauthenticated` means the session or token is missing, expired or revoked.
-Sign in again or create a new token. Do not retry a `401` in a loop.
+`401 unauthenticated` means the session or MCP key is missing, expired or
+revoked. Sign in again or create a new key. Do not retry a `401` in a loop.
 
 ## Remote Codex MCP access
 
 The app serves a stateless MCP endpoint at `/mcp` in the same process as the API.
-It exposes project and document operations; account, user, session, and token
+It exposes project and document operations; account, user, session and key
 administration are not MCP tools. Calls use the existing API authorization and
 revision rules. The server supplies agent instructions on initialization.
 
-1. Sign in to Layers and create an API token on `#/account`. Choose read-only
-   for inspection or read-write for edits. Never send a token in chat.
+1. Sign in to Layers, open the project actions menu and choose **API keys**.
+   Create a key for that project. Choose read-only for inspection or read-write
+   for edits. Never send the key in chat. The key is accepted only by `/mcp`.
 2. Set `LAYERS_MCP_ALLOWED_HOSTS` in the server environment to a comma-separated
    list of permitted hostnames, for example `layers.example.com,localhost`.
    Ports are omitted. The default permits only `localhost`, `127.0.0.1`, and
@@ -311,17 +314,21 @@ revision rules. The server supplies agent instructions on initialization.
    port binding to `127.0.0.1:3001:3001` (or another unused loopback port) when
    the proxy runs on the same host. Restrict access to the proxy's backend on
    other deployments. Disable logging of Authorization headers. Do not use a
-   real token over public HTTP.
-4. On the machine running Codex, make the token available to the Codex process:
+   real key over public HTTP.
+4. On the machine running Codex, make the key available to the Codex process:
 
    ```sh
-   export LAYERS_API_TOKEN='<token created in Layers>'
+   export LAYERS_API_TOKEN='<project key created in Layers>'
    codex mcp add layers --url https://<domain>/mcp --bearer-token-env-var LAYERS_API_TOKEN
    codex mcp list
    ```
 
-A user's token is checked on each request; revoking it on the account page
-blocks future requests. Never place tokens in URLs or commit them to files.
+A project key is checked on each request; revoking it in the project's **API
+keys** dialog, deleting the project, or disabling the user blocks future
+requests. Never place keys in URLs or commit them to files. The key is bound to
+one project, so `list_projects` returns only that project and
+`create_project`, `duplicate_project`, `activate_project` and `import_project`
+are not available.
 Project and document updates use separate ETags, exposed in tool results. On a
 revision conflict, fetch the latest content and reapply the intended change.
 MCP requests and responses are limited to 2 MiB; larger documents must be

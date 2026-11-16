@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, it } from "vitest";
 import {
   authHeaders,
-  bearerHeaders,
   createTestApi,
+  mcpCall,
   docRequest,
   json,
   TEST_SUPER_ADMIN,
@@ -222,15 +222,19 @@ describe("project authorization", () => {
     expect(json(appended).events[0].actorUserId).toBe(alice.user.id);
   });
 
-  it("does not let a token cross project ownership", async () => {
+  it("does not let a project key cross project ownership", async () => {
     api = await createTestApi();
     const { bob, project } = await setupUsers(api);
-    const token = await api.createToken(bob.cookie);
-    const response = await api.app.inject({
-      method: "GET",
-      url: `/api/v1/projects/${project.id}/document`,
-      headers: bearerHeaders(token),
+    const created = await api.app.inject({
+      method: "POST",
+      url: "/api/v1/projects",
+      ...docRequest({ name: "Bob private" }, authHeaders(bob.cookie)),
     });
-    expect(response.statusCode).toBe(404);
+    expect(created.statusCode).toBe(201);
+    const token = await api.createToken(bob.cookie, json(created).id);
+    const response = await mcpCall(api, token, "get_document", {
+      projectId: project.id,
+    });
+    expect(response.envelope.status).toBe(404);
   });
 });

@@ -1,11 +1,9 @@
 import { apiRequest } from "./client";
 import type {
   AuthUser,
-  CreateTokenResponse,
   LoginResponse,
   MeResponse,
   SessionsResponse,
-  TokensResponse,
   UserResponse,
   UsersResponse,
 } from "./types";
@@ -48,29 +46,6 @@ export async function revokeSession(id: string): Promise<void> {
 
 export async function revokeOtherSessions(): Promise<void> {
   await apiRequest<void>("/auth/sessions", { method: "DELETE" });
-}
-
-export async function listTokens(): Promise<TokensResponse> {
-  const response = await apiRequest<TokensResponse>("/me/tokens");
-  return response.data;
-}
-
-export async function createToken(input: {
-  name: string;
-  scopes: Array<"read" | "write">;
-  expiresInDays?: number;
-}): Promise<CreateTokenResponse> {
-  const response = await apiRequest<CreateTokenResponse>("/me/tokens", {
-    method: "POST",
-    body: input,
-  });
-  return response.data;
-}
-
-export async function revokeToken(id: string): Promise<void> {
-  await apiRequest<void>(`/me/tokens/${encodeURIComponent(id)}`, {
-    method: "DELETE",
-  });
 }
 
 export async function listUsers(): Promise<UsersResponse> {

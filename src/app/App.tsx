@@ -1,6 +1,7 @@
 import { Suspense, useCallback, useEffect, useState } from "react";
 import { DeleteProjectDialog } from "../components/DeleteProjectDialog";
 import { ProjectDialog } from "../components/ProjectDialog";
+import { ProjectTokensDialog } from "../components/ProjectTokensDialog";
 import { ProjectInput, ProjectPatch, ProjectSummary } from "../domain/projects";
 import { ROUTE_VIEWS, useRoute } from "../hooks/useRoute";
 import { useProjects } from "../store/ProjectsProvider";
@@ -95,9 +96,11 @@ function StandaloneProjects() {
     { mode: "create" } | { mode: "edit"; project: ProjectSummary } | null
   >(null);
   const [deleteTarget, setDeleteTarget] = useState<ProjectSummary | null>(null);
+  const [tokenProject, setTokenProject] = useState<ProjectSummary | null>(null);
 
   const closeProjectDialog = useCallback(() => setProjectDialog(null), []);
   const closeDeleteDialog = useCallback(() => setDeleteTarget(null), []);
+  const closeTokenDialog = useCallback(() => setTokenProject(null), []);
   const openCreateProject = useCallback(
     () => setProjectDialog({ mode: "create" }),
     [],
@@ -157,6 +160,7 @@ function StandaloneProjects() {
         activeProjectId={activeProjectId}
         onOpenProject={openProject}
         onNewProject={openCreateProject}
+        onManageProjectTokens={setTokenProject}
         onEditProject={openProjectSettings}
         onDuplicateProject={(item) => {
           void duplicateProject(item.id).then((result) => {
@@ -180,6 +184,12 @@ function StandaloneProjects() {
           }
           onClose={closeProjectDialog}
           onSubmit={submitProjectDialog}
+        />
+      )}
+      {tokenProject && (
+        <ProjectTokensDialog
+          project={tokenProject}
+          onClose={closeTokenDialog}
         />
       )}
       {deleteTarget && (

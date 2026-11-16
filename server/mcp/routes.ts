@@ -7,7 +7,6 @@ import type { AuthHooks } from "../auth/middleware";
 import type { ServerConfig } from "../config";
 import { ApiError } from "../api/errors";
 import {
-  createProjectSchema,
   updateProjectSchema,
   putDocumentSchema,
   appendActivitySchema,
@@ -24,6 +23,7 @@ type Operation = {
   method: "GET" | "POST" | "PATCH" | "PUT" | "DELETE";
   path: (args: Record<string, unknown>) => string;
   schema: z.ZodRawShape;
+  projectScoped?: boolean;
   readOnly?: boolean;
   destructive?: boolean;
 };
@@ -32,77 +32,64 @@ const projectPath = (args: Record<string, unknown>) =>
 const operations: Operation[] = [
   {
     name: "list_projects",
-    description: "List your projects and active project.",
+    description:
+      "List projects available to this API key. A project key returns exactly one project.",
     method: "GET",
     path: () => "/api/v1/projects",
     schema: {},
     readOnly: true,
   },
   {
-    name: "create_project",
-    description: "Create a project.",
-    method: "POST",
-    path: () => "/api/v1/projects",
-    schema: { body: createProjectSchema },
-  },
-  {
     name: "get_project",
-    description: "Get project metadata, guidelines, and its metadata ETag.",
+    description:
+      "Get the bound project's metadata, guidelines, and metadata ETag.",
     method: "GET",
     path: projectPath,
     schema: { projectId },
+    projectScoped: true,
     readOnly: true,
   },
   {
     name: "update_project",
-    description: "Update project metadata using its current ETag.",
+    description: "Update the bound project metadata using its current ETag.",
     method: "PATCH",
     path: projectPath,
     schema: { projectId, ifMatch, body: updateProjectSchema },
+    projectScoped: true,
   },
   {
     name: "delete_project",
     description:
-      "Delete a project after explicit user confirmation, using its current metadata ETag.",
+      "Delete the bound project after explicit user confirmation, using its current metadata ETag.",
     method: "DELETE",
     path: projectPath,
     schema: { projectId, ifMatch },
+    projectScoped: true,
     destructive: true,
   },
   {
-    name: "duplicate_project",
-    description: "Duplicate a project.",
-    method: "POST",
-    path: (a) => `${projectPath(a)}/duplicate`,
-    schema: { projectId },
-  },
-  {
-    name: "activate_project",
-    description: "Set your active project.",
-    method: "POST",
-    path: (a) => `${projectPath(a)}/activate`,
-    schema: { projectId },
-  },
-  {
     name: "get_document",
-    description: "Read the full chapter tree and document ETag.",
+    description:
+      "Read the bound project's full chapter tree and document ETag.",
     method: "GET",
     path: (a) => `${projectPath(a)}/document`,
     schema: { projectId },
+    projectScoped: true,
     readOnly: true,
   },
   {
     name: "replace_document",
     description:
-      "Replace a complete document using its current ETag. Ask before removing content.",
+      "Replace the bound project's complete document using its current ETag. Ask before removing content.",
     method: "PUT",
     path: (a) => `${projectPath(a)}/document`,
     schema: { projectId, ifMatch, body: putDocumentSchema },
+    projectScoped: true,
     destructive: true,
   },
   {
     name: "list_activity",
-    description: "Read project activity.",
+    description: "Read the bound project's activity.",
     method: "GET",
     path: (a) => {
       const query = new URLSearchParams();
@@ -116,39 +103,65 @@ const operations: Operation[] = [
       limit: z.number().int().min(1).max(100).optional(),
       before: z.number().int().min(1).optional(),
     },
+    projectScoped: true,
     readOnly: true,
   },
   {
     name: "append_activity",
-    description: "Append a project activity entry.",
+    description: "Append an activity entry to the bound project.",
     method: "POST",
     path: (a) => `${projectPath(a)}/activity`,
     schema: { projectId, body: appendActivitySchema },
+    projectScoped: true,
   },
   {
     name: "get_coverage",
-    description: "Read declaration-based verification coverage.",
+    description:
+      "Read the bound project's declaration-based verification coverage.",
     method: "GET",
     path: (a) => `${projectPath(a)}/coverage`,
     schema: { projectId },
+    projectScoped: true,
     readOnly: true,
   },
   {
     name: "export_project",
-    description: "Return a project export as JSON.",
+    description: "Return the bound project's export as JSON.",
     method: "GET",
     path: (a) => `${projectPath(a)}/export`,
     schema: { projectId },
+    projectScoped: true,
     readOnly: true,
   },
-  {
-    name: "import_project",
-    description: "Import JSON as a new project.",
-    method: "POST",
-    path: () => "/api/v1/projects/import",
-    schema: { body: z.record(z.string(), z.unknown()) },
-  },
 ];
+
+function textResult(envelope: unknown, isError: boolean) {
+  return {
+    isError,
+    content: [
+      {
+        type: "text" as const,
+        text: JSON.stringify(envelope),
+      },
+    ],
+  };
+}
+
+function notFoundResult() {
+  return textResult(
+    {
+      status: 404,
+      body: {
+        error: {
+          code: "not_found",
+          message: "The project does not exist.",
+        },
+      },
+      etag: null,
+    },
+    true,
+  );
+}
 
 export function registerMcpRoutes(
   app: FastifyInstance,
@@ -184,7 +197,22 @@ export function registerMcpRoutes(
       hooks.requireMcpToken,
     ],
     handler: async (request, reply) => {
-      const auth = request.headers.authorization!;
+      const auth = request.auth;
+      if (!auth || auth.method !== "token") {
+        throw new ApiError(
+          401,
+          "unauthenticated",
+          "A project API key is required.",
+        );
+      }
+      const internalHeaders = {
+        [hooks.internalAuth.headerName]: hooks.internalAuth.sign({
+          userId: auth.user.id,
+          projectId: auth.projectId,
+          tokenId: auth.tokenId,
+          scopes: auth.scopes,
+        }),
+      };
       const server = new McpServer(
         { name: "layers", version: "1.0.0" },
         { instructions },
@@ -202,7 +230,10 @@ export function registerMcpRoutes(
           },
           async (args) => {
             const input = args as Record<string, unknown>;
-            const headers: Record<string, string> = { authorization: auth };
+            if (operation.projectScoped && input.projectId !== auth.projectId) {
+              return notFoundResult();
+            }
+            const headers: Record<string, string> = { ...internalHeaders };
             if (typeof input.ifMatch === "string")
               headers["if-match"] = input.ifMatch;
             if (input.body !== undefined)
@@ -215,26 +246,25 @@ export function registerMcpRoutes(
                 ? { payload: JSON.stringify(input.body) }
                 : {}),
             });
+            const body = result.payload ? JSON.parse(result.payload) : null;
             const envelope = {
               status: result.statusCode,
-              body: JSON.parse(result.payload) as unknown,
+              body,
               etag: result.headers.etag ?? null,
             };
             const text = JSON.stringify(envelope);
-            if (Buffer.byteLength(text) > MAX_BYTES)
-              return {
-                isError: true,
-                content: [
-                  {
-                    type: "text" as const,
-                    text: "MCP response exceeds the 2 MiB limit.",
+            if (Buffer.byteLength(text) > MAX_BYTES) {
+              return textResult(
+                {
+                  error: {
+                    code: "payload_too_large",
+                    message: "MCP response exceeds the 2 MiB limit.",
                   },
-                ],
-              };
-            return {
-              isError: result.statusCode >= 400,
-              content: [{ type: "text" as const, text }],
-            };
+                },
+                true,
+              );
+            }
+            return textResult(envelope, result.statusCode >= 400);
           },
         );
       }

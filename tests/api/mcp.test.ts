@@ -1,5 +1,14 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { createTestApi, TEST_SUPER_ADMIN, type TestApi } from "./helpers";
+import {
+  authHeaders,
+  createTestApi,
+  docRequest,
+  json,
+  mcpCall,
+  mcpRpc,
+  TEST_SUPER_ADMIN,
+  type TestApi,
+} from "./helpers";
 
 let api: TestApi | null = null;
 afterEach(async () => {
@@ -7,59 +16,94 @@ afterEach(async () => {
   api = null;
 });
 
-async function rpc(token: string, method: string, params: object = {}) {
-  const response = await api!.app.inject({
-    method: "POST",
-    url: "/mcp",
-    headers: {
-      authorization: `Bearer ${token}`,
-      accept: "application/json, text/event-stream",
-      "content-type": "application/json",
-      host: "localhost",
-    },
-    payload: { jsonrpc: "2.0", id: 1, method, params },
-  });
-  return { status: response.statusCode, body: JSON.parse(response.payload) };
+const initialize = {
+  protocolVersion: "2025-03-26",
+  capabilities: {},
+  clientInfo: { name: "test", version: "1" },
+};
+
+const projectTools = [
+  "append_activity",
+  "delete_project",
+  "export_project",
+  "get_coverage",
+  "get_document",
+  "get_project",
+  "list_activity",
+  "list_projects",
+  "replace_document",
+  "update_project",
+].sort();
+
+async function superCookie(testApi: TestApi): Promise<string> {
+  return (
+    await testApi.login(TEST_SUPER_ADMIN.email, TEST_SUPER_ADMIN.password)
+  ).cookie;
 }
-async function call(token: string, name: string, args: object = {}) {
-  const result = await rpc(token, "tools/call", { name, arguments: args });
-  return {
-    ...result,
-    envelope: JSON.parse(result.body.result.content[0].text),
-  };
+
+async function createProject(testApi: TestApi, cookie: string) {
+  const response = await testApi.app.inject({
+    method: "POST",
+    url: "/api/v1/projects",
+    ...docRequest({ name: "MCP project" }, authHeaders(cookie)),
+  });
+  expect(response.statusCode).toBe(201);
+  return json(response) as { id: string };
 }
 
 describe("remote MCP", () => {
-  it("advertises instructions and fixed tools, enforces scopes and preserves revisions", async () => {
+  it("advertises project-bound instructions and tools, enforces scopes and revisions", async () => {
     api = await createTestApi();
-    const { cookie } = await api.login(
-      TEST_SUPER_ADMIN.email,
-      TEST_SUPER_ADMIN.password,
-    );
-    const read = await api.createToken(cookie, { scopes: ["read"] });
-    const write = await api.createToken(cookie, { scopes: ["read", "write"] });
-    const init = await rpc(read, "initialize", {
-      protocolVersion: "2025-03-26",
-      capabilities: {},
-      clientInfo: { name: "test", version: "1" },
-    });
+    const cookie = await superCookie(api);
+    const read = await api.createToken(cookie, "website", { scopes: ["read"] });
+    const write = await api.createToken(cookie, "website");
+    const init = await mcpRpc(api, read, "initialize", initialize);
     expect(init.status).toBe(200);
+    expect(init.body.result.instructions).toContain(
+      "bound to exactly one project",
+    );
     expect(init.body.result.instructions).toContain("confirm before deleting");
-    const list = await rpc(read, "tools/list");
+    const list = await mcpRpc(api, read, "tools/list");
+    const tools = list.body.result.tools as Array<{ name: string }>;
+    expect(tools.map((tool) => tool.name).sort()).toEqual(projectTools);
+    for (const excluded of [
+      "create_project",
+      "duplicate_project",
+      "activate_project",
+      "import_project",
+    ]) {
+      expect(tools.map((tool) => tool.name)).not.toContain(excluded);
+    }
+
+    const listed = await mcpCall(api, read, "list_projects");
+    expect(listed.envelope.status).toBe(200);
     expect(
-      list.body.result.tools.map((tool: { name: string }) => tool.name),
-    ).toContain("replace_document");
-    expect(list.body.result.tools).toHaveLength(14);
-    expect(
-      (await call(read, "create_project", { body: { name: "no" } })).envelope
-        .status,
-    ).toBe(403);
-    const created = await call(write, "create_project", {
-      body: { name: "MCP test" },
+      listed.envelope.body.projects.map(
+        (project: { id: string }) => project.id,
+      ),
+    ).toEqual(["website"]);
+
+    const wrongProject = await mcpCall(api, read, "get_project", {
+      projectId: "another-project",
     });
-    expect(created.envelope.status).toBe(201);
-    const doc = (await call(read, "get_document", { projectId: "website" }))
-      .envelope;
+    expect(wrongProject.envelope.status).toBe(404);
+    expect(wrongProject.envelope.body.error.code).toBe("not_found");
+
+    const denied = await mcpCall(api, read, "append_activity", {
+      projectId: "website",
+      body: {
+        message: "Denied",
+        chapterId: null,
+        chapterName: "Website",
+      },
+    });
+    expect(denied.envelope.status).toBe(403);
+
+    const doc = (
+      await mcpCall(api, read, "get_document", {
+        projectId: "website",
+      })
+    ).envelope;
     const chapters = structuredClone(doc.body.chapters);
     chapters.byId["password-reset"].title = "Updated through MCP";
     const body = {
@@ -67,40 +111,50 @@ describe("remote MCP", () => {
       selectedId: doc.body.selectedId,
     };
     const args = { projectId: "website", ifMatch: doc.etag, body };
-    expect((await call(write, "replace_document", args)).envelope.status).toBe(
-      200,
-    );
-    const conflict = await call(write, "replace_document", args);
+    expect(
+      (await mcpCall(api, write, "replace_document", args)).envelope.status,
+    ).toBe(200);
+    const conflict = await mcpCall(api, write, "replace_document", args);
     expect(conflict.envelope.status).toBe(412);
     expect(conflict.envelope.body.error.code).toBe("revision_conflict");
   });
 
-  it("isolates users and rejects cookies and unexpected hosts", async () => {
+  it("isolates users and rejects cookies, bad hosts and forged internal auth", async () => {
     api = await createTestApi();
-    const { cookie } = await api.login(
-      TEST_SUPER_ADMIN.email,
-      TEST_SUPER_ADMIN.password,
-    );
+    const cookie = await superCookie(api);
     const alice = await api.createMember(cookie, {
-      email: "alice@example.test",
+      email: "mcp-alice@example.test",
     });
-    const bob = await api.createMember(cookie, { email: "bob@example.test" });
-    const aliceToken = await api.createToken(alice.cookie, {
-      scopes: ["read", "write"],
+    const bob = await api.createMember(cookie, {
+      email: "mcp-bob@example.test",
     });
-    const bobToken = await api.createToken(bob.cookie, {
-      scopes: ["read", "write"],
-    });
-    const project = await call(aliceToken, "create_project", {
-      body: { name: "private" },
-    });
+    const aliceProject = await createProject(api, alice.cookie);
+    const bobProject = await createProject(api, bob.cookie);
+    const aliceToken = await api.createToken(alice.cookie, aliceProject.id);
+    const bobToken = await api.createToken(bob.cookie, bobProject.id);
+
+    const aliceList = await mcpCall(api, aliceToken, "list_projects");
+    expect(
+      aliceList.envelope.body.projects.map(
+        (project: { id: string }) => project.id,
+      ),
+    ).toEqual([aliceProject.id]);
+
     expect(
       (
-        await call(bobToken, "get_project", {
-          projectId: project.envelope.body.id,
+        await mcpCall(api, bobToken, "get_project", {
+          projectId: aliceProject.id,
         })
       ).envelope.status,
     ).toBe(404);
+    expect(
+      (
+        await mcpCall(api, aliceToken, "get_project", {
+          projectId: bobProject.id,
+        })
+      ).envelope.status,
+    ).toBe(404);
+
     const cookieOnly = await api.app.inject({
       method: "POST",
       url: "/mcp",
@@ -115,84 +169,86 @@ describe("remote MCP", () => {
       payload: {},
     });
     expect(badHost.statusCode).toBe(403);
+    const forged = await api.app.inject({
+      method: "GET",
+      url: "/api/v1/projects",
+      headers: { "x-layers-internal-auth": "forged.context" },
+    });
+    expect(forged.statusCode).toBe(401);
+    const forgedWithKey = await api.app.inject({
+      method: "GET",
+      url: "/api/v1/projects",
+      headers: {
+        authorization: `Bearer ${aliceToken}`,
+        "x-layers-internal-auth": "forged.context",
+      },
+    });
+    expect(forgedWithKey.statusCode).toBe(401);
   });
 
-  it("supports the project lifecycle and rejects revoked tokens", async () => {
+  it("supports the bound project lifecycle and revokes the key with the project", async () => {
     api = await createTestApi();
-    const { cookie, user } = await api.login(
-      TEST_SUPER_ADMIN.email,
-      TEST_SUPER_ADMIN.password,
-    );
-    const token = await api.createToken(cookie, { scopes: ["read", "write"] });
-    const created = (
-      await call(token, "create_project", { body: { name: "Lifecycle" } })
-    ).envelope;
-    const projectId = created.body.id;
-    expect((await call(token, "list_projects")).envelope.status).toBe(200);
-    const project = (await call(token, "get_project", { projectId })).envelope;
-    const updated = (
-      await call(token, "update_project", {
-        projectId,
-        ifMatch: project.etag,
-        body: { name: "Renamed" },
+    const cookie = await superCookie(api);
+    const token = await api.createToken(cookie, "website");
+
+    const project = (
+      await mcpCall(api, token, "get_project", {
+        projectId: "website",
       })
     ).envelope;
-    expect(updated.status).toBe(200);
+    expect(project.status).toBe(200);
+    const updated = await mcpCall(api, token, "update_project", {
+      projectId: "website",
+      ifMatch: project.etag,
+      body: { description: "Updated through MCP" },
+    });
+    expect(updated.envelope.status).toBe(200);
+    expect(updated.envelope.body.description).toBe("Updated through MCP");
+    const stale = await mcpCall(api, token, "update_project", {
+      projectId: "website",
+      ifMatch: project.etag,
+      body: { description: "Stale write" },
+    });
+    expect(stale.envelope.status).toBe(412);
+
+    const appended = await mcpCall(api, token, "append_activity", {
+      projectId: "website",
+      body: {
+        message: "MCP life cycle",
+        chapterId: null,
+        chapterName: "Website project",
+      },
+    });
+    expect(appended.envelope.status).toBe(201);
+    const activity = await mcpCall(api, token, "list_activity", {
+      projectId: "website",
+    });
+    expect(activity.envelope.status).toBe(200);
     expect(
-      (
-        await call(token, "update_project", {
-          projectId,
-          ifMatch: project.etag,
-          body: { name: "Stale" },
-        })
-      ).envelope.status,
-    ).toBe(412);
+      activity.envelope.body.events.some(
+        (event: { message: string }) => event.message === "MCP life cycle",
+      ),
+    ).toBe(true);
     expect(
-      (await call(token, "activate_project", { projectId })).envelope.status,
+      (await mcpCall(api, token, "get_coverage", { projectId: "website" }))
+        .envelope.status,
     ).toBe(200);
     expect(
-      (await call(token, "duplicate_project", { projectId })).envelope.status,
-    ).toBe(201);
-    expect(
-      (
-        await call(token, "append_activity", {
-          projectId,
-          body: { message: "Reviewed" },
-        })
-      ).envelope.status,
-    ).toBe(201);
-    expect(
-      (await call(token, "list_activity", { projectId, limit: 1 })).envelope
-        .status,
+      (await mcpCall(api, token, "export_project", { projectId: "website" }))
+        .envelope.status,
     ).toBe(200);
-    expect(
-      (await call(token, "get_coverage", { projectId })).envelope.status,
-    ).toBe(200);
-    const exported = (await call(token, "export_project", { projectId }))
-      .envelope;
-    expect(exported.status).toBe(200);
-    expect(
-      (await call(token, "import_project", { body: exported.body })).envelope
-        .status,
-    ).toBe(201);
-    expect(
-      (
-        await call(token, "delete_project", {
-          projectId,
-          ifMatch: project.etag,
-        })
-      ).envelope.status,
-    ).toBe(412);
-    expect(
-      (
-        await call(token, "delete_project", {
-          projectId,
-          ifMatch: updated.etag,
-        })
-      ).envelope.status,
-    ).toBe(200);
-    const [storedToken] = api.authStore.listApiTokens(user.id);
-    api.authStore.revokeApiToken(user.id, storedToken.id);
-    expect((await rpc(token, "tools/list")).status).toBe(401);
+
+    const current = (
+      await mcpCall(api, token, "get_project", {
+        projectId: "website",
+      })
+    ).envelope;
+    const removed = await mcpCall(api, token, "delete_project", {
+      projectId: "website",
+      ifMatch: current.etag,
+    });
+    expect(removed.envelope.status).toBe(200);
+    const afterDelete = await mcpRpc(api, token, "initialize", initialize);
+    expect(afterDelete.status).toBe(401);
   });
 });

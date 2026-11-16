@@ -165,7 +165,8 @@ export const createTokenSchema = z
       .max(2)
       .refine((scopes) => new Set(scopes).size === scopes.length, {
         message: "Scopes must be unique.",
-      }),
+      })
+      .optional(),
     expiresInDays: z.number().int().min(1).max(3650).optional(),
   })
   .strict();

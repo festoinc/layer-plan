@@ -886,24 +886,28 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
-  "/me/tokens": {
+  "/projects/{projectId}/tokens": {
     parameters: {
       query?: never;
       header?: never;
-      path?: never;
+      path: {
+        projectId: components["parameters"]["ProjectId"];
+      };
       cookie?: never;
     };
-    /** List API tokens */
+    /** List API keys for a project */
     get: {
       parameters: {
         query?: never;
         header?: never;
-        path?: never;
+        path: {
+          projectId: components["parameters"]["ProjectId"];
+        };
         cookie?: never;
       };
       requestBody?: never;
       responses: {
-        /** @description API tokens without secrets */
+        /** @description Project API keys without secrets */
         200: {
           headers: {
             [name: string]: unknown;
@@ -914,15 +918,18 @@ export interface paths {
         };
         401: components["responses"]["Unauthorized"];
         403: components["responses"]["Forbidden"];
+        404: components["responses"]["Error"];
       };
     };
     put?: never;
-    /** Create an API token */
+    /** Create an MCP API key for a project */
     post: {
       parameters: {
         query?: never;
         header?: never;
-        path?: never;
+        path: {
+          projectId: components["parameters"]["ProjectId"];
+        };
         cookie?: never;
       };
       requestBody: {
@@ -931,7 +938,7 @@ export interface paths {
         };
       };
       responses: {
-        /** @description Token created; the secret is returned once */
+        /** @description Key created; the secret is returned once */
         201: {
           headers: {
             [name: string]: unknown;
@@ -942,6 +949,7 @@ export interface paths {
         };
         401: components["responses"]["Unauthorized"];
         403: components["responses"]["Forbidden"];
+        404: components["responses"]["Error"];
         409: components["responses"]["Error"];
         422: components["responses"]["ValidationError"];
       };
@@ -952,11 +960,12 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
-  "/me/tokens/{tokenId}": {
+  "/projects/{projectId}/tokens/{tokenId}": {
     parameters: {
       query?: never;
       header?: never;
       path: {
+        projectId: components["parameters"]["ProjectId"];
         tokenId: string;
       };
       cookie?: never;
@@ -964,19 +973,20 @@ export interface paths {
     get?: never;
     put?: never;
     post?: never;
-    /** Revoke an API token */
+    /** Revoke a project API key */
     delete: {
       parameters: {
         query?: never;
         header?: never;
         path: {
+          projectId: components["parameters"]["ProjectId"];
           tokenId: string;
         };
         cookie?: never;
       };
       requestBody?: never;
       responses: {
-        /** @description Token revoked */
+        /** @description API key revoked */
         204: {
           headers: {
             [name: string]: unknown;
@@ -1348,6 +1358,7 @@ export interface components {
     };
     ApiTokenInfo: {
       id: string;
+      projectId: string;
       name: string;
       prefix: string;
       scopes: ("read" | "write")[];
@@ -1362,7 +1373,9 @@ export interface components {
     };
     CreateToken: {
       name: string;
-      scopes: ("read" | "write")[];
+      /** @description Defaults to read and write. */
+      scopes?: ("read" | "write")[];
+      /** @description Defaults to 3650 days. */
       expiresInDays?: number;
     };
     CreateTokenResponse: {

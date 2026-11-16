@@ -6,12 +6,14 @@ import {
   Copy,
   Trash2,
   ExternalLink,
+  KeyRound,
 } from "lucide-react";
 import { useFocusTrap } from "../hooks/useFocusTrap";
 
 export interface ProjectActionsMenuProps {
   projectName: string;
   onOpen: () => void;
+  onManageTokens: () => void;
   onRename: () => void;
   onDuplicate: () => void;
   onExport: () => void;
@@ -21,6 +23,7 @@ export interface ProjectActionsMenuProps {
 export function ProjectActionsMenu({
   projectName,
   onOpen,
+  onManageTokens,
   onRename,
   onDuplicate,
   onExport,
@@ -67,6 +70,14 @@ export function ProjectActionsMenu({
           <button type="button" role="menuitem" onClick={() => run(onRename)}>
             <Pencil size={15} />
             Rename and settings
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => run(onManageTokens)}
+          >
+            <KeyRound size={15} />
+            API keys
           </button>
           <button
             type="button"

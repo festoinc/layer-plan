@@ -26,6 +26,7 @@ export interface SessionRecord {
 export interface ApiTokenRecord {
   id: string;
   userId: string;
+  projectId: string;
   name: string;
   prefix: string;
   tokenHash: string;
@@ -52,6 +53,7 @@ export type AuthContext =
       method: "token";
       user: AuthUser;
       tokenId: string;
+      projectId: string;
       scopes: TokenScope[];
     };
 

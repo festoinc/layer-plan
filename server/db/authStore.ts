@@ -33,6 +33,7 @@ interface SessionRow {
 interface ApiTokenRow {
   id: string;
   user_id: string;
+  project_id: string;
   name: string;
   prefix: string;
   token_hash: string;
@@ -67,6 +68,7 @@ export interface CreateSessionInput {
 export interface CreateApiTokenInput {
   id?: string;
   userId: string;
+  projectId: string;
   name: string;
   prefix: string;
   tokenHash: string;
@@ -96,9 +98,9 @@ export interface AuthStore {
 
   createApiToken(input: CreateApiTokenInput): ApiTokenRecord;
   findApiTokenByHash(tokenHash: string): ApiTokenRecord | null;
-  listApiTokens(userId: string): ApiTokenRecord[];
+  listApiTokens(userId: string, projectId: string): ApiTokenRecord[];
   touchApiToken(id: string, lastUsedAt: string): void;
-  revokeApiToken(userId: string, id: string): boolean;
+  revokeApiToken(userId: string, projectId: string, id: string): boolean;
   countApiTokens(userId: string): number;
   pruneExpiredApiTokens(now: string): number;
 
@@ -146,6 +148,7 @@ function apiTokenFromRow(row: ApiTokenRow): ApiTokenRecord {
   return {
     id: row.id,
     userId: row.user_id,
+    projectId: row.project_id,
     name: row.name,
     prefix: row.prefix,
     tokenHash: row.token_hash,
@@ -342,13 +345,14 @@ export class SqliteAuthStore implements AuthStore {
     this.db
       .prepare(
         `INSERT INTO api_tokens (
-          id, user_id, name, prefix, token_hash, scopes,
+          id, user_id, project_id, name, prefix, token_hash, scopes,
           created_at, last_used_at, expires_at, revoked_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, NULL, ?, NULL)`,
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, NULL)`,
       )
       .run(
         id,
         input.userId,
+        input.projectId,
         input.name,
         input.prefix,
         input.tokenHash,
@@ -369,14 +373,14 @@ export class SqliteAuthStore implements AuthStore {
     return row ? apiTokenFromRow(row) : null;
   }
 
-  listApiTokens(userId: string): ApiTokenRecord[] {
+  listApiTokens(userId: string, projectId: string): ApiTokenRecord[] {
     const rows = this.db
       .prepare(
         `SELECT * FROM api_tokens
-         WHERE user_id = ?
+         WHERE user_id = ? AND project_id = ?
          ORDER BY created_at DESC, id DESC`,
       )
-      .all(userId) as ApiTokenRow[];
+      .all(userId, projectId) as ApiTokenRow[];
     return rows.map(apiTokenFromRow);
   }
 
@@ -386,14 +390,15 @@ export class SqliteAuthStore implements AuthStore {
       .run(lastUsedAt, id);
   }
 
-  revokeApiToken(userId: string, id: string): boolean {
+  revokeApiToken(userId: string, projectId: string, id: string): boolean {
     return (
       this.db
         .prepare(
           `UPDATE api_tokens SET revoked_at = ?
-           WHERE id = ? AND user_id = ? AND revoked_at IS NULL`,
+           WHERE id = ? AND user_id = ? AND project_id = ?
+             AND revoked_at IS NULL`,
         )
-        .run(this.now(), id, userId).changes > 0
+        .run(this.now(), id, userId, projectId).changes > 0
     );
   }
 

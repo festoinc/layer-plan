@@ -13,8 +13,8 @@ import { registerCoverageRoutes } from "./api/routes/coverage";
 import { registerDocumentRoutes } from "./api/routes/document";
 import { registerExportRoutes } from "./api/routes/exports";
 import { registerHealthRoutes } from "./api/routes/health";
-import { registerMeRoutes } from "./api/routes/me";
 import { registerProjectRoutes } from "./api/routes/projects";
+import { registerProjectTokenRoutes } from "./api/routes/projectTokens";
 import { registerTestRoutes } from "./api/routes/test";
 import { registerUserRoutes } from "./api/routes/users";
 import type { ServerConfig } from "./config";
@@ -113,7 +113,7 @@ export async function buildApp({
 
   registerHealthRoutes(app, store);
   registerAuthRoutes(app, { config, authStore, hooks, passwordHasher });
-  registerMeRoutes(app, authStore, hooks);
+  registerProjectTokenRoutes(app, store, authStore, hooks, now);
   registerUserRoutes(app, authStore, hooks, passwordHasher);
   registerProjectRoutes(app, store, hooks);
   registerDocumentRoutes(app, store, hooks);

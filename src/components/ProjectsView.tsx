@@ -9,6 +9,7 @@ export interface ProjectsViewProps {
   standalone?: boolean;
   onOpenProject: (id: string) => void;
   onNewProject: () => void;
+  onManageProjectTokens: (project: ProjectSummary) => void;
   onEditProject: (project: ProjectSummary) => void;
   onDuplicateProject: (project: ProjectSummary) => void;
   onExportProject: (project: ProjectSummary) => void;
@@ -22,6 +23,7 @@ export function ProjectsView({
   standalone = false,
   onOpenProject,
   onNewProject,
+  onManageProjectTokens,
   onEditProject,
   onDuplicateProject,
   onExportProject,
@@ -96,6 +98,7 @@ export function ProjectsView({
               project={project}
               active={project.id === activeProjectId}
               onOpen={() => onOpenProject(project.id)}
+              onManageTokens={() => onManageProjectTokens(project)}
               onRename={() => onEditProject(project)}
               onDuplicate={() => onDuplicateProject(project)}
               onExport={() => onExportProject(project)}
