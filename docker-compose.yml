@@ -1,0 +1,23 @@
+services:
+  app:
+    image: ghcr.io/festoinc/layer-plan:latest
+    container_name: layers
+    restart: unless-stopped
+    pull_policy: always
+    init: true
+    ports:
+      - "${LAYERS_HTTP_PORT:-80}:3001"
+    env_file: .env
+    environment:
+      HOST: 0.0.0.0
+      PORT: "3001"
+      LAYERS_ALLOW_REMOTE: "1"
+      LAYERS_DB_PATH: /app/data/layers.sqlite
+      LAYERS_SEED_SAMPLES: "0"
+    volumes:
+      - layers-data:/app/data
+    stop_grace_period: 15s
+
+volumes:
+  layers-data:
+    name: layers-data

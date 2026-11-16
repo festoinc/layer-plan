@@ -5,6 +5,9 @@ on:
     branches: [main]
   pull_request:
 
+permissions:
+  contents: read
+
 jobs:
   verify:
     runs-on: ubuntu-latest
@@ -27,3 +30,109 @@ jobs:
       - run: npm run build
       - run: npx playwright install --with-deps chromium
       - run: npm run test:e2e
+
+  docker:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    concurrency:
+      group: docker-main
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Short commit SHA
+        id: short
+        run: echo "sha=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build image for smoke test
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          load: true
+          tags: layers-ci:smoke
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args: |
+            VERSION=${{ github.sha }}
+            REVISION=${{ github.sha }}
+            BUILD_DATE=${{ github.event.head_commit.timestamp }}
+
+      - name: Smoke test container
+        run: bash scripts/docker-smoke.sh layers-ci:smoke
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Push latest and sha tags
+        id: push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: |
+            ghcr.io/festoinc/layer-plan:latest
+            ghcr.io/festoinc/layer-plan:sha-${{ steps.short.outputs.sha }}
+          cache-from: type=gha
+          build-args: |
+            VERSION=${{ github.sha }}
+            REVISION=${{ github.sha }}
+            BUILD_DATE=${{ github.event.head_commit.timestamp }}
+
+      - name: Verify both tags share the pushed digest
+        env:
+          DIGEST: ${{ steps.push.outputs.digest }}
+          SHORT_SHA: ${{ steps.short.outputs.sha }}
+        run: |
+          set -euo pipefail
+          image="ghcr.io/festoinc/layer-plan"
+          latest="$(docker buildx imagetools inspect "$image:latest" --format '{{.Manifest.Digest}}')"
+          sha="$(docker buildx imagetools inspect "$image:sha-$SHORT_SHA" --format '{{.Manifest.Digest}}')"
+          echo "pushed=$DIGEST latest=$latest sha=$sha"
+          if [ "$latest" != "$DIGEST" ] || [ "$sha" != "$DIGEST" ]; then
+            echo "::error::Published tags do not share the pushed digest."
+            exit 1
+          fi
+
+      - name: Delete older package versions
+        uses: actions/delete-package-versions@v5
+        with:
+          package-name: layer-plan
+          package-type: container
+          min-versions-to-keep: 1
+          delete-only-untagged-versions: false
+
+      - name: Verify retained tags still point at the new image
+        env:
+          DIGEST: ${{ steps.push.outputs.digest }}
+          SHORT_SHA: ${{ steps.short.outputs.sha }}
+        run: |
+          set -euo pipefail
+          image="ghcr.io/festoinc/layer-plan"
+          latest="$(docker buildx imagetools inspect "$image:latest" --format '{{.Manifest.Digest}}')"
+          sha="$(docker buildx imagetools inspect "$image:sha-$SHORT_SHA" --format '{{.Manifest.Digest}}')"
+          echo "pushed=$DIGEST latest=$latest sha=$sha"
+          if [ "$latest" != "$DIGEST" ] || [ "$sha" != "$DIGEST" ]; then
+            echo "::error::A retained tag no longer points at the new image."
+            exit 1
+          fi
+
+      - name: Write job summary
+        run: |
+          {
+            echo "## Docker image"
+            echo ""
+            echo "- image: \`ghcr.io/festoinc/layer-plan\`"
+            echo "- tags: \`latest\`, \`sha-${{ steps.short.outputs.sha }}\`"
+            echo "- digest: \`${{ steps.push.outputs.digest }}\`"
+            echo "- commit: \`${{ github.sha }}\`"
+          } >> "$GITHUB_STEP_SUMMARY"

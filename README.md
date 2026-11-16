@@ -74,8 +74,77 @@ examples are in [`docs/api.md`](docs/api.md).
 | `VITE_API_URL`                     | `/api/v1`               | Browser API base URL                                |
 
 The server refuses a non-loopback bind unless `LAYERS_ALLOW_REMOTE=1`.
-Authentication is always required outside test mode. Keep the default loopback
-bind; this phase does not provide TLS or remote deployment.
+Authentication is always required outside test mode. The default loopback bind
+is for local development; the Docker image uses a non-loopback bind. Remote
+deployment is documented below.
+
+## Docker image
+
+Every push to `main` publishes a public `linux/amd64` image to GitHub Container
+Registry after the CI quality gate passes:
+
+```sh
+docker pull ghcr.io/festoinc/layer-plan:latest
+```
+
+Tags are `latest` and `sha-<7>`. Only the newest published version is kept, so
+there is no digest rollback: reverting means reverting the commit. No nginx or
+other process is included; Fastify serves the built UI and the API from the same
+container on port `3001`.
+
+The image contains production artefacts only, runs as the non-root `node` user,
+and reads its SQLite database from `/app/data/layers.sqlite`. Sample seeding is
+off, so a fresh install starts with no projects.
+
+### Run with Compose
+
+`docker-compose.yml` runs the app with a named volume, publishes port 80 by
+default and reads configuration from `.env`:
+
+```sh
+cp .env.example .env
+# edit LAYERS_SUPER_ADMIN_EMAIL and LAYERS_SUPER_ADMIN_PASSWORD
+docker compose pull
+docker compose up -d
+docker compose ps
+```
+
+Open `http://<server>/`. Set `LAYERS_HTTP_PORT` in `.env` if port 80 is
+occupied. `docker compose pull && docker compose up -d` upgrades to the newest
+image; the `layers-data` volume survives restart and upgrade.
+
+Standalone equivalent:
+
+```sh
+docker run -d --name layers --restart unless-stopped -p 80:3001 \
+  -e LAYERS_SUPER_ADMIN_EMAIL=admin@example.com \
+  -e LAYERS_SUPER_ADMIN_PASSWORD='at-least-12-characters' \
+  -v layers-data:/app/data \
+  ghcr.io/festoinc/layer-plan:latest
+```
+
+The image defaults `HOST=0.0.0.0`, `LAYERS_ALLOW_REMOTE=1`,
+`LAYERS_DB_PATH=/app/data/layers.sqlite` and `LAYERS_SEED_SAMPLES=0`.
+`LAYERS_SUPER_ADMIN_EMAIL` and `LAYERS_SUPER_ADMIN_PASSWORD` are always
+required. Changing the password in `.env` and restarting re-syncs the super
+admin and revokes their sessions.
+
+### Persistence and backup
+
+Data lives in the `layers-data` volume. A host bind mount also works but must be
+writable by uid/gid `1000`. Back up with the container stopped so the SQLite WAL
+is consistent:
+
+```sh
+docker compose stop app
+docker run --rm -v layers-data:/data:ro -v "$PWD":/backup \
+  alpine tar czf /backup/layers-data.tar.gz -C /data .
+docker compose start app
+```
+
+There is no TLS, reverse proxy or automatic deployment. Do not expose the port
+publicly without a TLS terminator; `LAYERS_SECURE_COOKIES=1` is only correct
+behind HTTPS. The health endpoint is `GET /api/v1/health`.
 
 ## Authentication and accounts
 
@@ -308,8 +377,10 @@ accessibility (axe) and focus management.
   project roles, sharing and invitations are not.
 - No password change, password recovery, email verification or email delivery.
   A forgotten password requires disabling the account and creating a new one.
-- No remote deployment, TLS, Postgres support or database selection yet. All SQL
-  stays behind `server/db` so that work can be added later.
+- A public `linux/amd64` Docker image is published, but deployment is manual.
+  There is no TLS, reverse proxy, automated deployment, ARM image or database
+  selection yet. All SQL stays behind `server/db` so that work can be added
+  later.
 - No offline mode. The app requires the local API.
 - No WebSocket/SSE live updates. A tab refreshes on focus and uses optimistic
   conflict handling for concurrent writes.
@@ -331,4 +402,6 @@ accessibility (axe) and focus management.
 - **ESLint + Prettier** — lint and formatting checks.
 - **OpenAPI** — Redocly lint, generated types and a served Scalar reference.
 - **CI** — `.github/workflows/ci.yml` runs the full quality gate on pushes and
-  pull requests.
+  pull requests. On a push to `main` it also builds the Docker image,
+  smoke-tests the container and publishes `latest` and `sha-<7>` to GHCR,
+  deleting older package versions.
