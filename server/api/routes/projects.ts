@@ -21,7 +21,26 @@ export function registerProjectRoutes(
   app.get(
     "/api/v1/projects",
     { preHandler: hooks.requireAuth },
-    async (request) => store.listProjects(request.auth!.user.id),
+    async (request) => {
+      const auth = request.auth!;
+      if (auth.method === "token") {
+        const project = store.getProject(auth.user.id, auth.projectId);
+        if (!project) {
+          throw new ApiError(404, "not_found", "The project does not exist.");
+        }
+        const {
+          testGuidelines: _testGuidelines,
+          metadataRevision: _metadataRevision,
+          documentRevision: _documentRevision,
+          ...summary
+        } = project;
+        return {
+          projects: [summary],
+          activeProjectId: auth.projectId,
+        };
+      }
+      return store.listProjects(auth.user.id);
+    },
   );
 
   app.post(

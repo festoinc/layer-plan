@@ -5,6 +5,7 @@ export interface ProjectCardProps {
   project: ProjectSummary;
   active: boolean;
   onOpen: () => void;
+  onManageTokens: () => void;
   onRename: () => void;
   onDuplicate: () => void;
   onExport: () => void;
@@ -28,6 +29,7 @@ export function ProjectCard({
   project,
   active,
   onOpen,
+  onManageTokens,
   onRename,
   onDuplicate,
   onExport,
@@ -57,6 +59,7 @@ export function ProjectCard({
         <ProjectActionsMenu
           projectName={project.name}
           onOpen={onOpen}
+          onManageTokens={onManageTokens}
           onRename={onRename}
           onDuplicate={onDuplicate}
           onExport={onExport}

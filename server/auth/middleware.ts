@@ -6,6 +6,8 @@ import type {
 import type { ServerConfig } from "../config";
 import type { AuthStore } from "../db/authStore";
 import { ApiError } from "../api/errors";
+import { INTERNAL_AUTH_HEADER, createInternalAuth } from "./internal";
+import type { InternalAuth } from "./internal";
 import { hashToken, tokenAllows } from "./tokens";
 import { publicUser } from "./types";
 
@@ -24,6 +26,7 @@ export interface AuthHooks {
   requireMcpToken: preHandlerHookHandler;
   requireSession: preHandlerHookHandler;
   requireSuperAdmin: preHandlerHookHandler;
+  internalAuth: InternalAuth;
 }
 
 function unauthenticated(message = "Sign in to continue."): ApiError {
@@ -60,15 +63,77 @@ function assertOrigin(request: FastifyRequest, config: ServerConfig): void {
   }
 }
 
+function projectScopeAllows(
+  request: FastifyRequest,
+  projectId: string,
+): boolean {
+  const url = (request.raw.url ?? request.url ?? "").split("?")[0] ?? "";
+  if (!url.startsWith("/api/v1/projects")) return true;
+  if (
+    url === "/api/v1/projects" &&
+    (request.method === "GET" || request.method === "HEAD")
+  ) {
+    return true;
+  }
+  const match = /^\/api\/v1\/projects\/([^/]+)/.exec(url);
+  if (!match) return false;
+  try {
+    return decodeURIComponent(match[1]) === projectId;
+  } catch {
+    return false;
+  }
+}
+
+function internalHeaderValue(request: FastifyRequest): string | null {
+  const value = request.headers[INTERNAL_AUTH_HEADER];
+  if (value === undefined) return null;
+  return Array.isArray(value) ? (value[0] ?? "") : value;
+}
+
 export function createAuthHooks({
   config,
   authStore,
   now = () => new Date().toISOString(),
 }: AuthHookOptions): AuthHooks {
+  const internalAuth = createInternalAuth();
+
   const authenticate = async (
     request: FastifyRequest,
     mcp = false,
   ): Promise<void> => {
+    if (!mcp) {
+      const internalValue = internalHeaderValue(request);
+      if (internalValue !== null) {
+        const context = internalAuth.verify(internalValue);
+        if (!context) {
+          throw unauthenticated("The request could not be authenticated.");
+        }
+        const user = authStore.getUser(context.userId);
+        if (!user || user.disabledAt) {
+          throw unauthenticated("The account is disabled.");
+        }
+        if (!tokenAllows(context.scopes, request.method)) {
+          throw new ApiError(
+            403,
+            "forbidden",
+            "The API key does not allow this operation.",
+            { requiredScope: request.method === "GET" ? "read" : "write" },
+          );
+        }
+        if (!projectScopeAllows(request, context.projectId)) {
+          throw new ApiError(404, "not_found", "The project does not exist.");
+        }
+        request.auth = {
+          method: "token",
+          user: publicUser(user),
+          tokenId: context.tokenId,
+          projectId: context.projectId,
+          scopes: context.scopes,
+        };
+        return;
+      }
+    }
+
     const authorization = request.headers.authorization;
     if (authorization) {
       const match = /^Bearer\s+(.+)$/i.exec(authorization.trim());
@@ -81,18 +146,17 @@ export function createAuthHooks({
         (token.expiresAt &&
           Date.parse(token.expiresAt) <= Date.parse(timestamp))
       ) {
-        throw unauthenticated("The API token is invalid or expired.");
+        throw unauthenticated("The API key is invalid or expired.");
       }
       const user = authStore.getUser(token.userId);
       if (!user || user.disabledAt) {
         throw unauthenticated("The account is disabled.");
       }
-      if (!mcp && !tokenAllows(token.scopes, request.method)) {
+      if (!mcp) {
         throw new ApiError(
           403,
           "forbidden",
-          "The API token does not allow this operation.",
-          { requiredScope: request.method === "GET" ? "read" : "write" },
+          "Project API keys are only valid for the MCP endpoint.",
         );
       }
       if (
@@ -106,12 +170,13 @@ export function createAuthHooks({
         method: "token",
         user: publicUser(user),
         tokenId: token.id,
+        projectId: token.projectId,
         scopes: token.scopes,
       };
       return;
     }
 
-    if (mcp) throw unauthenticated("An API bearer token is required.");
+    if (mcp) throw unauthenticated("A project API key is required.");
     const rawToken = request.cookies?.[SESSION_COOKIE];
     if (!rawToken) throw unauthenticated();
     const session = authStore.findSessionByTokenHash(hashToken(rawToken));
@@ -157,7 +222,7 @@ export function createAuthHooks({
       throw new ApiError(
         403,
         "forbidden",
-        "This endpoint requires a browser session, not an API token.",
+        "This endpoint requires a browser session, not an API key.",
       );
     }
   };
@@ -171,7 +236,7 @@ export function createAuthHooks({
       throw new ApiError(
         403,
         "forbidden",
-        "This endpoint requires a browser session, not an API token.",
+        "This endpoint requires a browser session, not an API key.",
       );
     }
     if (request.auth.user.role !== "super_admin") {
@@ -183,7 +248,13 @@ export function createAuthHooks({
     }
   };
 
-  return { requireAuth, requireMcpToken, requireSession, requireSuperAdmin };
+  return {
+    requireAuth,
+    requireMcpToken,
+    requireSession,
+    requireSuperAdmin,
+    internalAuth,
+  };
 }
 
 export { SESSION_COOKIE, sessionExpiry };

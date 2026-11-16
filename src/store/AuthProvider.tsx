@@ -13,7 +13,7 @@ import {
   isUnauthenticated,
   UNAUTHORIZED_EVENT,
 } from "../api/client";
-import type { ApiTokenInfo, AuthUser, SessionInfo } from "../api/types";
+import type { AuthUser, SessionInfo } from "../api/types";
 
 export type AuthStatus =
   "loading" | "unauthenticated" | "authenticated" | "error";
@@ -32,13 +32,6 @@ export interface AuthContextValue {
   listSessions: () => Promise<SessionInfo[]>;
   revokeSession: (id: string) => Promise<void>;
   revokeOtherSessions: () => Promise<void>;
-  listTokens: () => Promise<ApiTokenInfo[]>;
-  createToken: (input: {
-    name: string;
-    scopes: Array<"read" | "write">;
-    expiresInDays?: number;
-  }) => Promise<{ token: string; tokenInfo: ApiTokenInfo }>;
-  revokeToken: (id: string) => Promise<void>;
   listUsers: () => Promise<AuthUser[]>;
   createUser: (input: {
     email: string;
@@ -140,27 +133,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await authApi.revokeOtherSessions();
   }, []);
 
-  const listTokens = useCallback(async () => {
-    const result = await authApi.listTokens();
-    return result.tokens;
-  }, []);
-
-  const createToken = useCallback(
-    async (input: {
-      name: string;
-      scopes: Array<"read" | "write">;
-      expiresInDays?: number;
-    }) => {
-      const result = await authApi.createToken(input);
-      return { token: result.token, tokenInfo: result.tokenInfo };
-    },
-    [],
-  );
-
-  const revokeToken = useCallback(async (id: string) => {
-    await authApi.revokeToken(id);
-  }, []);
-
   const listUsers = useCallback(async () => {
     const result = await authApi.listUsers();
     return result.users;
@@ -191,9 +163,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       listSessions,
       revokeSession,
       revokeOtherSessions,
-      listTokens,
-      createToken,
-      revokeToken,
       listUsers,
       createUser,
       setUserDisabled,
@@ -210,9 +179,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       listSessions,
       revokeSession,
       revokeOtherSessions,
-      listTokens,
-      createToken,
-      revokeToken,
       listUsers,
       createUser,
       setUserDisabled,

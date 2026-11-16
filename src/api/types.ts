@@ -98,6 +98,7 @@ export interface SessionsResponse {
 
 export interface ApiTokenInfo {
   id: string;
+  projectId: string;
   name: string;
   prefix: string;
   scopes: string[];

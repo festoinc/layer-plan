@@ -5,6 +5,10 @@ export function randomId(prefix: string, bytes = 12): string {
   return `${prefix}${randomBytes(bytes).toString("base64url")}`;
 }
 
+export const MAX_ACTIVE_API_TOKENS = 20;
+export const DEFAULT_API_TOKEN_EXPIRY_DAYS = 3650;
+export const MAX_API_TOKEN_EXPIRY_DAYS = 3650;
+
 export function randomToken(bytes = 32): string {
   return randomBytes(bytes).toString("base64url");
 }

@@ -5,7 +5,6 @@ import addFormats from "ajv-formats";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
   authHeaders,
-  bearerHeaders,
   createTestApi,
   docRequest,
   json,
@@ -59,8 +58,6 @@ const expectedPaths = [
   "/auth/sessions",
   "/auth/sessions/{sessionId}",
   "/me",
-  "/me/tokens",
-  "/me/tokens/{tokenId}",
   "/users",
   "/users/{userId}",
   "/projects",
@@ -71,25 +68,21 @@ const expectedPaths = [
   "/projects/{projectId}/document",
   "/projects/{projectId}/duplicate",
   "/projects/{projectId}/export",
+  "/projects/{projectId}/tokens",
+  "/projects/{projectId}/tokens/{tokenId}",
   "/projects/import",
 ].sort();
 
 describe("OpenAPI contract", () => {
-  it("documents every API route and both security schemes", () => {
+  it("documents every REST route and the session security scheme", () => {
     expect(Object.keys(apiDoc.paths).sort()).toEqual(expectedPaths);
     expect(apiDoc.components.securitySchemes.sessionCookie).toMatchObject({
       type: "apiKey",
       in: "cookie",
       name: "layers_session",
     });
-    expect(apiDoc.components.securitySchemes.bearerAuth).toMatchObject({
-      type: "http",
-      scheme: "bearer",
-    });
-    expect(apiDoc.security).toEqual([
-      { sessionCookie: [] },
-      { bearerAuth: [] },
-    ]);
+    expect(apiDoc.components.securitySchemes.bearerAuth).toBeUndefined();
+    expect(apiDoc.security).toEqual([{ sessionCookie: [] }]);
   });
 
   it("marks public routes and documents 401/403 on protected routes", () => {
@@ -196,22 +189,26 @@ describe("OpenAPI contract", () => {
 
     const tokens = await api.app.inject({
       method: "GET",
-      url: "/api/v1/me/tokens",
+      url: "/api/v1/projects/website/tokens",
       headers: authHeaders(superCookie),
     });
-    expectValid(schemaAt("/me/tokens", "get", "200"), json(tokens), "tokens");
+    expectValid(
+      schemaAt("/projects/{projectId}/tokens", "get", "200"),
+      json(tokens),
+      "tokens",
+    );
 
     const createdToken = await api.app.inject({
       method: "POST",
-      url: "/api/v1/me/tokens",
+      url: "/api/v1/projects/website/tokens",
       ...docRequest(
-        { name: "Contract token", scopes: ["read"] },
+        { name: "Contract key", scopes: ["read"] },
         authHeaders(superCookie),
       ),
     });
     expect(createdToken.statusCode).toBe(201);
     expectValid(
-      schemaAt("/me/tokens", "post", "201"),
+      schemaAt("/projects/{projectId}/tokens", "post", "201"),
       json(createdToken),
       "create token",
     );
@@ -311,8 +308,7 @@ describe("OpenAPI contract", () => {
     );
   });
 
-  it("matches activity and import responses with bearer tokens", async () => {
-    const token = await api.createToken(superCookie);
+  it("matches activity and import responses with a browser session", async () => {
     const activity = await api.app.inject({
       method: "POST",
       url: "/api/v1/projects/website/activity",
@@ -321,7 +317,10 @@ describe("OpenAPI contract", () => {
         chapterId: null,
         chapterName: "Website project",
       },
-      headers: { ...bearerHeaders(token), "content-type": "application/json" },
+      headers: {
+        ...authHeaders(superCookie),
+        "content-type": "application/json",
+      },
     });
     expect(activity.statusCode).toBe(201);
     expectValid(
@@ -333,14 +332,14 @@ describe("OpenAPI contract", () => {
     const exported = await api.app.inject({
       method: "GET",
       url: "/api/v1/projects/website/export",
-      headers: bearerHeaders(token),
+      headers: authHeaders(superCookie),
     });
     expect(exported.statusCode).toBe(200);
     const imported = await api.app.inject({
       method: "POST",
       url: "/api/v1/projects/import",
       headers: {
-        ...bearerHeaders(token),
+        ...authHeaders(superCookie),
         "content-type": "application/json",
       },
       payload: exported.payload,

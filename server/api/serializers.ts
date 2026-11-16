@@ -50,6 +50,7 @@ export function loginSessionJson(session: SessionRecord): {
 
 export function apiTokenJson(token: ApiTokenRecord): {
   id: string;
+  projectId: string;
   name: string;
   prefix: string;
   scopes: string[];
@@ -60,6 +61,7 @@ export function apiTokenJson(token: ApiTokenRecord): {
 } {
   return {
     id: token.id,
+    projectId: token.projectId,
     name: token.name,
     prefix: token.prefix,
     scopes: token.scopes,

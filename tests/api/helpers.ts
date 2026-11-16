@@ -39,7 +39,12 @@ export interface TestApi {
   ) => Promise<{ user: TestUser; cookie: string; password: string }>;
   createToken: (
     cookie: string,
-    input?: { name?: string; scopes?: Array<"read" | "write"> },
+    projectId: string,
+    input?: {
+      name?: string;
+      scopes?: Array<"read" | "write">;
+      expiresInDays?: number;
+    },
   ) => Promise<string>;
 }
 
@@ -156,17 +161,22 @@ export async function createTestApi(
 
   async function createToken(
     cookie: string,
+    projectId: string,
     input: {
       name?: string;
       scopes?: Array<"read" | "write">;
+      expiresInDays?: number;
     } = {},
   ): Promise<string> {
     const response = await app.inject({
       method: "POST",
-      url: "/api/v1/me/tokens",
+      url: `/api/v1/projects/${encodeURIComponent(projectId)}/tokens`,
       payload: {
-        name: input.name ?? "Test token",
+        name: input.name ?? "Test API key",
         scopes: input.scopes ?? ["read", "write"],
+        ...(input.expiresInDays === undefined
+          ? {}
+          : { expiresInDays: input.expiresInDays }),
       },
       headers: authHeaders(cookie),
     });
@@ -199,6 +209,42 @@ export function authHeaders(cookie: string): Record<string, string> {
 
 export function bearerHeaders(token: string): Record<string, string> {
   return { authorization: `Bearer ${token}` };
+}
+
+export async function mcpRpc(
+  testApi: TestApi,
+  token: string,
+  method: string,
+  params: object = {},
+) {
+  const response = await testApi.app.inject({
+    method: "POST",
+    url: "/mcp",
+    headers: {
+      authorization: `Bearer ${token}`,
+      accept: "application/json, text/event-stream",
+      "content-type": "application/json",
+      host: "localhost",
+    },
+    payload: { jsonrpc: "2.0", id: 1, method, params },
+  });
+  return { status: response.statusCode, body: JSON.parse(response.payload) };
+}
+
+export async function mcpCall(
+  testApi: TestApi,
+  token: string,
+  name: string,
+  args: object = {},
+) {
+  const result = await mcpRpc(testApi, token, "tools/call", {
+    name,
+    arguments: args,
+  });
+  return {
+    ...result,
+    envelope: JSON.parse(result.body.result.content[0].text),
+  };
 }
 
 export function json(response: { payload: string }) {

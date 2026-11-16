@@ -1,4 +1,4 @@
-# AGENTS template — Layers project documentation
+# Layers agent guide — project documentation over MCP
 
 ## Your role
 
@@ -56,36 +56,38 @@ This repository contains Layers, a local project-specification workspace.
 - Short API examples: `docs/api.md`
 - SQLite database: `data/layers.sqlite` by default
 
-The API is local-only and authenticated. Browser clients use an `HttpOnly`
-session cookie. You must use a bearer API token and never ask the person for
-their password. Do not expose the API beyond loopback. Do not change `HOST` to a
-public interface unless the person explicitly asks for that and understands the
-security implications.
+The REST API is local-only by default and authenticated. Browser clients use an
+`HttpOnly` session cookie. MCP clients use a project API key for `/mcp`; never
+ask the person for their password or key. Do not expose the REST API beyond
+loopback. Do not change `HOST` to a public interface unless the person explicitly
+asks for that and understands the security implications.
 
 The API is the source of truth. Do not edit SQLite directly, do not use browser
 `localStorage`, and do not modify files under `data/` while the API is running.
 
 ## Authentication for agents
 
-Ask the person to create an API token on the account page (`#/account`) or in
-the UI, then set it in the environment:
+Use the Layers MCP endpoint at `/mcp` with a project API key. The person creates
+the key in the project actions menu (**API keys**). The key is bound to exactly
+one project and is accepted only by `/mcp`; it cannot call the REST API. Never
+ask for the key in chat. Put it in the MCP client environment, for example
+`LAYERS_API_TOKEN`, and configure the client to send it as a bearer token to
+`https://<domain>/mcp`.
+
+The REST examples below are for a signed-in browser session, not for a project
+key. Use a cookie jar from `curl -c` / `curl -b`:
 
 ```sh
-export LAYERS_API_TOKEN=lrs_...
-AUTH="Authorization: Bearer $LAYERS_API_TOKEN"
+AUTH='-b /tmp/layers-cookies.txt'
 ```
 
-Use `-H "$AUTH"` on every project, document, activity, coverage and export call.
-The token inherits that user's project access. It cannot manage users, sessions
-or other tokens. A read-only token can list and read; it cannot write.
+Use `$AUTH` on every REST call. Project ids are private to their owner. Another
+user's project returns `404`, including for the super admin. Never assume a
+project id belongs to the current session's user.
 
-When the API returns `401 unauthenticated`, stop and ask for a new token. Do not
-retry in a loop. When it returns `403 forbidden`, the token scope or account
-role is insufficient.
-
-Project ids are private to their owner. Another user's project returns `404`,
-including for the super admin. Never assume a project id belongs to the current
-token's user.
+When MCP returns `401 unauthenticated`, stop and ask for a new key. Do not retry
+in a loop. `403 forbidden` means the key scope does not allow the operation or
+the project does not match the key.
 
 ## Start or check the stack
 
@@ -120,29 +122,30 @@ npm run api:lint      # validate the OpenAPI document
 
 Base URL: `http://127.0.0.1:3001/api/v1`
 
-| Method       | Path                      | Purpose                            |
-| ------------ | ------------------------- | ---------------------------------- |
-| `POST`       | `/auth/login`             | Browser sign-in; sets a cookie     |
-| `POST`       | `/auth/logout`            | Browser sign-out                   |
-| `GET`        | `/auth/session`           | Current browser session            |
-| `GET`        | `/me`                     | Current user for either credential |
-| `GET/DELETE` | `/auth/sessions`          | List or revoke other sessions      |
-| `GET/POST`   | `/me/tokens`              | List or create API tokens          |
-| `GET/POST`   | `/users`                  | Super-admin user management        |
-| `GET`        | `/projects`               | List projects and active project   |
-| `POST`       | `/projects`               | Create a project                   |
-| `GET`        | `/projects/:id`           | Read metadata and guidelines       |
-| `PATCH`      | `/projects/:id`           | Update metadata or guidelines      |
-| `DELETE`     | `/projects/:id`           | Delete a project                   |
-| `POST`       | `/projects/:id/duplicate` | Duplicate a project                |
-| `POST`       | `/projects/:id/activate`  | Set the active project             |
-| `GET`        | `/projects/:id/document`  | Read the document                  |
-| `PUT`        | `/projects/:id/document`  | Replace the document               |
-| `GET`        | `/projects/:id/activity`  | Read activity                      |
-| `POST`       | `/projects/:id/activity`  | Append an activity entry           |
-| `GET`        | `/projects/:id/coverage`  | Read verification coverage         |
-| `GET`        | `/projects/:id/export`    | Download a project file            |
-| `POST`       | `/projects/import`        | Import a project file              |
+| Method       | Path                            | Purpose                            |
+| ------------ | ------------------------------- | ---------------------------------- |
+| `POST`       | `/auth/login`                   | Browser sign-in; sets a cookie     |
+| `POST`       | `/auth/logout`                  | Browser sign-out                   |
+| `GET`        | `/auth/session`                 | Current browser session            |
+| `GET`        | `/me`                           | Current user for a browser session |
+| `GET/DELETE` | `/auth/sessions`                | List or revoke other sessions      |
+| `GET/POST`   | `/projects/:id/tokens`          | List or create MCP keys            |
+| `DELETE`     | `/projects/:id/tokens/:tokenId` | Revoke a project key               |
+| `GET/POST`   | `/users`                        | Super-admin user management        |
+| `GET`        | `/projects`                     | List projects and active project   |
+| `POST`       | `/projects`                     | Create a project                   |
+| `GET`        | `/projects/:id`                 | Read metadata and guidelines       |
+| `PATCH`      | `/projects/:id`                 | Update metadata or guidelines      |
+| `DELETE`     | `/projects/:id`                 | Delete a project                   |
+| `POST`       | `/projects/:id/duplicate`       | Duplicate a project                |
+| `POST`       | `/projects/:id/activate`        | Set the active project             |
+| `GET`        | `/projects/:id/document`        | Read the document                  |
+| `PUT`        | `/projects/:id/document`        | Replace the document               |
+| `GET`        | `/projects/:id/activity`        | Read activity                      |
+| `POST`       | `/projects/:id/activity`        | Append an activity entry           |
+| `GET`        | `/projects/:id/coverage`        | Read verification coverage         |
+| `GET`        | `/projects/:id/export`          | Download a project file            |
+| `POST`       | `/projects/import`              | Import a project file              |
 
 See `server/api/openapi.yaml` for exact request and response schemas. When the
 contract and an old example disagree, the OpenAPI document wins.
@@ -152,7 +155,7 @@ contract and an old example disagree, the OpenAPI document wins.
 1. List projects:
 
 ```sh
-curl -sS -H "$AUTH" http://127.0.0.1:3001/api/v1/projects
+curl -sS $AUTH http://127.0.0.1:3001/api/v1/projects
 ```
 
 2. Read the project and its document. Save the document `ETag`:
@@ -160,10 +163,10 @@ curl -sS -H "$AUTH" http://127.0.0.1:3001/api/v1/projects
 ```sh
 PROJECT_ID=website
 
-curl -sS -H "$AUTH" -D /tmp/layers-project.headers \
+curl -sS $AUTH -D /tmp/layers-project.headers \
   "http://127.0.0.1:3001/api/v1/projects/$PROJECT_ID"
 
-curl -sS -H "$AUTH" -D /tmp/layers-document.headers \
+curl -sS $AUTH -D /tmp/layers-document.headers \
   "http://127.0.0.1:3001/api/v1/projects/$PROJECT_ID/document" \
   -o /tmp/layers-document.json
 ```
@@ -256,7 +259,7 @@ REVISION=$(awk 'tolower($1) == "etag:" { gsub(/"/, "", $2); print $2 }' \
 3. Send the complete document with `If-Match`:
 
 ```sh
-curl -sS -H "$AUTH" -X PUT \
+curl -sS $AUTH -X PUT \
   "http://127.0.0.1:3001/api/v1/projects/$PROJECT_ID/document" \
   -H 'Content-Type: application/json' \
   -H "If-Match: \"$REVISION\"" \
@@ -313,7 +316,7 @@ For a document write, include new entries in the `activity` array. For a
 standalone note, use:
 
 ```sh
-curl -sS -H "$AUTH" -X POST \
+curl -sS $AUTH -X POST \
   "http://127.0.0.1:3001/api/v1/projects/$PROJECT_ID/activity" \
   -H 'Content-Type: application/json' \
   -d '{"message":"Reviewed AI verification instructions","chapterId":null,"chapterName":"Website project"}'
@@ -370,7 +373,7 @@ Coverage is declaration-based:
 Read coverage with:
 
 ```sh
-curl -sS -H "$AUTH" \
+curl -sS $AUTH \
   "http://127.0.0.1:3001/api/v1/projects/$PROJECT_ID/coverage"
 ```
 
@@ -382,7 +385,7 @@ the same values from the loaded document.
 Export before risky bulk changes:
 
 ```sh
-curl -sS -H "$AUTH" -o "/tmp/layers-$PROJECT_ID.json" \
+curl -sS $AUTH -o "/tmp/layers-$PROJECT_ID.json" \
   "http://127.0.0.1:3001/api/v1/projects/$PROJECT_ID/export"
 ```
 
@@ -391,7 +394,7 @@ the format and how to read it. Read that field first. Import always creates a
 new project; it never overwrites or merges:
 
 ```sh
-curl -sS -H "$AUTH" -X POST http://127.0.0.1:3001/api/v1/projects/import \
+curl -sS $AUTH -X POST http://127.0.0.1:3001/api/v1/projects/import \
   -H 'Content-Type: application/json' \
   --data @/tmp/layers-project.json
 ```
@@ -456,9 +459,9 @@ Relevant files:
 server/api/openapi.yaml       API contract
 server/api/schemas.ts         runtime validation
 server/api/routes/            route handlers
-server/auth/                  password, tokens, sessions and guards
+server/auth/                  password, project API keys, sessions and guards
 server/db/store.ts            SQLite project queries and transactions
-server/db/authStore.ts        users, sessions and API tokens
+server/db/authStore.ts        users, sessions and project API keys
 server/db/bootstrap.ts        super-admin and ownership bootstrap
 server/db/migrations/         schema migrations
 src/domain/                   shared domain rules
@@ -510,8 +513,10 @@ Keep the report concise and factual.
 ## Remote MCP access
 
 When connected through the Layers MCP server, use its project and document
-tools instead of the local curl examples above. The server sends adapted
-instructions during initialization. It enforces the calling user's API token
-scope and project ownership. Project metadata and document writes require their
+tools instead of the REST examples above. The server sends adapted instructions
+during initialization. The key is bound to one project: `list_projects` returns
+only that project, and every other tool requires its project id. The key cannot
+create, import, duplicate or activate projects. A read-only key can read; a
+read-write key can edit. Project metadata and document writes require their
 respective ETags; reread and rebase on a conflict. See `docs/api.md` for Codex
-configuration and HTTPS requirements. Ask before destructive changes.
+configuration, HTTPS requirements and limits. Ask before destructive changes.

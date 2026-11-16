@@ -8,6 +8,7 @@ import {
   tokenAllows,
 } from "../../server/auth/tokens";
 import { sessionExpiry } from "../../server/auth/middleware";
+import { createInternalAuth } from "../../server/auth/internal";
 import {
   createTokenSchema,
   createUserSchema,
@@ -87,10 +88,11 @@ describe("auth request schemas", () => {
     ).toBe(true);
   });
 
-  it("validates token scopes", () => {
+  it("validates project key scopes and expiry", () => {
     expect(
       createTokenSchema.safeParse({ name: "agent", scopes: ["read"] }).success,
     ).toBe(true);
+    expect(createTokenSchema.safeParse({ name: "agent" }).success).toBe(true);
     expect(
       createTokenSchema.safeParse({ name: "agent", scopes: [] }).success,
     ).toBe(false);
@@ -100,5 +102,50 @@ describe("auth request schemas", () => {
         scopes: ["read", "read"],
       }).success,
     ).toBe(false);
+    expect(
+      createTokenSchema.safeParse({ name: "agent", expiresInDays: 3650 })
+        .success,
+    ).toBe(true);
+    expect(
+      createTokenSchema.safeParse({ name: "agent", expiresInDays: 3651 })
+        .success,
+    ).toBe(false);
+  });
+});
+
+describe("MCP internal dispatch auth", () => {
+  const context = {
+    userId: "usr_1",
+    projectId: "website",
+    tokenId: "tok_1",
+    scopes: ["read"] as Array<"read" | "write">,
+  };
+
+  it("signs and verifies a short-lived project context", () => {
+    const auth = createInternalAuth(Buffer.from("unit-test-secret"));
+    const value = auth.sign(context);
+    expect(auth.verify(value)).toEqual(context);
+  });
+
+  it("rejects tampering and foreign secrets", () => {
+    const auth = createInternalAuth(Buffer.from("unit-test-secret"));
+    const other = createInternalAuth(Buffer.from("another-secret"));
+    const value = auth.sign(context);
+    expect(other.verify(value)).toBeNull();
+    expect(auth.verify(`${value}x`)).toBeNull();
+    expect(auth.verify("missing.signature")).toBeNull();
+  });
+
+  it("rejects expired and malformed contexts", () => {
+    const auth = createInternalAuth(Buffer.from("unit-test-secret"));
+    const value = auth.sign(context);
+    const now = Date.now;
+    Date.now = () => now() + 31_000;
+    try {
+      expect(auth.verify(value)).toBeNull();
+    } finally {
+      Date.now = now;
+    }
+    expect(auth.verify("")).toBeNull();
   });
 });

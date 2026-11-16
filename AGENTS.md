@@ -3,8 +3,8 @@
 Instructions for coding agents working in this repository. Read this before
 planning or changing code.
 
-`AGENTS_template.md` is a product artifact for people and agents using the Layers
-API. It is not repository guidance.
+`LAYERS_AGENT_GUIDE.md` is a product artifact for people and agents using the
+Layers MCP endpoint. It is not repository guidance.
 
 ## Reading order
 
@@ -116,7 +116,7 @@ still applies to future work unless the user explicitly authorizes it.
   so the HTTPS endpoint returned 502 despite having a valid certificate.
   A later test must provide its own isolated loopback backend and clean it up.
 - For MCP access, set `LAYERS_MCP_ALLOWED_HOSTS` to include the test domain.
-  Use HTTPS for bearer tokens and do not publish the backend port publicly.
+  Use HTTPS for project API keys and do not publish the backend port publicly.
   The default Compose port binding needs a loopback-only test override.
 
 The 2026-11-16 remote HTTPS test verified MCP reads, document writes, stale
@@ -383,7 +383,7 @@ When the work is complete:
 - Update the phase document status to `delivered`.
 - Rename the file with the `[done]` suffix, matching earlier phases.
 - Remove the delivered idea from `phases/phase-ideas.md`.
-- Update `README.md`, `docs/api.md` and `AGENTS_template.md` when the API or
+- Update `README.md`, `docs/api.md` and `LAYERS_AGENT_GUIDE.md` when the API or
   runtime contract changes.
 - Push to `main`, watch `verify` and `docker`, and run the relevant remote
   checks on the exact published digest.

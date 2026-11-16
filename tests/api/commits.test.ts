@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, it } from "vitest";
 import {
   authHeaders,
-  bearerHeaders,
   createTestApi,
+  mcpCall,
   docRequest,
   json,
   TEST_SUPER_ADMIN,
@@ -293,24 +293,21 @@ describe("commit API", () => {
     });
     expect(foreign.statusCode).toBe(404);
 
-    const readToken = await api.createToken(cookie, {
+    const readToken = await api.createToken(cookie, "website", {
       name: "Read only",
       scopes: ["read"],
     });
-    const first = await getDocument(api, cookie);
-    const denied = await api.app.inject({
-      method: "PUT",
-      url: "/api/v1/projects/website/document",
-      headers: {
-        ...bearerHeaders(readToken),
-        "content-type": "application/json",
-        "if-match": first.etag,
-      },
-      payload: {
-        chapters: withCommits(first.body, [short]),
-        selectedId: first.body.selectedId,
+    const first = await mcpCall(api, readToken, "get_document", {
+      projectId: "website",
+    });
+    const denied = await mcpCall(api, readToken, "replace_document", {
+      projectId: "website",
+      ifMatch: first.envelope.etag,
+      body: {
+        chapters: withCommits(first.envelope.body, [short]),
+        selectedId: first.envelope.body.selectedId,
       },
     });
-    expect(denied.statusCode).toBe(403);
+    expect(denied.envelope.status).toBe(403);
   });
 });

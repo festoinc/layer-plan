@@ -11,6 +11,7 @@ import {
 import { ChapterEditor } from "../components/ChapterEditor";
 import { DeleteProjectDialog } from "../components/DeleteProjectDialog";
 import { ProjectDialog } from "../components/ProjectDialog";
+import { ProjectTokensDialog } from "../components/ProjectTokensDialog";
 import { Sidebar } from "../components/Sidebar";
 import { SkipLink } from "../components/SkipLink";
 import { StorageBanner } from "../components/StorageBanner";
@@ -86,6 +87,7 @@ export function WorkspaceShell({ projectId }: WorkspaceShellProps) {
     { mode: "create" } | { mode: "edit"; project: ProjectSummary } | null
   >(null);
   const [deleteTarget, setDeleteTarget] = useState<ProjectSummary | null>(null);
+  const [tokenProject, setTokenProject] = useState<ProjectSummary | null>(null);
   const [confirmOverwrite, setConfirmOverwrite] = useState(false);
   const [overwritePending, setOverwritePending] = useState(false);
   const sidebarRef = useRef<HTMLElement | null>(null);
@@ -270,6 +272,7 @@ export function WorkspaceShell({ projectId }: WorkspaceShellProps) {
   }, [chapter, deleteChapter, projectId, route, state.chapters]);
   const closeProjectDialog = useCallback(() => setProjectDialog(null), []);
   const closeDeleteDialog = useCallback(() => setDeleteTarget(null), []);
+  const closeTokenDialog = useCallback(() => setTokenProject(null), []);
   const confirmOverwriteDocument = useCallback(async () => {
     setOverwritePending(true);
     try {
@@ -477,6 +480,7 @@ export function WorkspaceShell({ projectId }: WorkspaceShellProps) {
                 activeProjectId={activeProjectId}
                 onOpenProject={openProject}
                 onNewProject={openCreateProject}
+                onManageProjectTokens={setTokenProject}
                 onEditProject={openProjectSettings}
                 onDuplicateProject={(item) =>
                   void duplicateProjectById(item.id)
@@ -541,6 +545,12 @@ export function WorkspaceShell({ projectId }: WorkspaceShellProps) {
           }
           onClose={closeProjectDialog}
           onSubmit={submitProjectDialog}
+        />
+      )}
+      {tokenProject && (
+        <ProjectTokensDialog
+          project={tokenProject}
+          onClose={closeTokenDialog}
         />
       )}
       {deleteTarget && (

@@ -269,25 +269,19 @@ describe("authentication API", () => {
     expect(accepted.statusCode).toBe(200);
   });
 
-  it("serves /me for both sessions and tokens, but /auth/session only for cookies", async () => {
+  it("rejects project API keys on REST and never exposes sessions", async () => {
     api = await createTestApi();
     const cookie = await superCookie(api);
-    const token = await api.createToken(cookie);
-    const me = await api.app.inject({
-      method: "GET",
-      url: "/api/v1/me",
-      headers: { authorization: `Bearer ${token}` },
-    });
-    expect(me.statusCode).toBe(200);
-    expect(json(me).user.email).toBe(TEST_SUPER_ADMIN.email);
-
-    const sessionWithToken = await api.app.inject({
-      method: "GET",
-      url: "/api/v1/auth/session",
-      headers: { authorization: `Bearer ${token}` },
-    });
-    expect(sessionWithToken.statusCode).toBe(403);
-    expect(json(sessionWithToken).error.code).toBe("forbidden");
+    const token = await api.createToken(cookie, "website");
+    for (const url of ["/api/v1/me", "/api/v1/auth/session"]) {
+      const response = await api.app.inject({
+        method: "GET",
+        url,
+        headers: { authorization: `Bearer ${token}` },
+      });
+      expect(response.statusCode, url).toBe(403);
+      expect(json(response).error.code).toBe("forbidden");
+    }
   });
 
   it("re-synchronizes the super admin from environment values", async () => {

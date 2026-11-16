@@ -8,21 +8,31 @@ import {
   test,
 } from "./fixtures";
 
-test("account page manages sessions and API tokens", async ({ page }) => {
-  await page.goto("/#/account");
-  await expect(page.getByRole("heading", { name: "Account" })).toBeVisible();
-  await expect(page.getByText(superAdmin.email, { exact: true })).toBeVisible();
-  await expect(page.getByText(/Password changes and recovery/)).toBeVisible();
+test("project actions manage MCP API keys", async ({ page }) => {
+  await page.goto("/#/projects");
+  const card = page.locator(".project-card", { hasText: "Website project" });
+  await card
+    .getByRole("button", { name: "Actions for Website project" })
+    .click();
+  await page.getByRole("menuitem", { name: "API keys" }).click();
+  await expect(
+    page.getByRole("heading", { name: "API keys for Website project" }),
+  ).toBeVisible();
 
-  await page.getByLabel("Token name").fill("E2E agent");
+  await page.getByLabel("Key name").fill("E2E agent");
   await page.getByLabel("Scope").selectOption("read");
-  await page.getByRole("button", { name: "Create token" }).click();
+  await page.getByLabel("Expires in days").fill("3650");
+  await page.getByRole("button", { name: "Create API key" }).click();
   const token = page.locator(".token-created code");
   await expect(token).toContainText("lrs_");
   const secret = (await token.textContent()).trim();
   expect(secret.length).toBeGreaterThan(20);
 
-  await page.reload();
+  await page.getByRole("button", { name: "Close API keys dialog" }).click();
+  await card
+    .getByRole("button", { name: "Actions for Website project" })
+    .click();
+  await page.getByRole("menuitem", { name: "API keys" }).click();
   await expect(page.locator(".token-created")).toHaveCount(0);
   await expect(page.locator(".token-list")).toContainText("E2E agent");
   await expect(
