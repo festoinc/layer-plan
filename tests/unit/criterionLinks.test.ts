@@ -393,10 +393,8 @@ describe("criterion links: applying a save response", () => {
     const current = patchChapter(snapshot, "kid", {
       description: "Edited while saving",
     });
-    const source = pairDocument({
-      criteria: [{ id: "c1", text: linkedText, checked: false }],
-    });
-    const removed = reconcileCriterionLinks(snapshot, source);
+    const incoming = patchChapter(snapshot, "parent", { criteria: [] });
+    const removed = reconcileCriterionLinks(snapshot, incoming);
     const next = applyCriterionSync(
       current,
       snapshot,
