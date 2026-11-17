@@ -56,6 +56,7 @@ export function registerDocumentRoutes(
         stats: result.stats,
         activity: result.activity,
         createdSubchapters: result.createdSubchapters,
+        criterionSync: result.sync,
       };
     },
   );

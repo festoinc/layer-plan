@@ -75,6 +75,8 @@ describe("remote MCP", () => {
     expect(init.body.result.instructions).toContain(
       "Chapter: I want authorization to work",
     );
+    expect(init.body.result.instructions).toContain("one synchronized pair");
+    expect(init.body.result.instructions).toContain("criterionSync");
     const list = await mcpRpc(api, read, "tools/list");
     const tools = list.body.result.tools as Array<{ name: string }>;
     expect(tools.map((tool) => tool.name).sort()).toEqual(projectTools);
@@ -196,6 +198,82 @@ describe("remote MCP", () => {
       result.envelope.body.activity.some(
         (event: { message: string }) =>
           event.message === "Created subchapter from success criterion",
+      ),
+    ).toBe(true);
+  });
+
+  it("keeps criteria and subchapters synchronized through MCP", async () => {
+    api = await createTestApi();
+    const cookie = await superCookie(api);
+    const token = await api.createToken(cookie, "website");
+    const doc = (
+      await mcpCall(api, token, "get_document", {
+        projectId: "website",
+      })
+    ).envelope;
+    const chapters = structuredClone(doc.body.chapters);
+    chapters.byId["password-reset"].criteria.push({
+      id: "mcp-sync",
+      text: "MCP sync",
+      checked: false,
+    });
+    const created = await mcpCall(api, token, "replace_document", {
+      projectId: "website",
+      ifMatch: doc.etag,
+      body: { chapters, selectedId: doc.body.selectedId },
+    });
+    expect(created.envelope.status).toBe(200);
+    const subchapterId = created.envelope.body.createdSubchapters[0].id;
+
+    const editedChapters = structuredClone(created.envelope.body.chapters);
+    const editedParent = editedChapters.byId["password-reset"];
+    const editedCriterion = editedParent.criteria.find(
+      (item: { id: string }) => item.id === "mcp-sync",
+    );
+    editedCriterion.text = "MCP sync updated\n\nNew details.";
+    const edited = await mcpCall(api, token, "replace_document", {
+      projectId: "website",
+      ifMatch: created.envelope.etag,
+      body: {
+        chapters: editedChapters,
+        selectedId: created.envelope.body.selectedId,
+      },
+    });
+    expect(edited.envelope.status).toBe(200);
+    expect(edited.envelope.body.chapters.byId[subchapterId]).toMatchObject({
+      title: "MCP sync updated",
+      description: "MCP sync updated\n\nNew details.",
+    });
+    expect(edited.envelope.body.criterionSync.updatedSubchapters).toHaveLength(
+      1,
+    );
+
+    const removedChapters = structuredClone(edited.envelope.body.chapters);
+    removedChapters.byId["password-reset"].criteria = removedChapters.byId[
+      "password-reset"
+    ].criteria.filter((item: { id: string }) => item.id !== "mcp-sync");
+    const removed = await mcpCall(api, token, "replace_document", {
+      projectId: "website",
+      ifMatch: edited.envelope.etag,
+      body: {
+        chapters: removedChapters,
+        selectedId: edited.envelope.body.selectedId,
+      },
+    });
+    expect(removed.envelope.status).toBe(200);
+    expect(removed.envelope.body.chapters.byId[subchapterId]).toBeUndefined();
+    expect(removed.envelope.body.criterionSync.removedSubchapters).toEqual([
+      {
+        id: subchapterId,
+        parentId: "password-reset",
+        criterionId: "mcp-sync",
+        title: "MCP sync updated",
+      },
+    ]);
+    expect(
+      removed.envelope.body.activity.some(
+        (event: { message: string }) =>
+          event.message === "Deleted subchapter from success criterion",
       ),
     ).toBe(true);
   });

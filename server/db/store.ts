@@ -10,9 +10,14 @@ import {
   getDefaultId,
   insertChapter,
   patchChapter,
+  walkChapters,
   type ChapterDocument,
 } from "../../src/domain/chapters";
 import { createSubchapterFromCriterion } from "../../src/domain/criteria";
+import {
+  reconcileCriterionLinks,
+  type CriterionSync,
+} from "../../src/domain/criterionLinks";
 import {
   isSafeProjectId,
   MAX_PROJECTS,
@@ -79,6 +84,7 @@ export interface SaveDocumentResult {
   activity: ActivityEntry[];
   stats: ProjectStats;
   createdSubchapters: CreatedCriterionSubchapter[];
+  sync: CriterionSync;
 }
 
 export interface ImportProjectResult {
@@ -821,13 +827,29 @@ export class SqliteStore implements ProjectStore {
       );
     }
 
-    const previousCriteria = this.previousCriterionKeys(row.chapters_json);
-    const expanded = this.expandCriterionSubchapters(
+    const previousChapters = this.previousDocument(row.chapters_json);
+    const reconciled = reconcileCriterionLinks(
+      previousChapters,
       normalizedChapters,
-      previousCriteria,
+    );
+    const expanded = this.expandCriterionSubchapters(
+      reconciled.document,
+      previousChapters,
     );
     const chapters = expanded.document;
-    const selectedId = input.selectedId;
+
+    let selectedId = input.selectedId;
+    if (selectedId !== null && !chapters.byId[selectedId]) {
+      if (reconciled.removedChapterIds.includes(selectedId)) {
+        selectedId = getDefaultId(chapters, null);
+      } else {
+        throw new ApiError(
+          422,
+          "validation_failed",
+          "selectedId must be null or refer to a chapter in the document.",
+        );
+      }
+    }
     const stats = summarizeDocument(chapters);
     const chaptersJson = JSON.stringify(chapters);
     const changed =
@@ -862,7 +884,16 @@ export class SqliteStore implements ProjectStore {
       }
       this.insertNewActivity(
         id,
-        [...(input.activity ?? []), ...expanded.activity],
+        [
+          ...(input.activity ?? []),
+          ...reconciled.activity.map((entry) => ({
+            id: this.newId(),
+            message: entry.message,
+            chapterId: entry.chapterId,
+            chapterName: entry.chapterName,
+          })),
+          ...expanded.activity,
+        ],
         ownerId,
       );
     });
@@ -880,10 +911,11 @@ export class SqliteStore implements ProjectStore {
       activity: this.listActivity(ownerId, id),
       stats,
       createdSubchapters: expanded.created,
+      sync: reconciled.sync,
     };
   }
 
-  private previousCriterionKeys(chaptersJson: string): Set<string> {
+  private previousDocument(chaptersJson: string): ChapterDocument {
     let parsed: unknown;
     try {
       parsed = JSON.parse(chaptersJson);
@@ -894,44 +926,21 @@ export class SqliteStore implements ProjectStore {
         "The stored project document could not be read.",
       );
     }
-    if (!parsed || typeof parsed !== "object") {
+    const normalized = normalizeDocument(parsed, { newId: this.newId });
+    if (normalized.issues.length) {
       throw new ApiError(
         500,
         "stored_data_invalid",
         "The stored project document could not be read.",
+        { issues: normalized.issues.slice(0, 10) },
       );
     }
-    const byId = (parsed as { byId?: unknown }).byId;
-    if (!byId || typeof byId !== "object" || Array.isArray(byId)) {
-      throw new ApiError(
-        500,
-        "stored_data_invalid",
-        "The stored project document could not be read.",
-      );
-    }
-    const keys = new Set<string>();
-    for (const rawChapter of Object.values(byId as Record<string, unknown>)) {
-      if (!rawChapter || typeof rawChapter !== "object") continue;
-      const chapter = rawChapter as { id?: unknown; criteria?: unknown };
-      if (typeof chapter.id !== "string" || !Array.isArray(chapter.criteria)) {
-        continue;
-      }
-      for (const rawCriterion of chapter.criteria) {
-        if (
-          rawCriterion &&
-          typeof rawCriterion === "object" &&
-          typeof (rawCriterion as { id?: unknown }).id === "string"
-        ) {
-          keys.add(`${chapter.id}:${(rawCriterion as { id: string }).id}`);
-        }
-      }
-    }
-    return keys;
+    return normalized.document;
   }
 
   private expandCriterionSubchapters(
     input: ChapterDocument,
-    previousCriteria: Set<string>,
+    previous: ChapterDocument,
   ): {
     document: ChapterDocument;
     created: CreatedCriterionSubchapter[];
@@ -940,6 +949,12 @@ export class SqliteStore implements ProjectStore {
     let document = input;
     const created: CreatedCriterionSubchapter[] = [];
     const activity: CreateActivityInput[] = [];
+    const previousCriteria = new Set<string>();
+    for (const chapter of walkChapters(previous)) {
+      for (const criterion of chapter.criteria) {
+        previousCriteria.add(`${chapter.id}:${criterion.id}`);
+      }
+    }
     for (const parent of Object.values(input.byId)) {
       if (parent.finalLevel) continue;
       for (const criterion of parent.criteria) {

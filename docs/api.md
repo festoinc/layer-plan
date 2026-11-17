@@ -197,13 +197,42 @@ The request body is:
 timestamps, ignores duplicate `(projectId, eventId)` pairs, records the acting
 user and keeps the newest 100 entries.
 
-The response contains the saved document, `stats`, the latest `activity`, and
-`createdSubchapters`. The backend creates a subchapter for each new criterion on
-a non-final chapter and returns its id, parent id, criterion id and derived
-title. Use the returned `chapters` and `createdSubchapters` as the new working
-copy; do not create the subchapter yourself. Existing criteria are not
-backfilled, and final-level chapters, already-linked criteria and empty criterion
-text are skipped.
+The response contains the saved document, `stats`, the latest `activity`,
+`createdSubchapters` and `criterionSync`. The backend creates a subchapter for
+each new criterion on a non-final chapter and returns its id, parent id,
+criterion id and derived title. Use the returned `chapters` and
+`createdSubchapters` as the new working copy; do not create the subchapter
+yourself. Existing criteria are not backfilled, and final-level chapters,
+already-linked criteria and empty criterion text are skipped.
+
+A success criterion with `chapterId` and the subchapter it names are one
+synchronized pair. The criterion text is the canonical Markdown: the subchapter
+`description` is the same string and its `title` is derived from the first line.
+The backend keeps the pair identical on every write:
+
+- changing the criterion text updates the subchapter title and description;
+- changing only the subchapter description updates the criterion text;
+- changing only the subchapter title replaces the first line of the criterion
+  text and keeps the remaining lines;
+- if both sides changed in one write, the criterion text wins;
+- deleting a criterion deletes the subchapter and its whole subtree;
+- deleting the subchapter deletes the criterion;
+- removing only `chapterId` detaches the pair: the criterion and the chapter
+  both survive and the chapter becomes an ordinary manual chapter. Detaching and
+  deleting the criterion in one write is not a detach; the backend deletes the
+  chapter. Save the detach first, then delete the criterion;
+- a chapter that is moved out of its criterion's chapter is detached, not
+  deleted;
+- a new criterion that already names an existing chapter adopts the criterion
+  text as canonical and overwrites that chapter's title and description.
+
+`criterionSync` reports what the backend changed and always contains three
+arrays: `updatedSubchapters` (`id`, `parentId`, `criterionId`, `title`,
+`description`), `removedSubchapters` (`id`, `parentId`, `criterionId`, `title`)
+and `removedCriteria` (`chapterId`, `criterionId`, `text`). A request that
+already matched the stored document returns empty arrays and does not bump the
+revision. When the backend deletes a subchapter it also appends a
+`Deleted subchapter from success criterion` activity entry.
 
 Use the new `ETag` for the next write.
 
@@ -514,7 +543,10 @@ Project and document updates use separate ETags, exposed in tool results. When
 a document write adds a new criterion to a non-final chapter, the backend
 creates the matching subchapter and returns it in `createdSubchapters`. MCP
 agents send the criterion without `chapterId` and must not create the
-subchapter themselves. On a revision conflict, fetch the latest content and
+subchapter themselves. The backend also keeps every criterion/subchapter pair
+synchronized and reports edits and deletions in `criterionSync`; agents edit the
+criterion text (or the subchapter, with the same result) and never try to keep
+the two sides different. On a revision conflict, fetch the latest content and
 reapply the intended change.
 MCP requests and responses are limited to 2 MiB; larger documents must be
 handled through the existing API. The read-only `search_project` tool uses the

@@ -19,7 +19,7 @@ Chapter: I want authorization to work
 How to read that tree:
 
 - The top chapter keeps the user's intent in their own words. Its description can carry context.
-- A criterion is one observable expectation. On a non-final chapter it becomes a subchapter whose title is the criterion's first line and whose description is the full criterion text, so a broad criterion such as "Login should be email" can hold its own criteria.
+- A criterion is one observable expectation. On a non-final chapter it becomes a subchapter whose title is the criterion's first line and whose description is the full criterion text, so a broad criterion such as "Login should be email" can hold its own criteria. The pair stays synchronized: editing either side updates the other, and deleting either side deletes the pair.
 - `finalLevel: true` keeps a chapter flat: its criteria stay leaves and no subchapter is created.
 - One expectation belongs in one criterion. Splitting "login and password are validated" into two criteria keeps each one checkable.
 - Chapters also carry a verification rule (`auto`, `human` or `ai`), the git commits that implemented them, and their child and criterion ordering.
@@ -100,17 +100,19 @@ Every chapter record needs all of its fields. A new chapter looks like this:
 }
 ```
 
-`commits` may be omitted and defaults to an empty list; everything else above is required. A criterion is `id`, `text`, `checked` and, only when it already owns a subchapter, `chapterId`.
+`commits` may be omitted and defaults to an empty list; everything else above is required. A criterion is `id`, `text`, `checked` and, only when it owns a synchronized subchapter, `chapterId`.
 
 Choose IDs yourself for new chapters, criteria and activity entries: unique, lowercase, readable, at most 128 characters, and stable. Never reuse an ID for a different thing, never rename an existing ID, and never collide with an existing ID. Activity entries with a reused ID are silently dropped, so give every new entry a fresh one.
 
 Every chapter must be reachable exactly once: either listed in `rootIds` or referenced by exactly one parent's `childIds`. The list order is the display order. If you add a chapter to `byId` without linking it, the backend silently promotes it to the root; duplicate or cyclic references are silently dropped, so a broken write can look successful.
 
-To delete a chapter, remove it from `byId`, remove it from its parent's `childIds` or `rootIds`, and decide what happens to its children: reparent them or delete them with it. If the chapter came from a criterion, also remove that criterion or clear its `chapterId`; dangling links are stripped silently and leave the criterion pointing at nothing.
+To delete a chapter, remove it from `byId`, remove it from its parent's `childIds` or `rootIds`, and decide what happens to its children: reparent them or delete them with it. If the chapter came from a criterion, deleting it also deletes that criterion. To keep the criterion and turn the chapter into a manual chapter, detach by clearing `chapterId` in a separate write before deleting anything.
 
 `selectedId` is the chapter the person currently sees in the browser. Keep it unchanged, or set it to a chapter that exists after your write; it must be null or an existing chapter ID.
 
 The backend creates the matching subchapter when you add a new success criterion to a chapter whose finalLevel is false. Send the new criterion without chapterId and do not invent or append a subchapter yourself; use the chapters and createdSubchapters returned by replace_document. The backend skips final-level chapters, existing criteria, already-linked criteria and empty text. Never backfill subchapters for existing criteria. The response activity includes the backend's subchapter event; keep your own activity entries for the criterion change.
+
+A success criterion with `chapterId` and the subchapter it names are one synchronized pair. The criterion text is the canonical Markdown; the subchapter `description` is the same string and its `title` is derived from the first line. Edit either side and the backend mirrors the change: editing the criterion text updates the subchapter, editing only the subchapter description updates the criterion text, and editing only the subchapter title rewrites the first line of the criterion text. If both sides change in one write, the criterion text wins. Deleting a criterion deletes its subchapter and that subchapter's whole subtree; deleting the subchapter deletes the criterion. A chapter moved out of its criterion's chapter is detached, not deleted. To keep a subchapter while removing its checklist item, detach it by removing only `chapterId` and saving first, then delete the criterion in a later write. Never try to keep the two sides different. Read the returned document and `criterionSync` (`updatedSubchapters`, `removedSubchapters`, `removedCriteria`); never invent those values.
 
 Use search_project to find a chapter by keyword or commit prefix before reading it. Search covers chapter titles, descriptions, criterion text, commit hashes, and the auto, human and ai verification text. It searches only the bound project; activity, project metadata and test guidelines are not searched. Commit terms of 4–40 hexadecimal characters match by prefix. Results are chapter-level and reflect the saved document, so read the matched chapter with get_document before editing it. Search does not change the document or its revision.
 

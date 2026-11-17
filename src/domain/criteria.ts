@@ -5,6 +5,7 @@ import {
   Criterion,
   getChapter,
   insertChapter,
+  MAX_CHAPTER_TITLE,
   patchChapter,
   setCriteria,
 } from "./chapters";
@@ -12,18 +13,24 @@ import {
 export type { Criterion, Chapter, ChapterDocument };
 
 /**
+ * The canonical pair text. It matches the chapter description limit so the
+ * subchapter mirror never becomes an invalid criterion.
+ */
+export const MAX_CRITERION_TEXT = 100000;
+
+/**
  * Derive a chapter title from a Markdown criterion. The first line is used;
- * leading block markers, link targets and inline formatting are removed.
+ * leading block markers, link targets and inline formatting are removed. The
+ * result is clamped to the chapter title limit.
  */
 export function deriveCriterionTitle(markdown: string): string {
-  return (
-    String(markdown)
-      .split(/\r?\n/)[0]
-      .replace(/^\s{0,3}(?:#{1,6}\s+|>\s*|[-*+]\s+|\d+[.)]\s+)/, "")
-      .replace(/!?\[([^\]]*)\]\([^)]*\)/g, "$1")
-      .replace(/\*\*|__|~~|`|\*/g, "")
-      .trim() || "Untitled chapter"
-  );
+  const title = String(markdown)
+    .split(/\r?\n/)[0]
+    .replace(/^\s{0,3}(?:#{1,6}\s+|>\s*|[-*+]\s+|\d+[.)]\s+)/, "")
+    .replace(/!?\[([^\]]*)\]\([^)]*\)/g, "$1")
+    .replace(/\*\*|__|~~|`|\*/g, "")
+    .trim();
+  return (title || "Untitled chapter").slice(0, MAX_CHAPTER_TITLE);
 }
 
 export interface CreateCriterionInput {

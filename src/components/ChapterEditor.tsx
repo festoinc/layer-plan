@@ -6,19 +6,51 @@ import {
   useRef,
   useState,
 } from "react";
-import { ChevronRight, Plus, Trash2, X } from "lucide-react";
+import { ChevronRight, CornerDownRight, Plus, Trash2, X } from "lucide-react";
 import { AutoTextarea, EditableMarkdown } from "../Markdown";
-import { Chapter } from "../domain/chapters";
-import { criterionProgress } from "../domain/criteria";
-import { useWorkspaceActions } from "../store/WorkspaceProvider";
+import { Chapter, collectSubtreeIds } from "../domain/chapters";
+import { criterionProgress, deriveCriterionTitle } from "../domain/criteria";
+import {
+  useWorkspaceActions,
+  useWorkspaceState,
+} from "../store/WorkspaceProvider";
 import { ChapterCommits } from "./ChapterCommits";
 import { VerificationRules } from "./VerificationRules";
 import { DeleteChapterDialog } from "./DeleteChapterDialog";
+import { DeleteCriterionDialog } from "./DeleteCriterionDialog";
 
 export interface ChapterDeleteInfo {
   descendantCount: number;
   parentTitle?: string;
   linkedCriterionText?: string;
+}
+
+/**
+ * A mirrored pair has no content of its own, so removing it needs no
+ * confirmation. Anything a person would miss triggers the dialog.
+ */
+function isTrivialSubchapter(
+  subchapter: Chapter,
+  criterionText: string,
+): boolean {
+  return (
+    subchapter.childIds.length === 0 &&
+    subchapter.criteria.length === 0 &&
+    subchapter.commits.length === 0 &&
+    subchapter.verification.mode === "human" &&
+    !subchapter.verification.auto.command.trim() &&
+    !subchapter.verification.human.instructions.trim() &&
+    !subchapter.verification.ai.instructions.trim() &&
+    subchapter.description === criterionText &&
+    subchapter.title === deriveCriterionTitle(criterionText)
+  );
+}
+
+interface PendingCriterionDelete {
+  criterionId: string;
+  text: string;
+  subchapter: Chapter;
+  descendantCount: number;
 }
 
 export interface ChapterEditorProps {
@@ -53,11 +85,20 @@ export function ChapterEditor({
     logActivity,
     flushSave,
   } = useWorkspaceActions();
+  const state = useWorkspaceState();
   const titleRef = useRef<HTMLInputElement | null>(null);
   const [newCriterion, setNewCriterion] = useState("");
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [pendingCriterionDelete, setPendingCriterionDelete] =
+    useState<PendingCriterionDelete | null>(null);
   const progress = criterionProgress(chapter);
   const showVerification = chapter.parentId !== null;
+  const parentChapter = chapter.parentId
+    ? (state.chapters.byId[chapter.parentId] ?? null)
+    : null;
+  const sourceCriterion = parentChapter?.criteria.find(
+    (item) => item.chapterId === chapter.id,
+  );
 
   useEffect(() => {
     if (!autoFocusTitle) return;
@@ -96,6 +137,24 @@ export function ChapterEditor({
     addCriterion(chapter.id, newCriterion);
     onRevealChildren(chapter.id);
     setNewCriterion("");
+  }
+
+  function requestRemoveCriterion(criterionId: string, text: string) {
+    const criterion = chapter.criteria.find((item) => item.id === criterionId);
+    const subchapter = criterion?.chapterId
+      ? (state.chapters.byId[criterion.chapterId] ?? null)
+      : null;
+    if (subchapter && !isTrivialSubchapter(subchapter, text)) {
+      setPendingCriterionDelete({
+        criterionId,
+        text,
+        subchapter,
+        descendantCount: collectSubtreeIds(state.chapters, subchapter.id)
+          .length,
+      });
+      return;
+    }
+    removeCriterion(chapter.id, criterionId);
   }
 
   return (
@@ -139,6 +198,19 @@ export function ChapterEditor({
           </label>
         </div>
       </div>
+      {sourceCriterion && parentChapter && (
+        <p className="criterion-source-note">
+          Created from the success criterion in{" "}
+          <button
+            type="button"
+            className="inline-link"
+            onClick={() => onSelectChapter(parentChapter.id)}
+          >
+            {parentChapter.title || "Untitled chapter"}
+          </button>
+          . Edit either side and both stay in sync.
+        </p>
+      )}
       <input
         ref={titleRef}
         className="chapter-title"
@@ -205,46 +277,66 @@ export function ChapterEditor({
           )}
         </div>
         <ul className="criteria-list">
-          {chapter.criteria.map((item) => (
-            <li
-              className={`criterion ${item.checked ? "complete" : ""}`}
-              key={item.id}
-            >
-              <input
-                type="checkbox"
-                aria-label={`Complete: ${item.text || "Untitled criterion"}`}
-                checked={item.checked}
-                onChange={() => toggleCriterion(chapter.id, item.id)}
-              />
-              <EditableMarkdown
-                previewLabel="Criterion preview"
-                rows={1}
-                className="criterion-text"
-                aria-label="Criterion text"
-                placeholder="Describe a successful outcome…"
-                value={item.text}
-                onFocus={rememberValue}
-                onBlur={(event) =>
-                  logFieldChange(
-                    event,
-                    `Updated criterion: ${event.currentTarget.value}`,
-                    chapter,
-                  )
-                }
-                onChange={(event) =>
-                  setCriterionText(chapter.id, item.id, event.target.value)
-                }
-              />
-              <button
-                className="icon-button remove-criterion"
-                aria-label={`Remove criterion: ${item.text || "Untitled criterion"}`}
-                title="Remove criterion"
-                onClick={() => removeCriterion(chapter.id, item.id)}
+          {chapter.criteria.map((item) => {
+            const linkedSubchapter = item.chapterId
+              ? (state.chapters.byId[item.chapterId] ?? null)
+              : null;
+            return (
+              <li
+                className={`criterion ${item.checked ? "complete" : ""}`}
+                key={item.id}
               >
-                <X size={14} />
-              </button>
-            </li>
-          ))}
+                <input
+                  type="checkbox"
+                  aria-label={`Complete: ${item.text || "Untitled criterion"}`}
+                  checked={item.checked}
+                  onChange={() => toggleCriterion(chapter.id, item.id)}
+                />
+                <EditableMarkdown
+                  previewLabel="Criterion preview"
+                  rows={1}
+                  className="criterion-text"
+                  aria-label="Criterion text"
+                  placeholder="Describe a successful outcome…"
+                  value={item.text}
+                  onFocus={rememberValue}
+                  onBlur={(event) =>
+                    logFieldChange(
+                      event,
+                      `Updated criterion: ${event.currentTarget.value}`,
+                      chapter,
+                    )
+                  }
+                  onChange={(event) =>
+                    setCriterionText(chapter.id, item.id, event.target.value)
+                  }
+                />
+                {linkedSubchapter && (
+                  <button
+                    type="button"
+                    className="icon-button criterion-link"
+                    aria-label={`Open subchapter: ${linkedSubchapter.title || "Untitled chapter"}`}
+                    title="Open subchapter"
+                    onClick={() => onSelectChapter(linkedSubchapter.id)}
+                  >
+                    <CornerDownRight size={14} />
+                  </button>
+                )}
+                <button
+                  className="icon-button remove-criterion"
+                  aria-label={`Remove criterion: ${item.text || "Untitled criterion"}`}
+                  title={
+                    linkedSubchapter
+                      ? "Remove criterion and subchapter"
+                      : "Remove criterion"
+                  }
+                  onClick={() => requestRemoveCriterion(item.id, item.text)}
+                >
+                  <X size={14} />
+                </button>
+              </li>
+            );
+          })}
         </ul>
         <form className="add-criterion" onSubmit={submitCriterion}>
           <Plus size={17} />
@@ -282,6 +374,26 @@ export function ChapterEditor({
           onDelete={() => {
             setConfirmDelete(false);
             onDeleteChapter();
+          }}
+        />
+      )}
+      {pendingCriterionDelete && (
+        <DeleteCriterionDialog
+          criterionTitle={
+            deriveCriterionTitle(pendingCriterionDelete.text) ||
+            "Untitled criterion"
+          }
+          subchapterTitle={
+            pendingCriterionDelete.subchapter.title || "Untitled chapter"
+          }
+          descendantCount={pendingCriterionDelete.descendantCount}
+          parentTitle={chapter.title || "Untitled chapter"}
+          onClose={() => setPendingCriterionDelete(null)}
+          onDelete={() => {
+            const criterionId = pendingCriterionDelete.criterionId;
+            setPendingCriterionDelete(null);
+            removeCriterion(chapter.id, criterionId);
+            flushSave();
           }}
         />
       )}

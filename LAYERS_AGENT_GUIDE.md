@@ -241,8 +241,25 @@ Rules to preserve:
   document write; send the criterion without `chapterId` and use the chapter
   returned by the write. Final-level chapters, existing criteria, already-linked
   criteria and empty text are skipped. Never backfill old criteria.
-- A criterion may have `chapterId` when it created a subchapter. Keep that link
-  consistent.
+- A criterion may have `chapterId` when it created a subchapter. The criterion
+  text and the subchapter are one synchronized pair: the subchapter `description`
+  is exactly the criterion text and its `title` is derived from the first line.
+  - Editing the criterion text updates the subchapter title and description.
+  - Editing only the subchapter description updates the criterion text.
+  - Editing only the subchapter title rewrites the first line of the criterion
+    text and keeps the remaining lines.
+  - If both sides change in one write, the criterion text wins.
+  - Deleting a criterion deletes the subchapter and its whole subtree; deleting
+    the subchapter deletes the criterion.
+  - Removing only `chapterId` detaches the pair; both records survive and the
+    chapter becomes an ordinary manual chapter. Save that detach before deleting
+    the criterion, otherwise the chapter is deleted with it. Moving the chapter
+    out of the criterion's chapter detaches it too.
+  - A new criterion that names an existing chapter makes the criterion text
+    canonical and overwrites that chapter's title and description.
+- Document write responses include `criterionSync` with `updatedSubchapters`,
+  `removedSubchapters` and `removedCriteria`; read the returned document instead
+  of computing the changes yourself.
 - `verification.mode` is exactly `auto`, `human` or `ai`.
 - Each mode keeps its own text, even when inactive.
 - `commits` lists the git commits that implemented the document, newest first.

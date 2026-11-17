@@ -211,9 +211,13 @@ Enter/F2. Press Escape or Ctrl/Cmd+Enter to finish editing.
 
 Adding a success criterion also creates a subchapter under the current chapter
 unless **Final level** is checked. The backend applies the same rule for REST
-and MCP document writes. Its title comes from the first line of the criterion. Manually created subchapters do not add checklist items. Press Enter
-to add a criterion and Shift+Enter for a new line. Changes save automatically to
-the local API.
+and MCP document writes. Its title comes from the first line of the criterion.
+The checklist item and its subchapter stay synchronized: editing either side
+updates the other, and deleting one deletes the other. A link button on the
+criterion opens its subchapter, and the subchapter shows which criterion created
+it. Manually created subchapters do not add checklist items. Press Enter to add
+a criterion and Shift+Enter for a new line. Changes save automatically to the
+local API.
 
 ### Commit references
 

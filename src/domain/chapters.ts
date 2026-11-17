@@ -12,6 +12,8 @@ import {
  * that shares untouched records with the previous one.
  */
 
+export const MAX_CHAPTER_TITLE = 200;
+
 export interface Criterion {
   id: string;
   text: string;
