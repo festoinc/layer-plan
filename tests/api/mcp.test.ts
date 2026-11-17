@@ -67,6 +67,14 @@ describe("remote MCP", () => {
     expect(init.body.result.instructions).toContain(
       "createdSubchapters returned by replace_document",
     );
+    expect(init.body.result.instructions).toContain(
+      "Ask how to plan before writing",
+    );
+    expect(init.body.result.instructions).toContain("Whole project first");
+    expect(init.body.result.instructions).toContain("Criterion by criterion");
+    expect(init.body.result.instructions).toContain(
+      "Chapter: I want authorization to work",
+    );
     const list = await mcpRpc(api, read, "tools/list");
     const tools = list.body.result.tools as Array<{ name: string }>;
     expect(tools.map((tool) => tool.name).sort()).toEqual(projectTools);

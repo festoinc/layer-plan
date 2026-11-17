@@ -472,7 +472,11 @@ bodies.
 The app serves a stateless MCP endpoint at `/mcp` in the same process as the API.
 It exposes project and document operations; account, user, session and key
 administration are not MCP tools. Calls use the existing API authorization and
-revision rules. The server supplies agent instructions on initialization.
+revision rules. The server supplies agent instructions on initialization. The
+instructions describe the project as a chapter and criterion tree and ask the
+agent to offer two ways of working before it writes anything: a whole-project
+discussion that the agent turns into all detailed success criteria, or an
+interactive walk that agrees one criterion at a time.
 
 1. For a client with a bearer-token field, sign in to Layers, open the project
    actions menu and choose **MCP access**. Create a key for that project. Choose

@@ -566,3 +566,9 @@ cannot create, import, duplicate or activate projects. A read-only credential
 can read; a read-write credential can edit. Project metadata and document writes require their
 respective ETags; reread and rebase on a conflict. See `docs/api.md` for Codex
 configuration, HTTPS requirements and limits. Ask before destructive changes.
+
+The MCP instructions model a project as a chapter tree with success criteria:
+adding a criterion to a non-final chapter creates its subchapter on the backend.
+Before writing, the agent offers two planning modes — a whole-project
+discussion that it turns into all detailed criteria, or an interactive
+criterion-by-criterion walk — and does not pick one on the user's behalf.
