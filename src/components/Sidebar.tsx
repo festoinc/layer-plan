@@ -5,6 +5,7 @@ import {
   FileText,
   Layers,
   LayoutGrid,
+  Paperclip,
   LucideIcon,
   Plus,
   Search,
@@ -50,6 +51,7 @@ export interface SidebarProps {
   onNewProject: () => void;
   onExportProject: () => void;
   onImportProject: (text: string) => Promise<{ ok: boolean; issues: string[] }>;
+  onOpenAttachments: () => void;
 }
 
 export function Sidebar({
@@ -77,6 +79,7 @@ export function Sidebar({
   onNewProject,
   onExportProject,
   onImportProject,
+  onOpenAttachments,
 }: SidebarProps) {
   const fileInput = useRef<HTMLInputElement | null>(null);
   const [importError, setImportError] = useState("");
@@ -166,6 +169,10 @@ export function Sidebar({
         New chapter
       </button>
       <div className="workspace-tools">
+        <button type="button" onClick={onOpenAttachments}>
+          <Paperclip size={12} />
+          Attachments
+        </button>
         <button type="button" onClick={onExportProject}>
           Export project
         </button>

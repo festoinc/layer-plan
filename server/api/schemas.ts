@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { MAX_ATTACHMENT_FILENAME_LENGTH } from "../../src/domain/attachments";
 import {
   COMMIT_HASH_PATTERN,
   MAX_COMMITS_PER_CHAPTER,
@@ -153,6 +154,13 @@ export function parseBody<T>(schema: z.ZodType<T>, body: unknown): T {
 export function parseQuery<T>(schema: z.ZodType<T>, query: unknown): T {
   return parseBody(schema, query);
 }
+
+export const uploadAttachmentSchema = z
+  .object({
+    filename: z.string().trim().min(1).max(MAX_ATTACHMENT_FILENAME_LENGTH),
+    contentBase64: z.string().min(1),
+  })
+  .strict();
 
 export const loginSchema = z
   .object({

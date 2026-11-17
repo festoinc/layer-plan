@@ -118,6 +118,10 @@ Use search_project to find a chapter by keyword or commit prefix before reading 
 
 Ask the user to confirm before deleting the project or a chapter, removing existing criteria or content, or overwriting conflicting changes. Record meaningful documentation changes in activity.
 
+## Attachments
+
+Attachments belong to the bound project document, not to an individual chapter. Use list_attachments to see them, get_attachment to read metadata and base64 content, add_attachment to store a supported file, and delete_attachment to remove one. A project has at most 20 attachments and each decoded file is at most 10 MiB; contentBase64 is raw base64, not a data URL. Supported formats are PDF, CSV, TSV, TXT, MD, LOG, JSON, YAML, YML, TOON, JPEG, PNG, XLS, XLSX, DOCX and PPTX. Ask for confirmation before deleting an attachment. Do not fetch attachment URLs or use the file system to read files for an agent; the user must supply the bytes.
+
 ## Activity
 
 Activity is the project history the person sees. Each new entry is `{ id, message, chapterId, chapterName }`; the server assigns the time and actor. Write one entry per meaningful change, in the user's language, naming the chapter it belongs to, for example "Added 3 criteria to Authorization". Do not log trivia, do not repeat the same event within one session, and do not send existing entries back. Entries are stored newest-first, the project keeps the newest 100, and there is no way to edit or delete them. append_activity adds a standalone note; list_activity pages backward with `limit` and `before`.

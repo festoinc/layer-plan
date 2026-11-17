@@ -23,13 +23,17 @@ const initialize = {
 };
 
 const projectTools = [
+  "add_attachment",
   "append_activity",
+  "delete_attachment",
   "delete_project",
   "export_project",
+  "get_attachment",
   "get_coverage",
   "get_document",
   "get_project",
   "list_activity",
+  "list_attachments",
   "list_projects",
   "replace_document",
   "search_project",
@@ -88,6 +92,10 @@ describe("remote MCP", () => {
     ]) {
       expect(tools.map((tool) => tool.name)).not.toContain(excluded);
     }
+    const deleteAttachment = tools.find(
+      (tool) => tool.name === "delete_attachment",
+    ) as { annotations?: { destructiveHint?: boolean } } | undefined;
+    expect(deleteAttachment?.annotations?.destructiveHint).toBe(true);
 
     const listed = await mcpCall(api, read, "list_projects");
     expect(listed.envelope.status).toBe(200);
@@ -150,6 +158,85 @@ describe("remote MCP", () => {
     const conflict = await mcpCall(api, write, "replace_document", args);
     expect(conflict.envelope.status).toBe(412);
     expect(conflict.envelope.body.error.code).toBe("revision_conflict");
+  });
+
+  it("adds, reads and deletes attachments with the write scope", async () => {
+    api = await createTestApi();
+    const cookie = await superCookie(api);
+    const read = await api.createToken(cookie, "website", {
+      scopes: ["read"],
+    });
+    const write = await api.createToken(cookie, "website");
+    const pdf = Buffer.from("%PDF-1.4\n1 0 obj\n<<>>\nendobj\n%%EOF\n");
+    const contentBase64 = pdf.toString("base64");
+
+    const denied = await mcpCall(api, read, "add_attachment", {
+      projectId: "website",
+      filename: "denied.pdf",
+      contentBase64,
+    });
+    expect(denied.envelope.status).toBe(403);
+
+    const added = await mcpCall(api, write, "add_attachment", {
+      projectId: "website",
+      filename: "mcp-report.pdf",
+      contentBase64,
+    });
+    expect(added.envelope.status).toBe(201);
+    expect(added.envelope.body).toMatchObject({
+      filename: "mcp-report.pdf",
+      contentType: "application/pdf",
+      projectId: "website",
+    });
+    const attachmentId = added.envelope.body.id as string;
+
+    const listed = await mcpCall(api, read, "list_attachments", {
+      projectId: "website",
+    });
+    expect(listed.envelope.status).toBe(200);
+    expect(listed.envelope.body.maxAttachments).toBe(20);
+    expect(
+      listed.envelope.body.attachments.map(
+        (attachment: { filename: string }) => attachment.filename,
+      ),
+    ).toContain("mcp-report.pdf");
+
+    const content = await mcpCall(api, read, "get_attachment", {
+      projectId: "website",
+      attachmentId,
+    });
+    expect(content.envelope.status).toBe(200);
+    expect(content.envelope.body.filename).toBe("mcp-report.pdf");
+    expect(content.envelope.body.contentBase64).toBe(contentBase64);
+    expect(content.envelope.etag).toBeNull();
+
+    const missing = await mcpCall(api, read, "get_attachment", {
+      projectId: "website",
+      attachmentId: "missing-attachment",
+    });
+    expect(missing.envelope.status).toBe(404);
+
+    const wrongProject = await mcpCall(api, read, "list_attachments", {
+      projectId: "another-project",
+    });
+    expect(wrongProject.envelope.status).toBe(404);
+
+    const deniedDelete = await mcpCall(api, read, "delete_attachment", {
+      projectId: "website",
+      attachmentId,
+    });
+    expect(deniedDelete.envelope.status).toBe(403);
+
+    const removed = await mcpCall(api, write, "delete_attachment", {
+      projectId: "website",
+      attachmentId,
+    });
+    expect(removed.envelope.status).toBe(204);
+
+    const afterDelete = await mcpCall(api, read, "list_attachments", {
+      projectId: "website",
+    });
+    expect(afterDelete.envelope.body.attachments).toHaveLength(0);
   });
 
   it("creates criterion subchapters on MCP document writes", async () => {

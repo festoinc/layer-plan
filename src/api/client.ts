@@ -190,3 +190,57 @@ export function errorMessage(error: unknown): string {
 export function isRevisionConflict(error: unknown): boolean {
   return error instanceof ApiError && error.status === 412;
 }
+
+export interface BlobResponse {
+  blob: Blob;
+  filename: string | null;
+}
+
+function filenameFromDisposition(header: string | null): string | null {
+  if (!header) return null;
+  const extended = /filename\*=UTF-8''([^;]+)/i.exec(header);
+  if (extended) {
+    try {
+      return decodeURIComponent(extended[1]);
+    } catch {
+      return extended[1];
+    }
+  }
+  const quoted = /filename="([^"]+)"/i.exec(header);
+  return quoted ? quoted[1] : null;
+}
+
+export async function apiRequestBlob(
+  path: string,
+  options: { timeoutMs?: number } = {},
+): Promise<BlobResponse> {
+  const controller = new AbortController();
+  const timeout = setTimeout(
+    () => controller.abort(),
+    options.timeoutMs ?? 60_000,
+  );
+  try {
+    const response = await fetch(`${API_BASE}${path}`, {
+      credentials: "include",
+      signal: controller.signal,
+    });
+    if (!response.ok) {
+      if (response.status === 401) notifyUnauthorized(path);
+      throw await parseError(response);
+    }
+    return {
+      blob: await response.blob(),
+      filename: filenameFromDisposition(
+        response.headers.get("content-disposition"),
+      ),
+    };
+  } catch (error) {
+    if (error instanceof ApiError) throw error;
+    if (error instanceof DOMException && error.name === "AbortError") {
+      throw new ApiUnavailableError("The download timed out.");
+    }
+    throw new ApiUnavailableError();
+  } finally {
+    clearTimeout(timeout);
+  }
+}

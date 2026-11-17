@@ -243,6 +243,19 @@ project; activity and project metadata are not included. Results show the
 chapter path and highlighted snippets, and selecting one opens the chapter.
 Search never changes the document or its revision.
 
+### Attachments
+
+Every project document can hold supporting files. Open **Attachments** in the
+project sidebar, or use the paperclip in the document header, to add, download
+and remove them. PDF, CSV/TSV, text, Markdown, log, JSON, YAML, TOON, JPEG, PNG,
+XLS/XLSX, DOCX and PPTX are accepted, up to 10 MiB each and 20 files per
+project. Text formats are checked as UTF-8, image and PDF signatures are
+verified, and OOXML packages must contain their expected document part. The browser validates the extension and size first, then
+the API checks the file signature and stores the bytes in SQLite. Attachment
+changes appear in activity but do not change the document or metadata revision,
+so uploading a file does not conflict with an open editor. Duplicating a project
+copies its attachments; JSON export/import does not include them.
+
 ### Verification and coverage
 
 Subchapters get a **Verification Rules** section between Description and Success
@@ -270,7 +283,7 @@ its parent that created it.
 
 ```text
 server/          Fastify API, SQLite store, migrations, seed, OpenAPI routes
-src/domain/      Pure models: projects, chapters, criteria, commits, search, verification
+src/domain/      Pure models: projects, chapters, criteria, commits, attachments, search, verification
 src/api/         Fetch client and typed project/document/activity/search calls
 src/store/       Auth, project catalog and active workspace providers
 src/hooks/       Hash router, memoized chapter tree, focus trap
@@ -322,12 +335,13 @@ The database is created automatically. Migrations live in
 | `projects`                     | Owner, metadata, guidelines, stats and revisions            |
 | `project_documents`            | Normalized chapters, selected chapter and document revision |
 | `activity_entries`             | Append-only activity with actor attribution                 |
+| `attachments`                  | Project-document files, metadata, SHA-256 and content BLOB  |
 | `user_state`                   | Per-user active project                                     |
 | `app_state`                    | Legacy global state; migrated and unused after phase 6      |
 | `schema_migrations`            | Applied database migrations                                 |
 
 WAL mode, foreign keys and a busy timeout are enabled. Project deletion cascades
-to its document and activity. `npm run db:reset` deletes the database, reapplies
+to its document, activity and attachments. `npm run db:reset` deletes the database, reapplies
 migrations, creates the super admin and seeds the sample projects when
 `LAYERS_SEED_SAMPLES` is enabled.
 
@@ -339,37 +353,40 @@ suffix on name collisions. Older v1/v2 files remain importable.
 
 ### API
 
-| Method       | Path                                          | Purpose                            |
-| ------------ | --------------------------------------------- | ---------------------------------- |
-| `GET`        | `/api/v1/health`                              | Public API and database check      |
-| `POST`       | `/api/v1/auth/login`                          | Sign in and set a session cookie   |
-| `POST`       | `/api/v1/auth/logout`                         | Sign out                           |
-| `GET`        | `/api/v1/auth/session`                        | Current browser session            |
-| `GET`        | `/api/v1/me`                                  | Current user for a browser session |
-| `POST`       | `/api/v1/me/password`                         | Change the super-admin password    |
-| `GET/DELETE` | `/api/v1/auth/sessions`                       | List or revoke other sessions      |
-| `GET/POST`   | `/api/v1/projects/:id/tokens`                 | List or create MCP API keys        |
-| `DELETE`     | `/api/v1/projects/:id/tokens/:tokenId`        | Revoke a project API key           |
-| `GET`        | `/api/v1/projects/:id/oauth-grants`           | List OAuth connections             |
-| `DELETE`     | `/api/v1/projects/:id/oauth-grants/:grantId`  | Revoke an OAuth connection         |
-| `GET`        | `/api/v1/oauth/authorize/:requestId`          | Read a pending consent request     |
-| `POST`       | `/api/v1/oauth/authorize/:requestId/decision` | Approve or deny consent            |
-| `GET/POST`   | `/api/v1/users`                               | Super-admin user management        |
-| `GET`        | `/api/v1/projects`                            | Owned catalog and active project   |
-| `POST`       | `/api/v1/projects`                            | Create a project                   |
-| `GET`        | `/api/v1/projects/:id`                        | Project detail and guidelines      |
-| `PATCH`      | `/api/v1/projects/:id`                        | Update metadata/guidelines         |
-| `DELETE`     | `/api/v1/projects/:id`                        | Delete a project                   |
-| `POST`       | `/api/v1/projects/:id/duplicate`              | Duplicate a project                |
-| `POST`       | `/api/v1/projects/:id/activate`               | Set the active project             |
-| `GET`        | `/api/v1/projects/:id/document`               | Read the document                  |
-| `PUT`        | `/api/v1/projects/:id/document`               | Replace the document               |
-| `GET`        | `/api/v1/projects/:id/activity`               | Read activity                      |
-| `POST`       | `/api/v1/projects/:id/activity`               | Append activity                    |
-| `GET`        | `/api/v1/projects/:id/coverage`               | Derived verification coverage      |
-| `GET`        | `/api/v1/projects/:id/search`                 | Search one project                 |
-| `GET`        | `/api/v1/projects/:id/export`                 | Download a project file            |
-| `POST`       | `/api/v1/projects/import`                     | Import a project file              |
+| Method       | Path                                                     | Purpose                             |
+| ------------ | -------------------------------------------------------- | ----------------------------------- |
+| `GET`        | `/api/v1/health`                                         | Public API and database check       |
+| `POST`       | `/api/v1/auth/login`                                     | Sign in and set a session cookie    |
+| `POST`       | `/api/v1/auth/logout`                                    | Sign out                            |
+| `GET`        | `/api/v1/auth/session`                                   | Current browser session             |
+| `GET`        | `/api/v1/me`                                             | Current user for a browser session  |
+| `POST`       | `/api/v1/me/password`                                    | Change the super-admin password     |
+| `GET/DELETE` | `/api/v1/auth/sessions`                                  | List or revoke other sessions       |
+| `GET/POST`   | `/api/v1/projects/:id/tokens`                            | List or create MCP API keys         |
+| `DELETE`     | `/api/v1/projects/:id/tokens/:tokenId`                   | Revoke a project API key            |
+| `GET`        | `/api/v1/projects/:id/oauth-grants`                      | List OAuth connections              |
+| `DELETE`     | `/api/v1/projects/:id/oauth-grants/:grantId`             | Revoke an OAuth connection          |
+| `GET`        | `/api/v1/oauth/authorize/:requestId`                     | Read a pending consent request      |
+| `POST`       | `/api/v1/oauth/authorize/:requestId/decision`            | Approve or deny consent             |
+| `GET/POST`   | `/api/v1/users`                                          | Super-admin user management         |
+| `GET`        | `/api/v1/projects`                                       | Owned catalog and active project    |
+| `POST`       | `/api/v1/projects`                                       | Create a project                    |
+| `GET`        | `/api/v1/projects/:id`                                   | Project detail and guidelines       |
+| `PATCH`      | `/api/v1/projects/:id`                                   | Update metadata/guidelines          |
+| `DELETE`     | `/api/v1/projects/:id`                                   | Delete a project                    |
+| `POST`       | `/api/v1/projects/:id/duplicate`                         | Duplicate a project                 |
+| `POST`       | `/api/v1/projects/:id/activate`                          | Set the active project              |
+| `GET`        | `/api/v1/projects/:id/document`                          | Read the document                   |
+| `PUT`        | `/api/v1/projects/:id/document`                          | Replace the document                |
+| `GET/POST`   | `/api/v1/projects/:id/attachments`                       | List or upload document attachments |
+| `GET/DELETE` | `/api/v1/projects/:id/attachments/:attachmentId`         | Read metadata or delete one         |
+| `GET`        | `/api/v1/projects/:id/attachments/:attachmentId/content` | Download content                    |
+| `GET`        | `/api/v1/projects/:id/activity`                          | Read activity                       |
+| `POST`       | `/api/v1/projects/:id/activity`                          | Append activity                     |
+| `GET`        | `/api/v1/projects/:id/coverage`                          | Derived verification coverage       |
+| `GET`        | `/api/v1/projects/:id/search`                            | Search one project                  |
+| `GET`        | `/api/v1/projects/:id/export`                            | Download a project file             |
+| `POST`       | `/api/v1/projects/import`                                | Import a project file               |
 
 REST routes require a browser session cookie. Project API keys and OAuth access
 tokens are accepted only by `/mcp`. Standard OAuth and discovery routes live
@@ -459,7 +476,8 @@ project search, accessibility (axe) and focus management.
 
 ### Remote Codex access
 
-Layers exposes its project and document operations over MCP at `/mcp`.
+Layers exposes its project, document and attachment operations over MCP at
+`/mcp`.
 Create an API key for one project in that project's actions menu (**MCP
 access**), or let an OAuth-only client authorize itself through the consent
 page. Either credential is bound to that project and accepted only by `/mcp`;

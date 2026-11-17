@@ -276,6 +276,101 @@ activity entry if the change should appear on the activity page:
 }
 ```
 
+### Attachments
+
+Attachments belong to the project document, not to an individual chapter.
+Allowed files are `.pdf`, `.csv`, `.tsv`, `.txt`, `.md`, `.log`, `.json`,
+`.yaml`, `.yml`, `.toon`, `.jpg`, `.jpeg`, `.png`, `.xls`, `.xlsx`, `.docx` and
+`.pptx`. Each file can be at most 10 MiB (10 × 1024 × 1024 bytes) of decoded
+content, and a project can have at most 20 attachments. Upload and delete do not
+change the document or metadata revision.
+
+Upload uses JSON with raw base64 content, not multipart and not a data-URL
+prefix:
+
+```sh
+BASE64=$(base64 < /tmp/report.pdf | tr -d '\n')
+curl $AUTH \
+  -X POST http://127.0.0.1:3001/api/v1/projects/website/attachments \
+  -H 'Content-Type: application/json' \
+  -d "{\"filename\":\"report.pdf\",\"contentBase64\":\"$BASE64\"}"
+```
+
+Response `201`:
+
+```json
+{
+  "id": "att_...",
+  "projectId": "website",
+  "filename": "report.pdf",
+  "contentType": "application/pdf",
+  "sizeBytes": 48213,
+  "sha256": "9f2c...",
+  "createdAt": "2026-11-17T10:00:00.000Z",
+  "createdByName": "Super Admin"
+}
+```
+
+List and limits:
+
+```sh
+curl $AUTH http://127.0.0.1:3001/api/v1/projects/website/attachments
+```
+
+```json
+{
+  "attachments": [],
+  "maxAttachments": 20,
+  "maxAttachmentBytes": 10485760,
+  "allowedExtensions": [
+    ".pdf",
+    ".csv",
+    ".tsv",
+    ".txt",
+    ".md",
+    ".log",
+    ".json",
+    ".yaml",
+    ".yml",
+    ".toon",
+    ".jpg",
+    ".jpeg",
+    ".png",
+    ".xls",
+    ".xlsx",
+    ".docx",
+    ".pptx"
+  ]
+}
+```
+
+Read metadata, download content and delete:
+
+```sh
+curl $AUTH \
+  http://127.0.0.1:3001/api/v1/projects/website/attachments/<attachmentId>
+
+curl $AUTH -OJ \
+  http://127.0.0.1:3001/api/v1/projects/website/attachments/<attachmentId>/content
+
+curl $AUTH -X DELETE \
+  http://127.0.0.1:3001/api/v1/projects/website/attachments/<attachmentId>
+```
+
+The extension selects the content type. The server checks image/PDF/OLE
+signatures, requires valid UTF-8 text without NUL bytes for text formats, and
+checks the required package entry for `.xlsx`, `.docx` and `.pptx`. A mismatch
+returns `415 unsupported_attachment_type`. Upload errors
+use `413 attachment_too_large`, `409 attachment_limit_reached` and
+`422 validation_failed`. Missing attachments return
+`404 attachment_not_found`. Downloads set `Content-Disposition: attachment`,
+`X-Content-Type-Options: nosniff` and `Cache-Control: no-store`; never render
+the bytes inline.
+
+Activity records `Attached <filename>` and `Removed <filename>`. Duplicating a
+project copies its attachments. The JSON export does not include attachment
+content, and importing a project does not restore attachments.
+
 ### Search a project
 
 Search is always scoped to one project. There is no global search endpoint.
@@ -405,8 +500,10 @@ ETags are quoted decimal revisions such as `"12"`. Missing headers return
 Common codes: `unauthenticated`, `invalid_credentials`, `account_disabled`,
 `forbidden`, `invalid_origin`, `not_found`, `validation_failed`,
 `revision_conflict`, `precondition_required`, `email_taken`, `rate_limited`,
-`project_limit`, `password_unchanged`, `payload_too_large`, `stored_data_invalid`,
-`database_unavailable`, `internal_error`.
+`project_limit`, `attachment_limit_reached`, `attachment_too_large`,
+`attachment_not_found`, `unsupported_attachment_type`, `password_unchanged`,
+`payload_too_large`, `stored_data_invalid`, `database_unavailable`,
+`internal_error`.
 
 `401 unauthenticated` means the session, MCP key or OAuth access token is
 missing, expired or revoked. Sign in again, create a new key, or let the MCP
@@ -419,7 +516,7 @@ OAuth-only MCP clients use the same `/mcp` endpoint. Layers acts as both the
 OAuth 2.1 authorization server and the MCP resource server in the existing API
 process. An MCP request is authenticated by either a project API key
 (`lrs_…`) or an OAuth access token (`loa_…`); the credential type does not
-change the ten MCP tools or their project binding.
+change the fifteen MCP tools or their project binding.
 
 OAuth is enabled only when `LAYERS_PUBLIC_URL` is set. API keys continue to work
 without it. The value must be the exact public origin users open, for example
@@ -548,9 +645,14 @@ synchronized and reports edits and deletions in `criterionSync`; agents edit the
 criterion text (or the subchapter, with the same result) and never try to keep
 the two sides different. On a revision conflict, fetch the latest content and
 reapply the intended change.
-MCP requests and responses are limited to 2 MiB; larger documents must be
-handled through the existing API. The read-only `search_project` tool uses the
-same project-scoped rules and returns the same search response. The agent is instructed to seek confirmation
+MCP transport requests and responses are limited to 15 MiB so a 10 MiB
+attachment fits after base64 encoding. A regular tool envelope above 2 MiB
+returns `payload_too_large`; `get_attachment` may return the full attachment
+content. The attachment tools are `list_attachments`, `get_attachment`,
+`add_attachment` and `delete_attachment`; `add_attachment` takes raw
+`contentBase64` and `get_attachment` returns metadata plus `contentBase64`.
+The read-only `search_project` tool uses the same project-scoped rules and
+returns the same search response. The agent is instructed to seek confirmation
 before destructive actions, but instructions are not a server-side approval
 guarantee. In a Codex CLI 0.169.0 test, Codex attempted deletion after a direct
 request without first asking in chat; the client blocked the tool call because

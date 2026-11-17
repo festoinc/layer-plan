@@ -8,6 +8,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { AttachmentsDialog } from "../components/AttachmentsDialog";
 import { ChapterEditor } from "../components/ChapterEditor";
 import { DeleteProjectDialog } from "../components/DeleteProjectDialog";
 import { ProjectDialog } from "../components/ProjectDialog";
@@ -94,6 +95,7 @@ export function WorkspaceShell({ projectId }: WorkspaceShellProps) {
   >(null);
   const [deleteTarget, setDeleteTarget] = useState<ProjectSummary | null>(null);
   const [tokenProject, setTokenProject] = useState<ProjectSummary | null>(null);
+  const [attachmentsOpen, setAttachmentsOpen] = useState(false);
   const [confirmOverwrite, setConfirmOverwrite] = useState(false);
   const [overwritePending, setOverwritePending] = useState(false);
   const sidebarRef = useRef<HTMLElement | null>(null);
@@ -483,6 +485,7 @@ export function WorkspaceShell({ projectId }: WorkspaceShellProps) {
         onNewProject={openCreateProject}
         onExportProject={() => exportProjectById(projectId)}
         onImportProject={importProjectText}
+        onOpenAttachments={() => setAttachmentsOpen(true)}
       />
       <main id="main-content" className="main" tabIndex={-1}>
         <Topbar
@@ -535,6 +538,7 @@ export function WorkspaceShell({ projectId }: WorkspaceShellProps) {
                 onRevealChildren={revealChildren}
                 deleteInfo={deleteInfo}
                 onDeleteChapter={deleteCurrentChapter}
+                onOpenAttachments={() => setAttachmentsOpen(true)}
               />
             ) : (
               <section className="chapter-editor overview-page empty-workspace">
@@ -593,6 +597,13 @@ export function WorkspaceShell({ projectId }: WorkspaceShellProps) {
         <ProjectTokensDialog
           project={tokenProject}
           onClose={closeTokenDialog}
+        />
+      )}
+      {attachmentsOpen && (
+        <AttachmentsDialog
+          key={project.id}
+          project={project}
+          onClose={() => setAttachmentsOpen(false)}
         />
       )}
       {deleteTarget && (

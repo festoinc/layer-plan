@@ -6,7 +6,14 @@ import {
   useRef,
   useState,
 } from "react";
-import { ChevronRight, CornerDownRight, Plus, Trash2, X } from "lucide-react";
+import {
+  ChevronRight,
+  CornerDownRight,
+  Paperclip,
+  Plus,
+  Trash2,
+  X,
+} from "lucide-react";
 import { AutoTextarea, EditableMarkdown } from "../Markdown";
 import { Chapter, collectSubtreeIds } from "../domain/chapters";
 import { criterionProgress, deriveCriterionTitle } from "../domain/criteria";
@@ -62,6 +69,7 @@ export interface ChapterEditorProps {
   onRevealChildren: (id: string) => void;
   deleteInfo: ChapterDeleteInfo;
   onDeleteChapter: () => void;
+  onOpenAttachments: () => void;
 }
 
 export function ChapterEditor({
@@ -73,6 +81,7 @@ export function ChapterEditor({
   onRevealChildren,
   deleteInfo,
   onDeleteChapter,
+  onOpenAttachments,
 }: ChapterEditorProps) {
   const {
     setChapterField,
@@ -174,6 +183,15 @@ export function ChapterEditor({
           ))}
         </nav>
         <div className="document-options">
+          <button
+            type="button"
+            className="icon-button attachments-chapter-button"
+            aria-label="Open attachments"
+            title="Attachments"
+            onClick={onOpenAttachments}
+          >
+            <Paperclip size={16} />
+          </button>
           <button
             type="button"
             className="icon-button delete-chapter-button"

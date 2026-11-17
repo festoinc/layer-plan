@@ -1,4 +1,8 @@
 import type { ActivityEntry } from "../domain/activity";
+import type {
+  AttachmentInfo,
+  AttachmentListResponse,
+} from "../domain/attachments";
 import type { ChapterDocument } from "../domain/chapters";
 import type { CriterionSync } from "../domain/criterionLinks";
 import type { ProjectStats, ProjectSummary } from "../domain/projects";
@@ -11,6 +15,8 @@ export type {
   SearchResponse,
   SearchResult,
 } from "../domain/search";
+
+export type { AttachmentInfo, AttachmentListResponse };
 
 export interface ProjectDetail extends ProjectSummary {
   testGuidelines: string;

@@ -8,6 +8,7 @@ import Fastify, { type FastifyInstance } from "fastify";
 import { parse as parseYaml } from "yaml";
 import { ApiError, errorHandler, notFoundHandler } from "./api/errors";
 import { registerActivityRoutes } from "./api/routes/activity";
+import { registerAttachmentRoutes } from "./api/routes/attachments";
 import { registerAuthRoutes } from "./api/routes/auth";
 import { registerCoverageRoutes } from "./api/routes/coverage";
 import { registerDocumentRoutes } from "./api/routes/document";
@@ -159,6 +160,7 @@ export async function buildApp({
   registerUserRoutes(app, authStore, hooks, passwordHasher);
   registerProjectRoutes(app, store, hooks);
   registerDocumentRoutes(app, store, hooks);
+  registerAttachmentRoutes(app, store, hooks);
   registerActivityRoutes(app, store, hooks);
   registerCoverageRoutes(app, store, hooks);
   registerSearchRoutes(app, store, hooks);
@@ -171,7 +173,7 @@ export async function buildApp({
     hooks,
     now,
   });
-  registerMcpRoutes(app, hooks, config);
+  registerMcpRoutes(app, store, hooks, config);
   if (config.testMode) {
     registerTestRoutes(app, {
       config,
