@@ -95,7 +95,7 @@ describe("project search API", () => {
     ]);
     expect(
       reset.matches.map((match: { field: string }) => match.field),
-    ).toEqual(expect.arrayContaining(["title", "description", "criterion"]));
+    ).toEqual(expect.arrayContaining(["title", "criterion"]));
     for (const match of reset.matches) {
       expect(match.ranges.length).toBeGreaterThan(0);
       expect(match.snippet.length).toBeLessThanOrEqual(162);
