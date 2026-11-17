@@ -48,6 +48,16 @@ export async function revokeOtherSessions(): Promise<void> {
   await apiRequest<void>("/auth/sessions", { method: "DELETE" });
 }
 
+export async function changePassword(input: {
+  currentPassword: string;
+  newPassword: string;
+}): Promise<void> {
+  await apiRequest<void>("/me/password", {
+    method: "POST",
+    body: input,
+  });
+}
+
 export async function listUsers(): Promise<UsersResponse> {
   const response = await apiRequest<UsersResponse>("/users");
   return response.data;

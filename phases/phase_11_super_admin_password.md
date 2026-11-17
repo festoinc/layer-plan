@@ -20,9 +20,9 @@ sessions.
   new password and checks the two values match before sending. The server
   validates the current password, the 12–200 character password length and that
   the new password differs from the current one.
-- A wrong current password returns `401 invalid_credentials`. A non-super-admin
-  session, an API key or a missing session returns `403 forbidden` or `401
-  unauthenticated` as appropriate.
+- A wrong current password returns `403 invalid_credentials` so the current
+  session stays active. A non-super-admin session or an API key returns `403
+  forbidden`; a missing or expired session returns `401 unauthenticated`.
 - A successful change returns `204`, keeps the current session, and deletes the
   user's other sessions. All API project keys are unaffected.
 - The password-change route uses the login rate-limit window keyed by IP and

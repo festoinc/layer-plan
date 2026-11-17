@@ -38,20 +38,6 @@ export async function ensureSuperAdmin(
       });
     }
 
-    const passwordMatches = await passwordHasher.verify(
-      existing.passwordHash,
-      input.password,
-    );
-    if (!passwordMatches) {
-      const updated = authStore.updateSuperAdmin(existing.id, {
-        email,
-        displayName,
-        passwordHash: await passwordHasher.hash(input.password),
-      });
-      authStore.deleteUserSessions(existing.id);
-      return updated;
-    }
-
     const emailChanged = existing.email.toLowerCase() !== email;
     const nameChanged = existing.displayName !== displayName;
     if (emailChanged || nameChanged || existing.disabledAt) {

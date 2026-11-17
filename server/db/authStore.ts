@@ -85,6 +85,7 @@ export interface AuthStore {
   listUsers(): UserRecord[];
   createUser(input: CreateUserInput): UserRecord;
   setUserDisabled(id: string, disabled: boolean): UserRecord;
+  updateUserPassword(id: string, passwordHash: string): UserRecord;
 
   createSession(input: CreateSessionInput): SessionRecord;
   getSession(id: string): SessionRecord | null;
@@ -258,6 +259,15 @@ export class SqliteAuthStore implements AuthStore {
       .prepare("UPDATE users SET disabled_at = ?, updated_at = ? WHERE id = ?")
       .run(disabled ? timestamp : null, timestamp, id);
     if (disabled) this.deleteUserSessions(id);
+    return this.requireUser(id);
+  }
+
+  updateUserPassword(id: string, passwordHash: string): UserRecord {
+    this.db
+      .prepare(
+        "UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?",
+      )
+      .run(passwordHash, this.now(), id);
     return this.requireUser(id);
   }
 

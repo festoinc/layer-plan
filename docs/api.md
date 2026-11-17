@@ -17,7 +17,8 @@ AI-agent working instructions, see
 ## Sign in
 
 The super admin is configured in `.env` and can create member accounts at
-`#/users`. No email is sent. Passwords cannot be changed or recovered yet.
+`#/users`. No email is sent. The super admin can change their own password at
+`#/account`; member passwords and password recovery are not available.
 
 ```sh
 curl -c /tmp/layers-cookies.txt \
@@ -40,6 +41,24 @@ Sign out:
 curl -b /tmp/layers-cookies.txt -X POST \
   http://127.0.0.1:3001/api/v1/auth/logout
 ```
+
+## Change the super-admin password
+
+Sign in and send the current password with the new password. The new password
+must be 12–200 characters and must differ from the current one. The current
+session stays signed in; other browser sessions are revoked.
+
+```sh
+curl -b /tmp/layers-cookies.txt \
+  -X POST http://127.0.0.1:3001/api/v1/me/password \
+  -H 'Content-Type: application/json' \
+  -d '{"currentPassword":"current-password","newPassword":"new-password-123"}'
+```
+
+The response is `204 No Content`. A wrong current password returns
+`403 invalid_credentials` without signing out the current session. Member
+sessions and project API keys cannot call this endpoint. The account page form asks for the new password twice and checks the
+values before sending.
 
 ## Create an MCP API key for a project
 
@@ -287,7 +306,7 @@ ETags are quoted decimal revisions such as `"12"`. Missing headers return
 Common codes: `unauthenticated`, `invalid_credentials`, `account_disabled`,
 `forbidden`, `invalid_origin`, `not_found`, `validation_failed`,
 `revision_conflict`, `precondition_required`, `email_taken`, `rate_limited`,
-`project_limit`, `payload_too_large`, `stored_data_invalid`,
+`project_limit`, `password_unchanged`, `payload_too_large`, `stored_data_invalid`,
 `database_unavailable`, `internal_error`.
 
 `401 unauthenticated` means the session or MCP key is missing, expired or

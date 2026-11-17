@@ -10,6 +10,7 @@ import {
 import { sessionExpiry } from "../../server/auth/middleware";
 import { createInternalAuth } from "../../server/auth/internal";
 import {
+  changePasswordSchema,
   createTokenSchema,
   createUserSchema,
   loginSchema,
@@ -86,6 +87,27 @@ describe("auth request schemas", () => {
         password: "twelve-characters",
       }).success,
     ).toBe(true);
+  });
+
+  it("validates password changes", () => {
+    expect(
+      changePasswordSchema.safeParse({
+        currentPassword: "current-password",
+        newPassword: "new-password-123",
+      }).success,
+    ).toBe(true);
+    expect(
+      changePasswordSchema.safeParse({
+        currentPassword: "current-password",
+        newPassword: "short",
+      }).success,
+    ).toBe(false);
+    expect(
+      changePasswordSchema.safeParse({
+        currentPassword: "",
+        newPassword: "new-password-123",
+      }).success,
+    ).toBe(false);
   });
 
   it("validates project key scopes and expiry", () => {
