@@ -1,7 +1,36 @@
 # Phase 14 — Criterion and subchapter stay in sync
 
-Status: draft for review  
+Status: delivered  
 Updated: 2026-11-17
+
+## Delivery and verification
+
+- CI `verify` passed on `main` (run 44176572935): lint, format, typecheck, unit,
+  API, contract, build and Playwright (52 tests). The `docker` job published
+  `latest` and `sha-a82287c`.
+- Tested image: `ghcr.io/festoinc/layer-plan:sha-a82287c`, digest
+  `sha256:ed73cff826a166ccf012fba1ca5bef00e738442dd1a739da7e0c70e088d77213`,
+  revision `a82287cee2cb7d8917a88e706e0a2993111cef09`, runtime user `node`.
+- Remote checks ran on the shared test host in an isolated container on
+  `127.0.0.1:18081` with a fresh `layers-e2e-phase14-data` volume. The phase 1a
+  container on `18080` and the shared nginx vhost were left untouched.
+- REST checks passed: criterion creation, criterion text mirroring the
+  subchapter, description and title edits mirroring the criterion, criterion
+  deletion cascading to the subtree with the activity event plus coverage and
+  export updates, detach keeping both records, final-level suppression,
+  `selectedId` fallback, a stale `412 revision_conflict`, and all three
+  `criterionSync` arrays.
+- MCP checks passed with a project API key over the loopback port: the
+  initialization instructions, the unchanged eleven-tool list, create/edit/
+  delete through `replace_document` with `criterionSync`, and a wrong project id
+  returning `404`.
+- The UI and API surfaces returned `200`; the browser behaviour ran in the CI
+  Playwright suite.
+- Cleanup removed the container, volume, test directory and temporary Docker
+  config. Port `18081` is free, nginx is active, satia and n8n still run, and the
+  phase 1a container remains untouched.
+- The local gate (`lint`, `format:check`, `typecheck`, `api:lint`, `build`)
+  passed before every push.
 
 ## Why this phase
 
