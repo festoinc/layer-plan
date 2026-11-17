@@ -145,6 +145,61 @@ export function criterionProgress(chapter: Chapter | undefined | null): {
 /**
  * Keep the criterion list of a chapter in sync with a new set of criteria.
  */
+/**
+ * Apply server-created criterion subchapters to a local document. Used after a
+ * save response so a clean workspace adopts the server document and a dirty
+ * workspace receives only the generated chapters and links.
+ */
+export function applyCreatedSubchapters(
+  document: ChapterDocument,
+  created: Array<{
+    id: string;
+    parentId: string;
+    criterionId: string;
+  }>,
+  source: ChapterDocument,
+): ChapterDocument {
+  let next = document;
+  for (const item of created) {
+    let parent = next.byId[item.parentId];
+    if (!parent) continue;
+    const currentCriterion = parent.criteria.find(
+      (criterion) => criterion.id === item.criterionId,
+    );
+    if (
+      !currentCriterion ||
+      (currentCriterion.chapterId && currentCriterion.chapterId !== item.id)
+    ) {
+      continue;
+    }
+    if (!next.byId[item.id]) {
+      const subchapter = source.byId[item.id];
+      if (!subchapter) continue;
+      next = insertChapter(next, subchapter);
+      parent = next.byId[item.parentId];
+    }
+    if (!parent) continue;
+    if (!parent.childIds.includes(item.id)) {
+      next = patchChapter(next, parent.id, {
+        childIds: [...parent.childIds, item.id],
+      });
+      parent = next.byId[parent.id];
+    }
+    if (!parent) continue;
+    const criteria = parent.criteria.map((criterion) =>
+      criterion.id === item.criterionId && !criterion.chapterId
+        ? { ...criterion, chapterId: item.id }
+        : criterion,
+    );
+    if (
+      criteria.some((criterion, index) => criterion !== parent.criteria[index])
+    ) {
+      next = patchChapter(next, parent.id, { criteria });
+    }
+  }
+  return next;
+}
+
 export function replaceCriteria(
   document: ChapterDocument,
   chapterId: string,

@@ -1371,6 +1371,7 @@ components:
           required:
             - stats
             - activity
+            - createdSubchapters
           properties:
             stats:
               $ref: "#/components/schemas/Stats"
@@ -1378,6 +1379,26 @@ components:
               type: array
               items:
                 $ref: "#/components/schemas/ActivityEntry"
+            createdSubchapters:
+              type: array
+              items:
+                $ref: "#/components/schemas/CreatedCriterionSubchapter"
+    CreatedCriterionSubchapter:
+      type: object
+      required:
+        - id
+        - parentId
+        - criterionId
+        - title
+      properties:
+        id:
+          type: string
+        parentId:
+          type: string
+        criterionId:
+          type: string
+        title:
+          type: string
     VerificationSummary:
       type: object
       required:

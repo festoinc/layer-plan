@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   addCriterion,
+  applyCreatedSubchapters,
   createCriterion,
   createSubchapterFromCriterion,
   criterionProgress,
@@ -87,6 +88,59 @@ describe("criteria", () => {
     );
     expect(next.byId.parent.criteria[0]).not.toHaveProperty("chapterId");
     expect(next.byId.parent.childIds).toEqual([]);
+  });
+
+  it("applies server-created subchapters to a local document", () => {
+    const base = addCriterion(
+      documentWithChapter(),
+      "parent",
+      createCriterion({ id: "c1", text: "Ship it" }),
+    );
+    const source = addCriterion(
+      documentWithChapter(),
+      "parent",
+      createCriterion({ id: "c1", text: "Ship it" }),
+      createSubchapterFromCriterion({ id: "s1", text: "Ship it" }),
+    );
+    const applied = applyCreatedSubchapters(
+      base,
+      [{ id: "s1", parentId: "parent", criterionId: "c1" }],
+      source,
+    );
+    expect(applied.byId.parent.childIds).toEqual(["s1"]);
+    expect(applied.byId.parent.criteria[0].chapterId).toBe("s1");
+    expect(applied.byId.s1.description).toBe("Ship it");
+    expect(applied.byId.s1.parentId).toBe("parent");
+
+    const again = applyCreatedSubchapters(
+      applied,
+      [{ id: "s1", parentId: "parent", criterionId: "c1" }],
+      source,
+    );
+    expect(again).toBe(applied);
+
+    const withoutCriterion = applyCreatedSubchapters(
+      documentWithChapter(),
+      [{ id: "s1", parentId: "parent", criterionId: "missing" }],
+      source,
+    );
+    expect(withoutCriterion.byId.s1).toBeUndefined();
+  });
+
+  it("does not apply a generated chapter after the criterion was deleted", () => {
+    const base = documentWithChapter();
+    const source = addCriterion(
+      documentWithChapter(),
+      "parent",
+      createCriterion({ id: "c1", text: "Ship it" }),
+      createSubchapterFromCriterion({ id: "s1", text: "Ship it" }),
+    );
+    const applied = applyCreatedSubchapters(
+      base,
+      [{ id: "s1", parentId: "parent", criterionId: "c1" }],
+      source,
+    );
+    expect(applied).toBe(base);
   });
 
   it("patches, toggles and removes criteria without touching chapters", () => {

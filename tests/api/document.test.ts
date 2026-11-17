@@ -92,6 +92,181 @@ describe("document API", () => {
     expect(json(stale).error.details.currentRevision).toBe(2);
   });
 
+  it("creates subchapters for new criteria and is idempotent", async () => {
+    api = await createTestApi();
+    const cookie = await superCookie(api);
+    const first = await getDocument(api, cookie);
+    const chapters = structuredClone(first.body.chapters);
+    const parent = chapters.byId["password-reset"];
+    expect(parent.finalLevel).toBe(false);
+    parent.criteria.push({
+      id: "new-criterion",
+      text: "**Ship** it today",
+      checked: false,
+    });
+
+    const saved = await api.app.inject({
+      method: "PUT",
+      url: "/api/v1/projects/website/document",
+      headers: {
+        ...authHeaders(cookie),
+        "content-type": "application/json",
+        "if-match": first.etag,
+      },
+      payload: { chapters, selectedId: first.body.selectedId },
+    });
+    expect(saved.statusCode).toBe(200);
+    const body = json(saved);
+    expect(body.createdSubchapters).toHaveLength(1);
+    const created = body.createdSubchapters[0];
+    expect(created).toMatchObject({
+      parentId: "password-reset",
+      criterionId: "new-criterion",
+      title: "Ship it today",
+    });
+    expect(body.chapters.byId["password-reset"].childIds).toContain(created.id);
+    expect(
+      body.chapters.byId["password-reset"].criteria.find(
+        (item: { id: string }) => item.id === "new-criterion",
+      ).chapterId,
+    ).toBe(created.id);
+    expect(body.chapters.byId[created.id]).toMatchObject({
+      parentId: "password-reset",
+      title: "Ship it today",
+      description: "**Ship** it today",
+    });
+    expect(
+      body.activity.some(
+        (event: { message: string }) =>
+          event.message === "Created subchapter from success criterion",
+      ),
+    ).toBe(true);
+
+    const again = await api.app.inject({
+      method: "PUT",
+      url: "/api/v1/projects/website/document",
+      headers: {
+        ...authHeaders(cookie),
+        "content-type": "application/json",
+        "if-match": saved.headers.etag as string,
+      },
+      payload: {
+        chapters: body.chapters,
+        selectedId: body.selectedId,
+      },
+    });
+    expect(again.statusCode).toBe(200);
+    expect(json(again).createdSubchapters).toEqual([]);
+    expect(json(again).revision).toBe(body.revision);
+  });
+
+  it("skips final-level chapters, empty text and already-linked criteria", async () => {
+    api = await createTestApi();
+    const cookie = await superCookie(api);
+    const first = await getDocument(api, cookie);
+    const chapters = structuredClone(first.body.chapters);
+    const parent = chapters.byId["password-reset"];
+    const childCount = parent.childIds.length;
+    parent.finalLevel = true;
+    parent.criteria.push(
+      { id: "final-criterion", text: "Final outcome", checked: false },
+      { id: "empty-criterion", text: "   ", checked: false },
+    );
+    chapters.byId["manual-sub"] = {
+      ...structuredClone(parent),
+      id: "manual-sub",
+      parentId: "password-reset",
+      title: "Manual supporting notes",
+      criteria: [],
+      childIds: [],
+      finalLevel: false,
+    };
+    parent.childIds.push("manual-sub");
+    parent.criteria.push({
+      id: "linked-criterion",
+      text: "Already linked",
+      checked: false,
+      chapterId: "manual-sub",
+    });
+
+    const saved = await api.app.inject({
+      method: "PUT",
+      url: "/api/v1/projects/website/document",
+      headers: {
+        ...authHeaders(cookie),
+        "content-type": "application/json",
+        "if-match": first.etag,
+      },
+      payload: { chapters, selectedId: first.body.selectedId },
+    });
+    expect(saved.statusCode).toBe(200);
+    const body = json(saved);
+    expect(body.createdSubchapters).toEqual([]);
+    expect(body.chapters.byId["password-reset"].childIds).toHaveLength(
+      childCount + 1,
+    );
+    expect(
+      body.chapters.byId["password-reset"].criteria.find(
+        (item: { id: string }) => item.id === "final-criterion",
+      ).chapterId,
+    ).toBeUndefined();
+    expect(
+      body.chapters.byId["password-reset"].criteria.find(
+        (item: { id: string }) => item.id === "empty-criterion",
+      ).chapterId,
+    ).toBeUndefined();
+  });
+
+  it("does not backfill existing standalone criteria", async () => {
+    api = await createTestApi();
+    const cookie = await superCookie(api);
+    const first = await getDocument(api, cookie);
+    const chapters = structuredClone(first.body.chapters);
+    const parent = chapters.byId["password-reset"];
+    parent.finalLevel = true;
+    parent.criteria.push({
+      id: "standalone",
+      text: "Keep me standalone",
+      checked: false,
+    });
+    const firstSave = await api.app.inject({
+      method: "PUT",
+      url: "/api/v1/projects/website/document",
+      headers: {
+        ...authHeaders(cookie),
+        "content-type": "application/json",
+        "if-match": first.etag,
+      },
+      payload: { chapters, selectedId: first.body.selectedId },
+    });
+    expect(firstSave.statusCode).toBe(200);
+    expect(json(firstSave).createdSubchapters).toEqual([]);
+
+    const current = await getDocument(api, cookie);
+    const reopened = structuredClone(current.body.chapters);
+    reopened.byId["password-reset"].finalLevel = false;
+    const secondSave = await api.app.inject({
+      method: "PUT",
+      url: "/api/v1/projects/website/document",
+      headers: {
+        ...authHeaders(cookie),
+        "content-type": "application/json",
+        "if-match": current.etag,
+      },
+      payload: {
+        chapters: reopened,
+        selectedId: current.body.selectedId,
+      },
+    });
+    expect(secondSave.statusCode).toBe(200);
+    expect(json(secondSave).createdSubchapters).toEqual([]);
+    expect(
+      json(secondSave).chapters.byId["password-reset"].criteria.find(
+        (item: { id: string }) => item.id === "standalone",
+      ).chapterId,
+    ).toBeUndefined();
+  });
+
   it("does not bump the revision for an identical document", async () => {
     api = await createTestApi();
     const cookie = await superCookie(api);
