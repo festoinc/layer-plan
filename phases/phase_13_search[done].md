@@ -1,6 +1,6 @@
 # Phase 13 — Project search
 
-Status: draft for review  
+Status: delivered  
 Updated: 2026-11-17
 
 ## Why this phase
