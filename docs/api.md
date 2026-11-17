@@ -279,10 +279,11 @@ activity entry if the change should appear on the activity page:
 ### Attachments
 
 Attachments belong to the project document, not to an individual chapter.
-Allowed files are `.pdf`, `.csv`, `.jpg`, `.jpeg`, `.png` and `.xls`. Each file
-can be at most 10 MiB (10 × 1024 × 1024 bytes) of decoded content, and a project
-can have at most 20 attachments. Upload and delete do not change the document
-or metadata revision.
+Allowed files are `.pdf`, `.csv`, `.tsv`, `.txt`, `.md`, `.log`, `.json`,
+`.yaml`, `.yml`, `.toon`, `.jpg`, `.jpeg`, `.png`, `.xls`, `.xlsx`, `.docx` and
+`.pptx`. Each file can be at most 10 MiB (10 × 1024 × 1024 bytes) of decoded
+content, and a project can have at most 20 attachments. Upload and delete do not
+change the document or metadata revision.
 
 Upload uses JSON with raw base64 content, not multipart and not a data-URL
 prefix:
@@ -321,7 +322,25 @@ curl $AUTH http://127.0.0.1:3001/api/v1/projects/website/attachments
   "attachments": [],
   "maxAttachments": 20,
   "maxAttachmentBytes": 10485760,
-  "allowedExtensions": [".pdf", ".csv", ".jpg", ".jpeg", ".png", ".xls"]
+  "allowedExtensions": [
+    ".pdf",
+    ".csv",
+    ".tsv",
+    ".txt",
+    ".md",
+    ".log",
+    ".json",
+    ".yaml",
+    ".yml",
+    ".toon",
+    ".jpg",
+    ".jpeg",
+    ".png",
+    ".xls",
+    ".xlsx",
+    ".docx",
+    ".pptx"
+  ]
 }
 ```
 
@@ -338,8 +357,10 @@ curl $AUTH -X DELETE \
   http://127.0.0.1:3001/api/v1/projects/website/attachments/<attachmentId>
 ```
 
-The extension selects the content type and the server also checks file
-signatures; a mismatch returns `415 unsupported_attachment_type`. Upload errors
+The extension selects the content type. The server checks image/PDF/OLE
+signatures, requires valid UTF-8 text without NUL bytes for text formats, and
+checks the required package entry for `.xlsx`, `.docx` and `.pptx`. A mismatch
+returns `415 unsupported_attachment_type`. Upload errors
 use `413 attachment_too_large`, `409 attachment_limit_reached` and
 `422 validation_failed`. Missing attachments return
 `404 attachment_not_found`. Downloads set `Content-Disposition: attachment`,

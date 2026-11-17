@@ -299,7 +299,7 @@ export function AttachmentsDialog({
         ) : (
           <p className="attachments-empty">
             <Paperclip size={18} />
-            No attachments yet. Add a PDF, CSV, JPEG, PNG or XLS file.
+            No attachments yet. Add a document, image, spreadsheet or text file.
           </p>
         )}
       </div>

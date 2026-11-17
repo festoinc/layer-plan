@@ -13,7 +13,10 @@ import {
   appendActivitySchema,
   uploadAttachmentSchema,
 } from "../api/schemas";
-import { MAX_ATTACHMENT_BYTES } from "../../src/domain/attachments";
+import {
+  ATTACHMENT_EXTENSIONS,
+  MAX_ATTACHMENT_BYTES,
+} from "../../src/domain/attachments";
 import type { ProjectStore } from "../db/store";
 import {
   SEARCH_MAX_LIMIT,
@@ -188,8 +191,7 @@ function createOperations(store: ProjectStore): Operation[] {
     },
     {
       name: "list_attachments",
-      description:
-        "List the bound project document's attachments. The project can have at most 20 attachments of PDF, CSV, JPEG, PNG or XLS.",
+      description: `List the bound project document's attachments. The project can have at most 20 attachments. Allowed types: ${ATTACHMENT_EXTENSIONS.join(", ")}.`,
       method: "GET",
       path: (a) => `${projectPath(a)}/attachments`,
       schema: { projectId },
@@ -234,7 +236,7 @@ function createOperations(store: ProjectStore): Operation[] {
     },
     {
       name: "add_attachment",
-      description: `Attach a PDF, CSV, JPEG, PNG or XLS file to the bound project document. contentBase64 is the raw base64 file content, at most ${MAX_ATTACHMENT_BYTES} decoded bytes. At most 20 attachments are allowed.`,
+      description: `Attach a supported file to the bound project document. contentBase64 is the raw base64 file content, at most ${MAX_ATTACHMENT_BYTES} decoded bytes. At most 20 attachments are allowed. Allowed types: ${ATTACHMENT_EXTENSIONS.join(", ")}.`,
       method: "POST",
       path: (a) => `${projectPath(a)}/attachments`,
       schema: {

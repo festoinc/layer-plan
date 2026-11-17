@@ -461,11 +461,12 @@ export interface paths {
     };
     put?: never;
     /**
-     * Attach a PDF, CSV, JPEG, PNG or XLS file
+     * Attach a supported document, image or data file
      * @description Send raw base64 content without a data-URL prefix. The request body is
      *     limited to slightly more than the base64 size of a 10 MiB attachment;
      *     the decoded content must be at most 10 MiB. A project can have at most
-     *     20 attachments.
+     *     20 attachments. Supported formats include PDF, CSV/TSV, text, Markdown,
+     *     log, JSON, YAML, TOON, JPEG, PNG, XLS/XLSX, DOCX and PPTX.
      */
     post: {
       parameters: {
@@ -1583,9 +1584,18 @@ export interface components {
       contentType:
         | "application/pdf"
         | "text/csv"
+        | "text/tab-separated-values"
+        | "text/plain"
+        | "text/markdown"
+        | "text/toon"
+        | "application/json"
+        | "application/yaml"
         | "image/jpeg"
         | "image/png"
-        | "application/vnd.ms-excel";
+        | "application/vnd.ms-excel"
+        | "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        | "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        | "application/vnd.openxmlformats-officedocument.presentationml.presentation";
       sizeBytes: number;
       sha256: string;
       /** Format: date-time */

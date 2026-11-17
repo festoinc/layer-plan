@@ -16,9 +16,9 @@ the UI, the REST API and MCP.
 
 ## Goal
 
-The owner of a project can attach up to 20 files of type PDF, CSV, JPEG, PNG or
-XLS to the project document, 10 MiB per file, and can list, download and delete
-them. The browser and an MCP agent use the same stored data and enforce the same
+The owner of a project can attach up to 20 files of the supported document,
+image, spreadsheet and text/data formats to the project document, 10 MiB per
+file, and can list, download and delete them. The browser and an MCP agent use the same stored data and enforce the same
 limits. Attachments survive restart and are removed with their project.
 
 ## Locked decisions
@@ -27,8 +27,8 @@ limits. Attachments survive restart and are removed with their project.
 | --- | --- | --- |
 | 1 | Document scope | Attachments belong to the project document, not to an individual chapter. A project has one attachment set shared by all of its chapters. |
 | 2 | Limits | At most 20 attachments per project and at most 10 MiB (10 × 1024 × 1024 bytes) of decoded content per attachment. The limits are shared constants in `src/domain/attachments.ts`. |
-| 3 | Accepted types | `.pdf` → `application/pdf`, `.csv` → `text/csv`, `.jpg`/`.jpeg` → `image/jpeg`, `.png` → `image/png`, `.xls` → `application/vnd.ms-excel`. `.xlsx` is not accepted in this phase. |
-| 4 | Validation | The extension decides the accepted type. The decoded bytes are also checked against the type's signature; CSV must be valid UTF-8 without NUL bytes. A mismatch returns `415 unsupported_attachment_type`. |
+| 3 | Accepted types | `.pdf` → `application/pdf`, `.csv` → `text/csv`, `.tsv` → `text/tab-separated-values`, `.txt`/`.log` → `text/plain`, `.md` → `text/markdown`, `.json` → `application/json`, `.yaml`/`.yml` → `application/yaml`, `.toon` → `text/toon`, `.jpg`/`.jpeg` → `image/jpeg`, `.png` → `image/png`, `.xls` → `application/vnd.ms-excel`, `.xlsx` → `application/vnd.openxmlformats-officedocument.spreadsheetml.sheet`, `.docx` → `application/vnd.openxmlformats-officedocument.wordprocessingml.document`, `.pptx` → `application/vnd.openxmlformats-officedocument.presentationml.presentation`. |
+| 4 | Validation | The extension decides the accepted type. PDF, JPEG, PNG and OLE files are checked against their signatures. Text, CSV, TSV, Markdown, log, JSON, YAML and TOON must be valid UTF-8 without NUL bytes. XLSX, DOCX and PPTX must be ZIP packages containing their expected part. A mismatch returns `415 unsupported_attachment_type`. |
 | 5 | Storage | A new `attachments` table stores metadata and the content as a SQLite `BLOB`, with a foreign key to `projects` and `ON DELETE CASCADE`. No file system directory and no object storage. |
 | 6 | Revision semantics | Attachments are a separate collection. Uploading or deleting one does not change the document or metadata revision and does not create optimistic-concurrency conflicts for editors. Attachment changes are recorded in project activity. |
 | 7 | REST upload | JSON `{ filename, contentBase64 }` to `POST /projects/{projectId}/attachments`. No multipart dependency. The route has a dedicated 14 MiB body limit; decoded content is enforced at 10 MiB. |
@@ -118,8 +118,8 @@ bound to the credential's project; another project id returns `not_found`.
 `AttachmentsDialog` is a modal with:
 
 - the project name and current count against the limit;
-- a file input accepting the five extensions, with client-side extension, size
-  and count checks before uploading;
+- a file input accepting the allowed extensions, with client-side extension,
+  size and count checks before uploading;
 - one row per attachment with filename, type, formatted size, upload time,
   download and a two-step delete;
 - loading, empty, error and notice states.
@@ -133,11 +133,11 @@ development UI on port 5173 works with the API on port 3001.
 ## 6. Tests and acceptance criteria
 
 1. Unit tests cover the extension table, filename normalization, size limit and
-   signature validation for PDF, PNG, JPEG, XLS and CSV.
+   validation for PDF, PNG, JPEG, XLS, XLSX, DOCX, PPTX and text/data formats.
 2. API tests cover upload, list, metadata, binary download headers and bytes,
-   deletion, the 20-file limit, the 10 MiB limit, unsupported types, malformed
-   base64, owner isolation, cascade deletion, project duplication and unchanged
-   document ETag after upload/delete.
+   deletion, every accepted format, the 20-file limit, the 10 MiB limit,
+   unsupported types, malformed base64, owner isolation, cascade deletion,
+   project duplication and unchanged document ETag after upload/delete.
 3. MCP tests assert the four new tools, read-only scope rejection, add/list/get/
    delete round-trip, base64 content equality, wrong-project rejection and the
    destructive annotation.
@@ -156,4 +156,5 @@ development UI on port 5173 works with the API on port 3001.
 - No attachment metadata in the project export or import.
 - No virus scanning, per-file sharing, public links or per-attachment
   permissions.
-- No `.xlsx` or other formats until the allowlist is extended deliberately.
+- No HTML, SVG, executable files or archives. Adding another format requires an
+  explicit allowlist entry, validation rule, contract update and tests.

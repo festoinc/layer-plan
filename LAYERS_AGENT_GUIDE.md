@@ -396,7 +396,8 @@ document ETag.
 
 Allowed types and limits:
 
-- `.pdf`, `.csv`, `.jpg`, `.jpeg`, `.png`, `.xls`;
+- `.pdf`, `.csv`, `.tsv`, `.txt`, `.md`, `.log`, `.json`, `.yaml`, `.yml`,
+  `.toon`, `.jpg`, `.jpeg`, `.png`, `.xls`, `.xlsx`, `.docx`, `.pptx`;
 - at most 10 MiB (10 × 1024 × 1024 bytes) of decoded content per file;
 - at most 20 attachments per project.
 
@@ -423,8 +424,10 @@ curl -sS $AUTH -X DELETE \
   "http://127.0.0.1:3001/api/v1/projects/$PROJECT_ID/attachments/$ATTACHMENT_ID"
 ```
 
-The extension selects the content type. The server also checks common file
-signatures and rejects mismatches. Downloads are served with
+The extension selects the content type. The server also checks PDF, image and
+OLE signatures, requires valid UTF-8 text without NUL bytes for text formats, and
+checks the required package entry for `.xlsx`, `.docx` and `.pptx`. Mismatches
+are rejected. Downloads are served with
 `Content-Disposition: attachment`, `X-Content-Type-Options: nosniff` and
 `Cache-Control: no-store`; never render attachment bytes inline. Attachment
 changes appear in activity as `Attached <name>` and `Removed <name>`.

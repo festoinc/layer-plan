@@ -247,8 +247,10 @@ Search never changes the document or its revision.
 
 Every project document can hold supporting files. Open **Attachments** in the
 project sidebar, or use the paperclip in the document header, to add, download
-and remove them. PDF, CSV, JPEG, PNG and XLS are accepted, up to 10 MiB each and
-20 files per project. The browser validates the extension and size first, then
+and remove them. PDF, CSV/TSV, text, Markdown, log, JSON, YAML, TOON, JPEG, PNG,
+XLS/XLSX, DOCX and PPTX are accepted, up to 10 MiB each and 20 files per
+project. Text formats are checked as UTF-8, image and PDF signatures are
+verified, and OOXML packages must contain their expected document part. The browser validates the extension and size first, then
 the API checks the file signature and stores the bytes in SQLite. Attachment
 changes appear in activity but do not change the document or metadata revision,
 so uploading a file does not conflict with an open editor. Duplicating a project

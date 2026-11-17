@@ -89,7 +89,25 @@ describe("attachments API", () => {
     expect(json(list)).toMatchObject({
       maxAttachments: 20,
       maxAttachmentBytes: MAX_ATTACHMENT_BYTES,
-      allowedExtensions: [".pdf", ".csv", ".jpg", ".jpeg", ".png", ".xls"],
+      allowedExtensions: [
+        ".pdf",
+        ".csv",
+        ".tsv",
+        ".txt",
+        ".md",
+        ".log",
+        ".json",
+        ".yaml",
+        ".yml",
+        ".toon",
+        ".jpg",
+        ".jpeg",
+        ".png",
+        ".xls",
+        ".xlsx",
+        ".docx",
+        ".pptx",
+      ],
     });
     expect(json(list).attachments).toHaveLength(1);
     expect(json(list).attachments[0].id).toBe(attachment.id);
@@ -157,6 +175,75 @@ describe("attachments API", () => {
     );
   });
 
+  it("accepts text, data and Open XML attachments", async () => {
+    api = await createTestApi();
+    const cookie = await superCookie(api);
+
+    const textFormats: Array<[string, string]> = [
+      [".txt", "plain text\n"],
+      [".md", "# Markdown\n"],
+      [".tsv", "name\tvalue\nalpha\t1\n"],
+      [".json", '{"name":"alpha"}\n'],
+      [".yaml", "name: alpha\n"],
+      [".yml", "name: alpha\n"],
+      [".toon", "name: alpha\n"],
+      [".log", "started\n"],
+    ];
+    for (const [extension, content] of textFormats) {
+      const response = await upload(
+        api,
+        cookie,
+        "website",
+        `sample${extension}`,
+        Buffer.from(content),
+      );
+      expect(response.statusCode, extension).toBe(201);
+    }
+
+    const openXml = (marker: string) =>
+      Buffer.concat([
+        Buffer.from([0x50, 0x4b, 0x03, 0x04]),
+        Buffer.from(marker),
+      ]);
+    for (const [filename, marker] of [
+      ["book.xlsx", "xl/workbook.xml"],
+      ["letter.docx", "word/document.xml"],
+      ["deck.pptx", "ppt/presentation.xml"],
+    ] as const) {
+      const response = await upload(
+        api,
+        cookie,
+        "website",
+        filename,
+        openXml(marker),
+      );
+      expect(response.statusCode, filename).toBe(201);
+    }
+
+    const list = await api.app.inject({
+      method: "GET",
+      url: "/api/v1/projects/website/attachments",
+      headers: authHeaders(cookie),
+    });
+    expect(json(list).attachments).toHaveLength(11);
+    const contentTypes = json(list).attachments.map(
+      (attachment: { contentType: string }) => attachment.contentType,
+    );
+    expect(contentTypes).toEqual(
+      expect.arrayContaining([
+        "text/plain",
+        "text/markdown",
+        "text/tab-separated-values",
+        "application/json",
+        "application/yaml",
+        "text/toon",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+      ]),
+    );
+  });
+
   it("rejects unsupported types, mismatched content and invalid base64", async () => {
     api = await createTestApi();
     const cookie = await superCookie(api);
@@ -171,6 +258,15 @@ describe("attachments API", () => {
     expect(unsupported.statusCode).toBe(415);
     expect(json(unsupported).error.code).toBe("unsupported_attachment_type");
     expect(json(unsupported).error.details.allowedExtensions).toContain(".pdf");
+
+    const html = await upload(
+      api,
+      cookie,
+      "website",
+      "page.html",
+      Buffer.from("<html></html>"),
+    );
+    expect(html.statusCode).toBe(415);
 
     const mismatched = await upload(
       api,

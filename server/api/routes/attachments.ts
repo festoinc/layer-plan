@@ -108,7 +108,7 @@ export function registerAttachmentRoutes(
         throw new ApiError(
           415,
           "unsupported_attachment_type",
-          "Only PDF, CSV, JPEG, PNG and XLS files can be attached.",
+          `Only these file types can be attached: ${ATTACHMENT_EXTENSIONS.join(", ")}.`,
           { allowedExtensions: ATTACHMENT_EXTENSIONS },
         );
       }
