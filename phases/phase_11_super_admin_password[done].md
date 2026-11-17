@@ -1,7 +1,29 @@
 # Phase 11 — Super-admin password change
 
-Status: in progress  
+Status: delivered  
 Updated: 2026-11-17
+
+## Delivery and verification
+
+- CI `verify` passed on the merge commit, including unit, API, contract, build
+  and Playwright suites. The Docker job published `latest` and `sha-3c641e8`
+  with digest
+  `sha256:6bbbda93bb898d37f41837df969ca76ff65d5f67360786161b8e172c62c7699f`.
+- The image was deployed on the shared test host behind the existing HTTPS
+  proxy, preserving the SQLite volume and account data.
+- Live checks against the public UI passed: the old password signed in, a
+  password change returned `204`, the current session stayed `200`, the second
+  session returned `401`, and signing in with the new password returned `200`.
+  The password was then changed back to the original test value and the final
+  sign-in returned `200`. The UI root returned `200`.
+- The account page exposes the form only to the super admin. The Playwright
+  suite covers mismatched confirmation, success, old-password rejection,
+  new-password login and other-session revocation.
+- `LAYERS_SUPER_ADMIN_PASSWORD` is now bootstrap-only: a later startup with a
+  different env password does not overwrite the stored password, while email
+  and display-name synchronization still works.
+- No Cloudflare or nginx changes were required for this phase; the existing
+  live deployment remained in place.
 
 ## Goal
 
