@@ -1,7 +1,10 @@
 # Phase 12 — OAuth connections for MCP
 
-Status: draft for review  
+Status: implementation complete; remote acceptance pending  
 Updated: 2026-11-17
+
+CI `verify` passed on PR #5 (unit, API, contract, build and Playwright).
+Remote OAuth and API-key acceptance on the published image is still pending.
 
 ## Why this phase
 
