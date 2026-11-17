@@ -24,11 +24,7 @@ test("search finds chapters and opens the matched result", async ({ page }) => {
     page.locator(".search-result").first().locator("mark").first(),
   ).toBeVisible();
 
-  await page
-    .locator(".search-result")
-    .filter({ hasText: "Password reset" })
-    .getByRole("button")
-    .click();
+  await page.locator(".search-result").first().getByRole("button").click();
   await expect(page).toHaveURL(
     /#\/projects\/website\/chapters\/password-reset$/,
   );
