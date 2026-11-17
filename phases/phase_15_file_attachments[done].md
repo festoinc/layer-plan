@@ -1,7 +1,43 @@
 # Phase 15 — File attachments
 
-Status: in progress  
+Status: delivered  
 Updated: 2026-11-17
+
+## Delivery and verification
+
+- CI `verify` passed on `main` (run 44181798520): lint, format, typecheck, unit,
+  API, contract, build and Playwright. The `docker` job published `latest` and
+  `sha-969a741`.
+- Tested image: `ghcr.io/festoinc/layer-plan:sha-969a741`, digest
+  `sha256:7ccd3909f7b7165aadf8e95be689e0c9befe08b7bfbbbf727e297c90239b2cb1`,
+  revision `969a741561c7279eff597fba140098768d8a479d`, runtime user `node`.
+- Remote checks ran on the shared test host in an isolated container on
+  `127.0.0.1:18082` with a fresh `layers-e2e-attachments-data` volume. The
+  existing phase 1a container on `18080` and the shared nginx virtual host were
+  left untouched.
+- REST checks passed for every accepted format: PDF, CSV/TSV, TXT, MD, LOG,
+  JSON, YAML/YML, TOON, PNG, XLSX, DOCX and PPTX. List limits, metadata,
+  binary download headers and bytes, activity entries and the unchanged
+  document ETag were verified.
+- Rejections passed: HTML returned `415 unsupported_attachment_type`, a
+  signature mismatch returned `415`, a 10 MiB + 1 byte upload returned
+  `413 attachment_too_large`, and the 21st attachment returned
+  `409 attachment_limit_reached`.
+- Project duplication copied all 20 attachments and their content; deleting the
+  duplicate removed its copies.
+- MCP checks passed over the loopback port: initialization, the 15-tool list,
+  `add_attachment`, `list_attachments`, `get_attachment` with identical base64
+  content, and `delete_attachment`. A read-only key received `403` for
+  `add_attachment`.
+- Persistence passed after both `docker restart` and
+  `docker rm -f` plus a fresh container on the same volume: the session cookie,
+  all 20 attachments, the downloaded PDF bytes and document ETag `"1"`
+  survived. The UI dialog behaviour ran in the CI Playwright suite.
+- Cleanup removed the container, volume, environment file, state files and
+  temporary Docker config. Port `18082` is free, nginx is active, satia and n8n
+  still run, and the existing `layers-e2e-app` container remains up.
+- The local gate (`lint`, `format:check`, `typecheck`, `api:lint`, `build`)
+  passed before every push.
 
 ## Why this phase
 
