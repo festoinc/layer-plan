@@ -77,7 +77,7 @@ export function ProjectActionsMenu({
             onClick={() => run(onManageTokens)}
           >
             <KeyRound size={15} />
-            API keys
+            MCP access
           </button>
           <button
             type="button"

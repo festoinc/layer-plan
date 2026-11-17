@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { SignInPage } from "../components/SignInPage";
 import { AccountPage } from "../components/AccountPage";
+import { OAuthConsentPage } from "../components/OAuthConsentPage";
 import { UsersPage } from "../components/UsersPage";
 import { ROUTE_VIEWS, useRoute } from "../hooks/useRoute";
 import { useAuth } from "../store/AuthProvider";
@@ -51,6 +52,24 @@ export function AuthGate() {
       <p className="page-loading" role="status">
         Loading workspace…
       </p>
+    );
+  }
+
+  if (route.view === ROUTE_VIEWS.oauthConsent) {
+    if (!route.oauthRequestId) {
+      return (
+        <div className="development-state api-load-error" role="alert">
+          <h1>Authorization link is incomplete</h1>
+          <p>Return to the app that requested access and try again.</p>
+          <a href="#/projects">Back to Layers</a>
+        </div>
+      );
+    }
+    return (
+      <OAuthConsentPage
+        key={route.oauthRequestId}
+        requestId={route.oauthRequestId}
+      />
     );
   }
 

@@ -1045,6 +1045,187 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/projects/{projectId}/oauth-grants": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        projectId: components["parameters"]["ProjectId"];
+      };
+      cookie?: never;
+    };
+    /** List OAuth connections for a project */
+    get: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path: {
+          projectId: components["parameters"]["ProjectId"];
+        };
+        cookie?: never;
+      };
+      requestBody?: never;
+      responses: {
+        /** @description OAuth connections without token material */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": components["schemas"]["OAuthGrantsResponse"];
+          };
+        };
+        401: components["responses"]["Unauthorized"];
+        403: components["responses"]["Forbidden"];
+        404: components["responses"]["Error"];
+      };
+    };
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/projects/{projectId}/oauth-grants/{grantId}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        projectId: components["parameters"]["ProjectId"];
+        grantId: string;
+      };
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post?: never;
+    /** Revoke an OAuth connection */
+    delete: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path: {
+          projectId: components["parameters"]["ProjectId"];
+          grantId: string;
+        };
+        cookie?: never;
+      };
+      requestBody?: never;
+      responses: {
+        /** @description OAuth connection revoked */
+        204: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content?: never;
+        };
+        401: components["responses"]["Unauthorized"];
+        403: components["responses"]["Forbidden"];
+        404: components["responses"]["Error"];
+      };
+    };
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/oauth/authorize/{requestId}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        requestId: string;
+      };
+      cookie?: never;
+    };
+    /** Read a pending MCP OAuth authorization request */
+    get: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path: {
+          requestId: string;
+        };
+        cookie?: never;
+      };
+      requestBody?: never;
+      responses: {
+        /** @description Pending request and the user's projects */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": components["schemas"]["OAuthConsentResponse"];
+          };
+        };
+        401: components["responses"]["Unauthorized"];
+        403: components["responses"]["Forbidden"];
+        404: components["responses"]["Error"];
+        409: components["responses"]["Error"];
+        410: components["responses"]["Error"];
+      };
+    };
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/oauth/authorize/{requestId}/decision": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        requestId: string;
+      };
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Approve or deny an MCP OAuth authorization request */
+    post: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path: {
+          requestId: string;
+        };
+        cookie?: never;
+      };
+      requestBody: {
+        content: {
+          "application/json": components["schemas"]["OAuthConsentDecision"];
+        };
+      };
+      responses: {
+        /** @description Redirect target for the OAuth client */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": components["schemas"]["OAuthConsentDecisionResponse"];
+          };
+        };
+        401: components["responses"]["Unauthorized"];
+        403: components["responses"]["Forbidden"];
+        404: components["responses"]["Error"];
+        409: components["responses"]["Error"];
+        410: components["responses"]["Error"];
+        422: components["responses"]["ValidationError"];
+      };
+    };
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/users": {
     parameters: {
       query?: never;
@@ -1394,6 +1575,51 @@ export interface components {
     };
     UserResponse: {
       user: components["schemas"]["AuthUser"];
+    };
+    OAuthGrantInfo: {
+      id: string;
+      clientId: string;
+      clientName: string;
+      scopes: ("read" | "write")[];
+      /** Format: date-time */
+      createdAt: string;
+      /** Format: date-time */
+      lastUsedAt: string | null;
+      /** Format: date-time */
+      expiresAt: string;
+      /** Format: date-time */
+      revokedAt: string | null;
+    };
+    OAuthGrantsResponse: {
+      grants: components["schemas"]["OAuthGrantInfo"][];
+    };
+    OAuthConsentProject: {
+      id: string;
+      name: string;
+      color: string;
+    };
+    OAuthConsentRequest: {
+      id: string;
+      clientId: string;
+      clientName: string;
+      redirectUri: string;
+      redirectHost: string;
+      scopes: ("read" | "write")[];
+      /** Format: date-time */
+      expiresAt: string;
+    };
+    OAuthConsentResponse: {
+      request: components["schemas"]["OAuthConsentRequest"];
+      projects: components["schemas"]["OAuthConsentProject"][];
+    };
+    OAuthConsentDecision: {
+      /** @enum {string} */
+      decision: "approve" | "deny";
+      projectId?: string;
+      scopes?: ("read" | "write")[];
+    };
+    OAuthConsentDecisionResponse: {
+      redirectTo: string;
     };
     UsersResponse: {
       users: components["schemas"]["AuthUser"][];

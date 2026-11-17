@@ -5,8 +5,8 @@ info:
   description: |-
     Authenticated local API for Layers project specifications.
     The server binds to loopback by default. Browser clients use an HttpOnly session
-    cookie; local AI agents use bearer API tokens. Every project is private to its
-    owner.
+    cookie; local AI agents use project API keys or OAuth access tokens. Every
+    project is private to its owner.
   license:
     name: Private local project
     url: https://example.com/private-license
@@ -657,6 +657,125 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/Error"
+  /projects/{projectId}/oauth-grants:
+    parameters:
+      - $ref: "#/components/parameters/ProjectId"
+    get:
+      tags:
+        - auth
+      summary: List OAuth connections for a project
+      security:
+        - sessionCookie: []
+      responses:
+        "200":
+          description: OAuth connections without token material
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OAuthGrantsResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/Error"
+  /projects/{projectId}/oauth-grants/{grantId}:
+    parameters:
+      - $ref: "#/components/parameters/ProjectId"
+      - name: grantId
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 128
+    delete:
+      tags:
+        - auth
+      summary: Revoke an OAuth connection
+      security:
+        - sessionCookie: []
+      responses:
+        "204":
+          description: OAuth connection revoked
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/Error"
+  /oauth/authorize/{requestId}:
+    parameters:
+      - name: requestId
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 128
+    get:
+      tags:
+        - auth
+      summary: Read a pending MCP OAuth authorization request
+      security:
+        - sessionCookie: []
+      responses:
+        "200":
+          description: Pending request and the user's projects
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OAuthConsentResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "410":
+          $ref: "#/components/responses/Error"
+  /oauth/authorize/{requestId}/decision:
+    parameters:
+      - name: requestId
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 128
+    post:
+      tags:
+        - auth
+      summary: Approve or deny an MCP OAuth authorization request
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OAuthConsentDecision"
+      responses:
+        "200":
+          description: Redirect target for the OAuth client
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OAuthConsentDecisionResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/Error"
+        "409":
+          $ref: "#/components/responses/Error"
+        "410":
+          $ref: "#/components/responses/Error"
+        "422":
+          $ref: "#/components/responses/ValidationError"
   /users:
     get:
       tags:
@@ -1415,6 +1534,142 @@ components:
       properties:
         user:
           $ref: "#/components/schemas/AuthUser"
+    OAuthGrantInfo:
+      type: object
+      required:
+        - id
+        - clientId
+        - clientName
+        - scopes
+        - createdAt
+        - lastUsedAt
+        - expiresAt
+        - revokedAt
+      properties:
+        id:
+          type: string
+        clientId:
+          type: string
+        clientName:
+          type: string
+        scopes:
+          type: array
+          items:
+            type: string
+            enum:
+              - read
+              - write
+        createdAt:
+          type: string
+          format: date-time
+        lastUsedAt:
+          type:
+            - string
+            - "null"
+          format: date-time
+        expiresAt:
+          type: string
+          format: date-time
+        revokedAt:
+          type:
+            - string
+            - "null"
+          format: date-time
+    OAuthGrantsResponse:
+      type: object
+      required:
+        - grants
+      properties:
+        grants:
+          type: array
+          items:
+            $ref: "#/components/schemas/OAuthGrantInfo"
+    OAuthConsentProject:
+      type: object
+      required:
+        - id
+        - name
+        - color
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        color:
+          type: string
+    OAuthConsentRequest:
+      type: object
+      required:
+        - id
+        - clientId
+        - clientName
+        - redirectUri
+        - redirectHost
+        - scopes
+        - expiresAt
+      properties:
+        id:
+          type: string
+        clientId:
+          type: string
+        clientName:
+          type: string
+        redirectUri:
+          type: string
+        redirectHost:
+          type: string
+        scopes:
+          type: array
+          items:
+            type: string
+            enum:
+              - read
+              - write
+        expiresAt:
+          type: string
+          format: date-time
+    OAuthConsentResponse:
+      type: object
+      required:
+        - request
+        - projects
+      properties:
+        request:
+          $ref: "#/components/schemas/OAuthConsentRequest"
+        projects:
+          type: array
+          items:
+            $ref: "#/components/schemas/OAuthConsentProject"
+    OAuthConsentDecision:
+      type: object
+      required:
+        - decision
+      properties:
+        decision:
+          type: string
+          enum:
+            - approve
+            - deny
+        projectId:
+          type: string
+          minLength: 1
+          maxLength: 128
+        scopes:
+          type: array
+          minItems: 1
+          maxItems: 2
+          items:
+            type: string
+            enum:
+              - read
+              - write
+    OAuthConsentDecisionResponse:
+      type: object
+      required:
+        - redirectTo
+      properties:
+        redirectTo:
+          type: string
     UsersResponse:
       type: object
       required:

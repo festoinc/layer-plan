@@ -10,8 +10,8 @@ SQLite file (`data/layers.sqlite` unless `LAYERS_DB_PATH` is set).
 - JSON contract: `http://127.0.0.1:3001/api/v1/openapi.json`
 
 Every project is private to its owner. Browser clients use an `HttpOnly` session
-cookie. MCP clients use a project API key that is accepted only by `/mcp`. For
-AI-agent working instructions, see
+cookie. MCP clients use either a project API key or an OAuth access token; both
+are accepted only by `/mcp`. For AI-agent working instructions, see
 [`LAYERS_AGENT_GUIDE.md`](../LAYERS_AGENT_GUIDE.md).
 
 ## Sign in
@@ -62,9 +62,9 @@ values before sending.
 
 ## Create an MCP API key for a project
 
-An MCP client needs an API key bound to one project. Keys are accepted only by
-`/mcp`; they cannot call the REST API. Create keys from the project actions menu
-(**API keys**) or with a browser session:
+An MCP client that accepts a bearer token needs an API key bound to one project.
+Keys are accepted only by `/mcp`; they cannot call the REST API. Create keys
+from the project actions menu (**MCP access**) or with a browser session:
 
 ```sh
 curl -b /tmp/layers-cookies.txt \
@@ -309,8 +309,93 @@ Common codes: `unauthenticated`, `invalid_credentials`, `account_disabled`,
 `project_limit`, `password_unchanged`, `payload_too_large`, `stored_data_invalid`,
 `database_unavailable`, `internal_error`.
 
-`401 unauthenticated` means the session or MCP key is missing, expired or
-revoked. Sign in again or create a new key. Do not retry a `401` in a loop.
+`401 unauthenticated` means the session, MCP key or OAuth access token is
+missing, expired or revoked. Sign in again, create a new key, or let the MCP
+client refresh or repeat its OAuth authorization. Do not retry a `401` in a
+loop.
+
+## MCP OAuth authorization
+
+OAuth-only MCP clients use the same `/mcp` endpoint. Layers acts as both the
+OAuth 2.1 authorization server and the MCP resource server in the existing API
+process. An MCP request is authenticated by either a project API key
+(`lrs_…`) or an OAuth access token (`loa_…`); the credential type does not
+change the ten MCP tools or their project binding.
+
+OAuth is enabled only when `LAYERS_PUBLIC_URL` is set. API keys continue to work
+without it. The value must be the exact public origin users open, for example
+`https://layers.example.com`; plain HTTP is accepted only for loopback
+development. It must not contain a path, query or fragment. Restart the server
+after changing it.
+
+### Discovery
+
+| Method | Path                                        | Purpose                             |
+| ------ | ------------------------------------------- | ----------------------------------- |
+| `GET`  | `/.well-known/oauth-protected-resource`     | MCP resource metadata               |
+| `GET`  | `/.well-known/oauth-protected-resource/mcp` | Endpoint-specific resource metadata |
+| `GET`  | `/.well-known/oauth-authorization-server`   | Authorization-server metadata       |
+
+A `401` from `/mcp` advertises the metadata URL and supported scopes:
+
+```http
+WWW-Authenticate: Bearer resource_metadata="https://layers.example.com/.well-known/oauth-protected-resource", scope="read write"
+```
+
+The authorization server advertises `authorization_code` and `refresh_token`
+grants, `S256` PKCE, and `none`, `client_secret_post` and `client_secret_basic`
+client authentication.
+
+### Authorization flow
+
+1. The client registers with `POST /oauth/register` (RFC 7591 dynamic client
+   registration) and receives a `lcl_…` client id. Registration is open,
+   rate-limited and capped; unused clients are pruned. The consent page shows
+   the client name and the redirect hostname.
+2. The client opens `GET /oauth/authorize` with `response_type=code`,
+   `redirect_uri`, `code_challenge`, `code_challenge_method=S256`, optional
+   `scope`, optional `state`, and the MCP `resource` (for example
+   `https://layers.example.com/mcp`). The server validates the client and exact
+   redirect URI, creates a 10-minute pending request, and redirects to the
+   Layers consent page.
+3. The person signs in if needed, chooses one owned project, and approves
+   read-only or read-write access. The browser is redirected to the client with
+   a 5-minute single-use authorization code and the original `state`, or with
+   `error=access_denied`.
+4. The client exchanges the code at `POST /oauth/token` with
+   `grant_type=authorization_code`, the client credentials, the exact
+   `redirect_uri`, `code_verifier` and the same `resource`. Tokens are opaque:
+   an access token valid for one hour and a refresh token valid for 90 days.
+5. The client sends `Authorization: Bearer <access_token>` to `/mcp`. Access
+   tokens are bound to the project, scopes and MCP audience chosen at consent.
+6. `grant_type=refresh_token` rotates both tokens. Reusing an old refresh token
+   revokes the connection. `POST /oauth/revoke` revokes a connection from the
+   client, and the project **MCP access** dialog can revoke it from Layers.
+
+Scopes are `read` and `write`; `write` includes `read`. The consent page cannot
+grant more than the client requested. A read-only token can call read tools but
+receives the existing MCP `403` envelope for writes. If an access token expires,
+the client should refresh it; if the refresh token is expired or revoked, the
+person must authorize the client again.
+
+Dynamic client registration is the supported client-registration method in this
+version. Client ID Metadata Documents are not fetched. An OAuth connection is
+always bound to one project; account-wide OAuth access is not available.
+
+### Manage OAuth connections
+
+The project actions menu (**MCP access**) lists API keys and connected apps.
+Revoking a connected app invalidates its access and refresh tokens immediately.
+
+| Method   | Path                                                  | Credential | Purpose                |
+| -------- | ----------------------------------------------------- | ---------- | ---------------------- |
+| `GET`    | `/api/v1/projects/{projectId}/oauth-grants`           | session    | List OAuth connections |
+| `DELETE` | `/api/v1/projects/{projectId}/oauth-grants/{grantId}` | session    | Revoke one connection  |
+
+Use HTTPS for any public deployment, set `LAYERS_MCP_ALLOWED_HOSTS`, and keep
+the plain HTTP backend private. Ensure the reverse proxy does not cache
+`/oauth/*` or `/.well-known/*` and does not log Authorization headers or request
+bodies.
 
 ## Remote Codex MCP access
 
@@ -319,9 +404,11 @@ It exposes project and document operations; account, user, session and key
 administration are not MCP tools. Calls use the existing API authorization and
 revision rules. The server supplies agent instructions on initialization.
 
-1. Sign in to Layers, open the project actions menu and choose **API keys**.
-   Create a key for that project. Choose read-only for inspection or read-write
-   for edits. Never send the key in chat. The key is accepted only by `/mcp`.
+1. For a client with a bearer-token field, sign in to Layers, open the project
+   actions menu and choose **MCP access**. Create a key for that project. Choose
+   read-only for inspection or read-write for edits. Never send the key in chat.
+   The key is accepted only by `/mcp`. OAuth-only clients use the flow above
+   instead and need no manually created key.
 2. Set `LAYERS_MCP_ALLOWED_HOSTS` in the server environment to a comma-separated
    list of permitted hostnames, for example `layers.example.com,localhost`.
    Ports are omitted. The default permits only `localhost`, `127.0.0.1`, and
@@ -342,10 +429,11 @@ revision rules. The server supplies agent instructions on initialization.
    codex mcp list
    ```
 
-A project key is checked on each request; revoking it in the project's **API
-keys** dialog, deleting the project, or disabling the user blocks future
-requests. Never place keys in URLs or commit them to files. The key is bound to
-one project, so `list_projects` returns only that project and
+A project key or OAuth access token is checked on each request; revoking it in
+the project's **MCP access** dialog, revoking the OAuth connection, deleting the
+project, or disabling the user blocks future requests. Never place credentials
+in URLs or commit them to files. The credential is bound to one project, so
+`list_projects` returns only that project and
 `create_project`, `duplicate_project`, `activate_project` and `import_project`
 are not available.
 Project and document updates use separate ETags, exposed in tool results. On a

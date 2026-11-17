@@ -177,3 +177,18 @@ export const changePasswordSchema = z
     newPassword: z.string().min(12).max(200),
   })
   .strict();
+
+export const oauthConsentDecisionSchema = z
+  .object({
+    decision: z.enum(["approve", "deny"]),
+    projectId: z.string().min(1).max(128).optional(),
+    scopes: z
+      .array(z.enum(["read", "write"]))
+      .min(1)
+      .max(2)
+      .refine((scopes) => new Set(scopes).size === scopes.length, {
+        message: "Scopes must be unique.",
+      })
+      .optional(),
+  })
+  .strict();

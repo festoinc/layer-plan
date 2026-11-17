@@ -3,6 +3,21 @@ import { config as loadDotenv } from "dotenv";
 
 loadDotenv({ quiet: true });
 
+export interface OAuthConfig {
+  issuer: string;
+  resource: string;
+  resourceMetadataUrl: string;
+  authorizationServerMetadataUrl: string;
+  authorizeUrl: string;
+  tokenUrl: string;
+  registerUrl: string;
+  revokeUrl: string;
+  accessTokenTtlSeconds: number;
+  refreshTokenTtlSeconds: number;
+  authorizationRequestTtlSeconds: number;
+  authorizationCodeTtlSeconds: number;
+}
+
 export interface ServerConfig {
   host: string;
   port: number;
@@ -21,6 +36,7 @@ export interface ServerConfig {
   loginRateLimit: number;
   loginRateWindowMinutes: number;
   mcpAllowedHosts: string[];
+  oauth: OAuthConfig | null;
 }
 
 export interface LoadConfigOptions {
@@ -43,6 +59,54 @@ function positiveInteger(value: string | undefined, fallback: number): number {
 
 function normalizeOrigin(value: string): string {
   return value.trim().replace(/\/+$/, "");
+}
+
+function normalizePublicUrl(value: string | undefined): string | null {
+  const raw = value?.trim();
+  if (!raw) return null;
+  let url: URL;
+  try {
+    url = new URL(raw);
+  } catch {
+    throw new Error("LAYERS_PUBLIC_URL must be an absolute URL.");
+  }
+  if (url.username || url.password) {
+    throw new Error("LAYERS_PUBLIC_URL must not contain credentials.");
+  }
+  if (url.search || url.hash) {
+    throw new Error("LAYERS_PUBLIC_URL must not contain a query or fragment.");
+  }
+  if (url.pathname !== "/" && url.pathname !== "") {
+    throw new Error("LAYERS_PUBLIC_URL must use the site root as its path.");
+  }
+  const loopback =
+    url.hostname === "localhost" ||
+    url.hostname === "127.0.0.1" ||
+    url.hostname === "[::1]" ||
+    url.hostname === "::1";
+  if (url.protocol !== "https:" && !(url.protocol === "http:" && loopback)) {
+    throw new Error(
+      "LAYERS_PUBLIC_URL must use https, or http with a loopback host.",
+    );
+  }
+  return normalizeOrigin(url.origin);
+}
+
+function createOAuthConfig(issuer: string): OAuthConfig {
+  return {
+    issuer,
+    resource: `${issuer}/mcp`,
+    resourceMetadataUrl: `${issuer}/.well-known/oauth-protected-resource`,
+    authorizationServerMetadataUrl: `${issuer}/.well-known/oauth-authorization-server`,
+    authorizeUrl: `${issuer}/oauth/authorize`,
+    tokenUrl: `${issuer}/oauth/token`,
+    registerUrl: `${issuer}/oauth/register`,
+    revokeUrl: `${issuer}/oauth/revoke`,
+    accessTokenTtlSeconds: 60 * 60,
+    refreshTokenTtlSeconds: 90 * 24 * 60 * 60,
+    authorizationRequestTtlSeconds: 10 * 60,
+    authorizationCodeTtlSeconds: 5 * 60,
+  };
 }
 
 export function loadConfig(
@@ -108,6 +172,7 @@ export function loadConfig(
   const port = Number.isInteger(rawPort) && rawPort > 0 ? rawPort : 3001;
   const rawDbPath = env.LAYERS_DB_PATH ?? "data/layers.sqlite";
   const dbPath = rawDbPath === ":memory:" ? rawDbPath : path.resolve(rawDbPath);
+  const publicUrl = normalizePublicUrl(env.LAYERS_PUBLIC_URL);
 
   return {
     host,
@@ -138,5 +203,6 @@ export function loadConfig(
       .split(",")
       .map((value) => value.trim().toLowerCase())
       .filter(Boolean),
+    oauth: publicUrl ? createOAuthConfig(publicUrl) : null,
   };
 }

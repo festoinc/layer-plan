@@ -49,6 +49,23 @@ describe("project routes", () => {
     });
   });
 
+  it("parses and round-trips OAuth consent routes", () => {
+    const parsed = parseRoute("#/oauth/consent/orq_request-1");
+    expect(parsed).toMatchObject({
+      view: ROUTE_VIEWS.oauthConsent,
+      oauthRequestId: "orq_request-1",
+      valid: true,
+    });
+    expect(
+      routeToHash({
+        view: ROUTE_VIEWS.oauthConsent,
+        oauthRequestId: "orq_request-1",
+      }),
+    ).toBe("#/oauth/consent/orq_request-1");
+    expect(parseRoute("#/oauth/consent").valid).toBe(false);
+    expect(parseRoute("#/oauth/consent/a/b").valid).toBe(false);
+  });
+
   it("parses legacy hashes as legacy routes", () => {
     expect(parseRoute("")).toMatchObject({
       view: ROUTE_VIEWS.specifications,

@@ -262,9 +262,9 @@ export function AccountPage() {
       </section>
 
       <p className="account-hint">
-        Project API keys are managed from a project's actions menu. Open
-        Projects, choose <strong>API keys</strong>, and create a key for that
-        project.
+        Project API keys and OAuth connections are managed from a project's
+        actions menu. Open Projects, choose <strong>MCP access</strong>, and
+        create a key or review connected apps for that project.
       </p>
     </main>
   );

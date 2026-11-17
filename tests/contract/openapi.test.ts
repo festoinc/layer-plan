@@ -71,6 +71,10 @@ const expectedPaths = [
   "/projects/{projectId}/export",
   "/projects/{projectId}/tokens",
   "/projects/{projectId}/tokens/{tokenId}",
+  "/projects/{projectId}/oauth-grants",
+  "/projects/{projectId}/oauth-grants/{grantId}",
+  "/oauth/authorize/{requestId}",
+  "/oauth/authorize/{requestId}/decision",
   "/projects/import",
 ].sort();
 

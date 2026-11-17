@@ -32,6 +32,10 @@ const MIGRATIONS: Migration[] = [
     version: 3,
     sql: readMigration("migrations/003_project_api_keys.sql"),
   },
+  {
+    version: 4,
+    sql: readMigration("migrations/004_oauth.sql"),
+  },
 ];
 
 export function runMigrations(db: DatabaseConnection): void {

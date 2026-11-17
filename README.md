@@ -6,7 +6,7 @@ Markdown description, verification rules and a success-criteria checklist.
 
 Everything is stored in a local Fastify API backed by SQLite. Accounts and
 sessions protect the API, projects are private to their owner, and local AI
-agents use project-bound MCP API keys. There is no cloud service and no browser
+agents use project-bound MCP API keys or OAuth connections. There is no cloud service and no browser
 `localStorage` persistence. The React UI is one client of the API.
 
 ## Run
@@ -72,6 +72,7 @@ examples are in [`docs/api.md`](docs/api.md).
 | `LAYERS_LOGIN_RATE_LIMIT`          | `5`                         | Login attempts per window                           |
 | `LAYERS_LOGIN_RATE_WINDOW_MINUTES` | `15`                        | Login rate-limit window                             |
 | `LAYERS_MCP_ALLOWED_HOSTS`         | `localhost,127.0.0.1,[::1]` | Allowed MCP request hostnames                       |
+| `LAYERS_PUBLIC_URL`                | none                        | Public origin; enables MCP OAuth when set           |
 | `VITE_API_URL`                     | `/api/v1`                   | Browser API base URL                                |
 
 The server refuses a non-loopback bind unless `LAYERS_ALLOW_REMOTE=1`.
@@ -163,21 +164,32 @@ behind HTTPS. The health endpoint is `GET /api/v1/health`.
   for the super admin. The super admin manages users but does not bypass project
   ownership.
 - The account page at `#/account` lists browser sessions.
-- Project API keys are managed from a project's actions menu (**API keys**),
-  shown once, stored hashed, and can be read-only or read-write. They default to
-  read-write and expire after 3650 days. A user can have 20 active keys.
-- API keys work only with `/mcp` and only for their project; they cannot call
-  the REST API or reach another project.
+- MCP credentials are managed from a project's actions menu (**MCP access**).
+  API keys are shown once, stored hashed, and can be read-only or read-write.
+  They default to read-write and expire after 3650 days. A user can have 20
+  active keys.
+- OAuth clients authorize through the browser consent page, choose one project
+  and read-only or read-write access, and receive short-lived access tokens plus
+  rotating refresh tokens. Connected apps are listed and revocable from **MCP
+  access**.
+- Both credential types work only with `/mcp` and only for their project; they
+  cannot call the REST API or reach another project.
 - Login is rate-limited. Browser sessions use an `HttpOnly`, `SameSite=Lax`
   cookie and are never stored in `localStorage`.
 
-MCP client example:
+MCP client examples:
 
 ```sh
+# Clients with a bearer-token field
 export LAYERS_API_TOKEN=lrs_...
 codex mcp add layers --url https://<domain>/mcp \
   --bearer-token-env-var LAYERS_API_TOKEN
 ```
+
+OAuth-only clients use the same URL and discover the authorization server from
+`/mcp`. Set `LAYERS_PUBLIC_URL` to the public origin (for example
+`https://layers.example.com`) before starting the server. The client opens the
+Layers consent page; sign in, choose a project and approve access.
 
 ## Usage
 
@@ -281,17 +293,21 @@ LAYERS_AGENT_GUIDE.md  Instructions for AI agents using the MCP endpoint
 The database is created automatically. Migrations live in
 `server/db/migrations/`.
 
-| Table               | Contents                                                    |
-| ------------------- | ----------------------------------------------------------- |
-| `users`             | Email, display name, password hash, role and disabled state |
-| `sessions`          | Hashed browser-session tokens and expiry                    |
-| `api_tokens`        | Project-bound MCP keys, scopes, expiry and revocation       |
-| `projects`          | Owner, metadata, guidelines, stats and revisions            |
-| `project_documents` | Normalized chapters, selected chapter and document revision |
-| `activity_entries`  | Append-only activity with actor attribution                 |
-| `user_state`        | Per-user active project                                     |
-| `app_state`         | Legacy global state; migrated and unused after phase 6      |
-| `schema_migrations` | Applied database migrations                                 |
+| Table                          | Contents                                                    |
+| ------------------------------ | ----------------------------------------------------------- |
+| `users`                        | Email, display name, password hash, role and disabled state |
+| `sessions`                     | Hashed browser-session tokens and expiry                    |
+| `api_tokens`                   | Project-bound MCP keys, scopes, expiry and revocation       |
+| `oauth_clients`                | Dynamically registered MCP OAuth clients                    |
+| `oauth_grants`                 | Project-bound OAuth connections and hashed tokens           |
+| `oauth_authorization_requests` | Pending consent requests                                    |
+| `oauth_authorization_codes`    | Single-use OAuth authorization codes                        |
+| `projects`                     | Owner, metadata, guidelines, stats and revisions            |
+| `project_documents`            | Normalized chapters, selected chapter and document revision |
+| `activity_entries`             | Append-only activity with actor attribution                 |
+| `user_state`                   | Per-user active project                                     |
+| `app_state`                    | Legacy global state; migrated and unused after phase 6      |
+| `schema_migrations`            | Applied database migrations                                 |
 
 WAL mode, foreign keys and a busy timeout are enabled. Project deletion cascades
 to its document and activity. `npm run db:reset` deletes the database, reapplies
@@ -306,36 +322,41 @@ suffix on name collisions. Older v1/v2 files remain importable.
 
 ### API
 
-| Method       | Path                                   | Purpose                            |
-| ------------ | -------------------------------------- | ---------------------------------- |
-| `GET`        | `/api/v1/health`                       | Public API and database check      |
-| `POST`       | `/api/v1/auth/login`                   | Sign in and set a session cookie   |
-| `POST`       | `/api/v1/auth/logout`                  | Sign out                           |
-| `GET`        | `/api/v1/auth/session`                 | Current browser session            |
-| `GET`        | `/api/v1/me`                           | Current user for a browser session |
-| `POST`       | `/api/v1/me/password`                  | Change the super-admin password    |
-| `GET/DELETE` | `/api/v1/auth/sessions`                | List or revoke other sessions      |
-| `GET/POST`   | `/api/v1/projects/:id/tokens`          | List or create MCP API keys        |
-| `DELETE`     | `/api/v1/projects/:id/tokens/:tokenId` | Revoke a project API key           |
-| `GET/POST`   | `/api/v1/users`                        | Super-admin user management        |
-| `GET`        | `/api/v1/projects`                     | Owned catalog and active project   |
-| `POST`       | `/api/v1/projects`                     | Create a project                   |
-| `GET`        | `/api/v1/projects/:id`                 | Project detail and guidelines      |
-| `PATCH`      | `/api/v1/projects/:id`                 | Update metadata/guidelines         |
-| `DELETE`     | `/api/v1/projects/:id`                 | Delete a project                   |
-| `POST`       | `/api/v1/projects/:id/duplicate`       | Duplicate a project                |
-| `POST`       | `/api/v1/projects/:id/activate`        | Set the active project             |
-| `GET`        | `/api/v1/projects/:id/document`        | Read the document                  |
-| `PUT`        | `/api/v1/projects/:id/document`        | Replace the document               |
-| `GET`        | `/api/v1/projects/:id/activity`        | Read activity                      |
-| `POST`       | `/api/v1/projects/:id/activity`        | Append activity                    |
-| `GET`        | `/api/v1/projects/:id/coverage`        | Derived verification coverage      |
-| `GET`        | `/api/v1/projects/:id/export`          | Download a project file            |
-| `POST`       | `/api/v1/projects/import`              | Import a project file              |
+| Method       | Path                                          | Purpose                            |
+| ------------ | --------------------------------------------- | ---------------------------------- |
+| `GET`        | `/api/v1/health`                              | Public API and database check      |
+| `POST`       | `/api/v1/auth/login`                          | Sign in and set a session cookie   |
+| `POST`       | `/api/v1/auth/logout`                         | Sign out                           |
+| `GET`        | `/api/v1/auth/session`                        | Current browser session            |
+| `GET`        | `/api/v1/me`                                  | Current user for a browser session |
+| `POST`       | `/api/v1/me/password`                         | Change the super-admin password    |
+| `GET/DELETE` | `/api/v1/auth/sessions`                       | List or revoke other sessions      |
+| `GET/POST`   | `/api/v1/projects/:id/tokens`                 | List or create MCP API keys        |
+| `DELETE`     | `/api/v1/projects/:id/tokens/:tokenId`        | Revoke a project API key           |
+| `GET`        | `/api/v1/projects/:id/oauth-grants`           | List OAuth connections             |
+| `DELETE`     | `/api/v1/projects/:id/oauth-grants/:grantId`  | Revoke an OAuth connection         |
+| `GET`        | `/api/v1/oauth/authorize/:requestId`          | Read a pending consent request     |
+| `POST`       | `/api/v1/oauth/authorize/:requestId/decision` | Approve or deny consent            |
+| `GET/POST`   | `/api/v1/users`                               | Super-admin user management        |
+| `GET`        | `/api/v1/projects`                            | Owned catalog and active project   |
+| `POST`       | `/api/v1/projects`                            | Create a project                   |
+| `GET`        | `/api/v1/projects/:id`                        | Project detail and guidelines      |
+| `PATCH`      | `/api/v1/projects/:id`                        | Update metadata/guidelines         |
+| `DELETE`     | `/api/v1/projects/:id`                        | Delete a project                   |
+| `POST`       | `/api/v1/projects/:id/duplicate`              | Duplicate a project                |
+| `POST`       | `/api/v1/projects/:id/activate`               | Set the active project             |
+| `GET`        | `/api/v1/projects/:id/document`               | Read the document                  |
+| `PUT`        | `/api/v1/projects/:id/document`               | Replace the document               |
+| `GET`        | `/api/v1/projects/:id/activity`               | Read activity                      |
+| `POST`       | `/api/v1/projects/:id/activity`               | Append activity                    |
+| `GET`        | `/api/v1/projects/:id/coverage`               | Derived verification coverage      |
+| `GET`        | `/api/v1/projects/:id/export`                 | Download a project file            |
+| `POST`       | `/api/v1/projects/import`                     | Import a project file              |
 
-REST routes require a browser session cookie. Project API keys are accepted
-only by `/mcp`. See [`docs/api.md`](docs/api.md) for login, key management,
-revision rules and examples.
+REST routes require a browser session cookie. Project API keys and OAuth access
+tokens are accepted only by `/mcp`. Standard OAuth and discovery routes live
+outside `/api/v1`; see [`docs/api.md`](docs/api.md) for the flow, login, key
+management, revision rules and examples.
 Error responses use `{ "error": { "code", "message", "details" } }`.
 
 ### Routes
@@ -419,11 +440,14 @@ accessibility (axe) and focus management.
 
 ### Remote Codex access
 
-Layers exposes its project and document operations to Codex over MCP at `/mcp`.
-Create an API key for one project in that project's actions menu (**API keys**).
-The key is bound to that project and accepted only by `/mcp`; it cannot create,
-import, duplicate or activate projects. Before remote access, set
-`LAYERS_MCP_ALLOWED_HOSTS` and configure HTTPS with a private backend; the
-default Docker Compose port is publicly bound and needs a loopback override
-behind a local reverse proxy. See [Remote Codex MCP access](docs/api.md#remote-codex-mcp-access)
-for setup, key handling, and limits.
+Layers exposes its project and document operations over MCP at `/mcp`.
+Create an API key for one project in that project's actions menu (**MCP
+access**), or let an OAuth-only client authorize itself through the consent
+page. Either credential is bound to that project and accepted only by `/mcp`;
+it cannot create, import, duplicate or activate projects. Before remote access,
+set `LAYERS_MCP_ALLOWED_HOSTS` and, for OAuth, `LAYERS_PUBLIC_URL`, then
+configure HTTPS with a private backend; the default Docker Compose port is
+publicly bound and needs a loopback override behind a local reverse proxy. See
+[Remote Codex MCP access](docs/api.md#remote-codex-mcp-access) and
+[MCP OAuth authorization](docs/api.md#mcp-oauth-authorization) for setup, token
+handling, and limits.
