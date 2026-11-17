@@ -1,7 +1,29 @@
 # Phase 1a — Backend-owned criterion subchapters
 
-Status: draft for review  
+Status: delivered  
 Updated: 2026-11-17
+
+## Delivery and verification
+
+- CI `verify` passed on PR #7 and on the merge to `main`, including unit, API,
+  contract, build and Playwright suites. The Playwright run covers the UI
+  criterion-to-subchapter flow, final level, reload and deletion.
+- The Docker job published `latest` and `sha-23f87c0` at
+  `sha256:d5d398dc5795f9b03a97e3c115beddc4d057b0cb0ee7413d6ee69b59b375c4ee`.
+- The exact image was deployed on the shared test host behind the existing
+  HTTPS virtual host. The running test instance was restarted against that image
+  with the existing `layers-e2e-data` volume preserved.
+- REST checks passed on a disposable project: a new criterion created one
+  subchapter with the derived title, parent link, `criterion.chapterId`, full
+  Markdown description and activity event; a second identical write returned
+  `createdSubchapters: []` without a revision bump; a final-level chapter stayed
+  flat.
+- MCP checks passed with a project API key: `replace_document` created the
+  subchapter without the caller supplying one and returned it in
+  `createdSubchapters` and the document body.
+- The disposable projects were deleted. The user's existing project, login and
+  data volume were left intact. The test instance remains available for manual
+  testing.
 
 ## Why this phase
 
@@ -10,16 +32,16 @@ the criterion stores the new chapter in `criterion.chapterId`, the parent gains
 the subchapter in `childIds`, and the subchapter title comes from the first line
 of the criterion. **Final level** suppresses the automatic chapter.
 
-That rule currently lives in the browser reducer. API and MCP writes send a
-complete document and do not run the rule, so the same criterion can exist with
-or without a subchapter depending on the client. A recent MCP instruction change
-asked agents to reproduce the rule, but instructions are guidance, not a
+That rule previously lived in the browser reducer. API and MCP writes send a
+complete document and did not run the rule, so the same criterion could exist
+with or without a subchapter depending on the client. An earlier MCP instruction
+change asked agents to reproduce the rule, but instructions are guidance, not a
 contract. This phase moves the rule into `ProjectStore.saveDocument` so every
 document write has the same result.
 
-## Decisions to confirm
+## Decisions
 
-| # | Decision | Recommendation |
+| # | Decision | Choice |
 | --- | --- | --- |
 | 1 | Should the UI keep creating the subchapter optimistically, or let the backend do it? | **Backend only.** The UI applies the created chapters from the save response. This removes duplicate logic and makes the write response authoritative. |
 | 2 | Should existing standalone criteria be converted? | **No backfill.** Only criteria absent from the previously stored document are candidates. |
