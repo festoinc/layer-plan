@@ -3,13 +3,17 @@ import { test, expect } from "./fixtures";
 const linkedText =
   "**Verify reset tokens**\n\nTokens expire after `30 minutes`.";
 
+function chapterButton(page, title) {
+  return page
+    .getByRole("navigation", { name: "Chapters" })
+    .getByRole("button", { name: title, exact: true });
+}
+
 async function addLinkedCriterion(page, text = linkedText) {
   await page.goto("/");
   await page.getByLabel("New success criterion").fill(text);
   await page.getByLabel("New success criterion").press("Enter");
-  await expect(
-    page.getByRole("button", { name: "Verify reset tokens", exact: true }),
-  ).toBeVisible();
+  await expect(chapterButton(page, "Verify reset tokens")).toBeVisible();
 }
 
 test("editing a criterion updates its subchapter and the link affordances", async ({
@@ -50,13 +54,9 @@ test("editing a criterion updates its subchapter and the link affordances", asyn
     "**Reset token email**\n\nThe email arrives within one minute.",
   );
   await criterionEditor.press("Control+Enter");
-  await expect(
-    page.getByRole("button", { name: "Reset token email", exact: true }),
-  ).toBeVisible();
+  await expect(chapterButton(page, "Reset token email")).toBeVisible();
 
-  await page
-    .getByRole("button", { name: "Reset token email", exact: true })
-    .click();
+  await chapterButton(page, "Reset token email").click();
   const description = page.getByRole("region", {
     name: "Description preview",
     exact: true,
@@ -86,9 +86,7 @@ test("editing a criterion updates its subchapter and the link affordances", asyn
 
 test("editing a linked subchapter updates the criterion", async ({ page }) => {
   await addLinkedCriterion(page);
-  await page
-    .getByRole("button", { name: "Verify reset tokens", exact: true })
-    .click();
+  await chapterButton(page, "Verify reset tokens").click();
   const description = page.getByRole("region", {
     name: "Description preview",
     exact: true,
@@ -102,10 +100,7 @@ test("editing a linked subchapter updates the criterion", async ({ page }) => {
   await editor.press("Control+Enter");
 
   await expect(
-    page.getByRole("button", {
-      name: "The email arrives within one minute.",
-      exact: true,
-    }),
+    chapterButton(page, "The email arrives within one minute."),
   ).toBeVisible();
   await page
     .getByRole("button", { name: "Password reset", exact: true })
@@ -136,9 +131,7 @@ test("deleting a trivial criterion deletes its subchapter without a dialog", asy
     .click();
   await expect(page.getByRole("alertdialog")).toHaveCount(0);
   await expect(page.locator(".criteria-list > .criterion")).toHaveCount(4);
-  await expect(
-    page.getByRole("button", { name: "Verify reset tokens", exact: true }),
-  ).toHaveCount(0);
+  await expect(chapterButton(page, "Verify reset tokens")).toHaveCount(0);
 
   const stored = await (
     await request.get("http://127.0.0.1:3001/api/v1/projects/website/document")
@@ -160,9 +153,7 @@ test("deleting a non-trivial criterion asks for confirmation and removes the sub
   request,
 }) => {
   await addLinkedCriterion(page);
-  await page
-    .getByRole("button", { name: "Verify reset tokens", exact: true })
-    .click();
+  await chapterButton(page, "Verify reset tokens").click();
   await page
     .getByRole("button", {
       name: "Add subchapter to Verify reset tokens",
@@ -175,9 +166,7 @@ test("deleting a non-trivial criterion asks for confirmation and removes the sub
   await page
     .getByRole("button", { name: "Create chapter", exact: true })
     .click();
-  await expect(
-    page.getByRole("button", { name: "Implementation notes", exact: true }),
-  ).toBeVisible();
+  await expect(chapterButton(page, "Implementation notes")).toBeVisible();
 
   await page
     .getByRole("button", { name: "Password reset", exact: true })
@@ -194,9 +183,7 @@ test("deleting a non-trivial criterion asks for confirmation and removes the sub
   await expect(dialog).toContainText("2 chapters in total");
   await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
   await expect(dialog).toHaveCount(0);
-  await expect(
-    page.getByRole("button", { name: "Implementation notes", exact: true }),
-  ).toBeVisible();
+  await expect(chapterButton(page, "Implementation notes")).toBeVisible();
 
   await remove.click();
   await page
@@ -205,20 +192,14 @@ test("deleting a non-trivial criterion asks for confirmation and removes the sub
       exact: true,
     })
     .click();
-  await expect(
-    page.getByRole("button", { name: "Verify reset tokens", exact: true }),
-  ).toHaveCount(0);
-  await expect(
-    page.getByRole("button", { name: "Implementation notes", exact: true }),
-  ).toHaveCount(0);
+  await expect(chapterButton(page, "Verify reset tokens")).toHaveCount(0);
+  await expect(chapterButton(page, "Implementation notes")).toHaveCount(0);
 
   await expect(page.getByRole("status").first()).toContainText(
     "All changes saved",
   );
   await page.reload();
-  await expect(
-    page.getByRole("button", { name: "Verify reset tokens", exact: true }),
-  ).toHaveCount(0);
+  await expect(chapterButton(page, "Verify reset tokens")).toHaveCount(0);
   const stored = await (
     await request.get("http://127.0.0.1:3001/api/v1/projects/website/document")
   ).json();
