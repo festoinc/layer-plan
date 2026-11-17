@@ -436,8 +436,11 @@ in URLs or commit them to files. The credential is bound to one project, so
 `list_projects` returns only that project and
 `create_project`, `duplicate_project`, `activate_project` and `import_project`
 are not available.
-Project and document updates use separate ETags, exposed in tool results. On a
-revision conflict, fetch the latest content and reapply the intended change.
+Project and document updates use separate ETags, exposed in tool results. When
+an agent adds a criterion to a non-final chapter, the MCP instructions require
+it to create the matching subchapter in the same document write, mirroring the
+UI. On a revision conflict, fetch the latest content and reapply the intended
+change.
 MCP requests and responses are limited to 2 MiB; larger documents must be
 handled through the existing API. The agent is instructed to seek confirmation
 before destructive actions, but instructions are not a server-side approval

@@ -63,6 +63,9 @@ describe("remote MCP", () => {
       "bound to exactly one project",
     );
     expect(init.body.result.instructions).toContain("confirm before deleting");
+    expect(init.body.result.instructions).toContain(
+      "mirror the UI in the same replace_document call",
+    );
     const list = await mcpRpc(api, read, "tools/list");
     const tools = list.body.result.tools as Array<{ name: string }>;
     expect(tools.map((tool) => tool.name).sort()).toEqual(projectTools);
