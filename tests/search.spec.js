@@ -52,7 +52,7 @@ test("search deep links, empty states and project switching work", async ({
   await expect(page.getByRole("heading", { name: "No matches" })).toBeVisible();
 
   await page.locator(".project-switcher-trigger").click();
-  await page.getByRole("button", { name: /Mobile app/ }).click();
+  await page.getByRole("menuitem", { name: /Mobile app/ }).click();
   await expect(page).toHaveURL(/#\/projects\/mobile\/search$/);
   await expect(input).toHaveValue("");
   await expect(
