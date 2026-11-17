@@ -6,6 +6,8 @@ export default defineConfig({
   server: {
     proxy: {
       "/api": "http://127.0.0.1:3001",
+      "/oauth": "http://127.0.0.1:3001",
+      "/.well-known": "http://127.0.0.1:3001",
     },
   },
   build: {

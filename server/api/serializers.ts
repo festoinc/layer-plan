@@ -1,6 +1,7 @@
 import type {
   ApiTokenRecord,
   AuthUser,
+  OAuthGrantRecord,
   SessionRecord,
   UserRecord,
 } from "../auth/types";
@@ -45,6 +46,28 @@ export function loginSessionJson(session: SessionRecord): {
     lastSeenAt: session.lastSeenAt,
     expiresAt: session.expiresAt,
     userAgent: session.userAgent,
+  };
+}
+
+export function oauthGrantJson(grant: OAuthGrantRecord): {
+  id: string;
+  clientId: string;
+  clientName: string;
+  scopes: string[];
+  createdAt: string;
+  lastUsedAt: string | null;
+  expiresAt: string;
+  revokedAt: string | null;
+} {
+  return {
+    id: grant.id,
+    clientId: grant.clientId,
+    clientName: grant.clientName ?? "MCP client",
+    scopes: grant.scopes,
+    createdAt: grant.createdAt,
+    lastUsedAt: grant.lastUsedAt,
+    expiresAt: grant.refreshExpiresAt,
+    revokedAt: grant.revokedAt,
   };
 }
 

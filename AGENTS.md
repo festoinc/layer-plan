@@ -21,6 +21,8 @@ Layers MCP endpoint. It is not repository guidance.
 - Native runtime dependencies: `better-sqlite3` and `@node-rs/argon2`.
 - The API is the source of truth; there is no browser persistence.
 - Every project is private to its owner. Auth is required outside test mode.
+- MCP at `/mcp` accepts a project API key or an OAuth access token. OAuth is
+  enabled by `LAYERS_PUBLIC_URL`; API keys work without it.
 - Default local database: `data/layers.sqlite` (gitignored).
 - Default bind: `127.0.0.1:3001`; a non-loopback bind requires
   `LAYERS_ALLOW_REMOTE=1`.
@@ -118,6 +120,9 @@ still applies to future work unless the user explicitly authorizes it.
 - For MCP access, set `LAYERS_MCP_ALLOWED_HOSTS` to include the test domain.
   Use HTTPS for project API keys and do not publish the backend port publicly.
   The default Compose port binding needs a loopback-only test override.
+- To test OAuth, also set `LAYERS_PUBLIC_URL=https://<test-domain>` and
+  `LAYERS_SECURE_COOKIES=1`. The existing virtual host already proxies
+  `/oauth/*` and `/.well-known/*`; do not add a second proxy for them.
 
 The 2026-11-16 remote HTTPS test verified MCP reads, document writes, stale
 revision handling, user isolation and read-only scopes. Codex CLI 0.169.0

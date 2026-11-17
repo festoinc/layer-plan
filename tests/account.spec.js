@@ -8,15 +8,15 @@ import {
   test,
 } from "./fixtures";
 
-test("project actions manage MCP API keys", async ({ page }) => {
+test("project actions manage MCP access", async ({ page }) => {
   await page.goto("/#/projects");
   const card = page.locator(".project-card", { hasText: "Website project" });
   await card
     .getByRole("button", { name: "Actions for Website project" })
     .click();
-  await page.getByRole("menuitem", { name: "API keys" }).click();
+  await page.getByRole("menuitem", { name: "MCP access" }).click();
   await expect(
-    page.getByRole("heading", { name: "API keys for Website project" }),
+    page.getByRole("heading", { name: "MCP access for Website project" }),
   ).toBeVisible();
 
   await page.getByLabel("Key name").fill("E2E agent");
@@ -28,11 +28,11 @@ test("project actions manage MCP API keys", async ({ page }) => {
   const secret = (await token.textContent()).trim();
   expect(secret.length).toBeGreaterThan(20);
 
-  await page.getByRole("button", { name: "Close API keys dialog" }).click();
+  await page.getByRole("button", { name: "Close MCP access dialog" }).click();
   await card
     .getByRole("button", { name: "Actions for Website project" })
     .click();
-  await page.getByRole("menuitem", { name: "API keys" }).click();
+  await page.getByRole("menuitem", { name: "MCP access" }).click();
   await expect(page.locator(".token-created")).toHaveCount(0);
   await expect(page.locator(".token-list")).toContainText("E2E agent");
   await expect(

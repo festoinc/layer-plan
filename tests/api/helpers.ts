@@ -6,6 +6,7 @@ import { createPasswordHasher } from "../../server/auth/password";
 import { openDatabase, type DatabaseConnection } from "../../server/db/client";
 import { runMigrations } from "../../server/db/migrate";
 import { SqliteAuthStore } from "../../server/db/authStore";
+import { SqliteOAuthStore } from "../../server/db/oauthStore";
 import { SqliteStore } from "../../server/db/store";
 import { bootstrap } from "../../server/db/bootstrap";
 
@@ -25,6 +26,7 @@ export interface TestApi {
   app: FastifyInstance;
   store: SqliteStore;
   authStore: SqliteAuthStore;
+  oauthStore: SqliteOAuthStore;
   config: ServerConfig;
   db: DatabaseConnection;
   close: () => Promise<void>;
@@ -72,12 +74,17 @@ function cookieFrom(response: { headers: Record<string, unknown> }): string {
 }
 
 export async function createTestApi(
-  options: { seed?: boolean; loginRateLimit?: number } = {},
+  options: {
+    seed?: boolean;
+    loginRateLimit?: number;
+    publicUrl?: string;
+  } = {},
 ): Promise<TestApi> {
   const config = loadConfig(
     {
       ...process.env,
       LAYERS_DB_PATH: ":memory:",
+      LAYERS_PUBLIC_URL: options.publicUrl ?? "",
       LAYERS_SEED_SAMPLES: options.seed === false ? "0" : "1",
       LAYERS_TEST_MODE: "1",
       LAYERS_LOGIN_RATE_LIMIT: String(options.loginRateLimit ?? 1000),
@@ -100,6 +107,10 @@ export async function createTestApi(
     now: () => FIXED_NOW,
     newId: idFactory(),
   });
+  const oauthStore = new SqliteOAuthStore(db, {
+    now: () => FIXED_NOW,
+    newId: idFactory(),
+  });
   const passwordHasher = createPasswordHasher({ testMode: true });
   await bootstrap({ config, store, authStore, passwordHasher });
 
@@ -107,6 +118,7 @@ export async function createTestApi(
     config,
     store,
     authStore,
+    oauthStore,
     passwordHasher,
     logger: false,
     now: () => FIXED_NOW,
@@ -192,6 +204,7 @@ export async function createTestApi(
     app,
     store,
     authStore,
+    oauthStore,
     config,
     db,
     login,

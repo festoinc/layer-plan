@@ -2,6 +2,11 @@ export type UserRole = "super_admin" | "member";
 
 export type TokenScope = "read" | "write";
 
+export type OAuthClientAuthMethod =
+  "none" | "client_secret_post" | "client_secret_basic";
+
+export type OAuthClientSource = "dcr";
+
 export interface UserRecord {
   id: string;
   email: string;
@@ -47,10 +52,75 @@ export interface AuthUser {
   disabledAt: string | null;
 }
 
+export interface OAuthClientRecord {
+  id: string;
+  name: string;
+  redirectUris: string[];
+  grantTypes: string[];
+  responseTypes: string[];
+  tokenEndpointAuthMethod: OAuthClientAuthMethod;
+  clientSecretHash: string | null;
+  source: OAuthClientSource;
+  createdAt: string;
+  lastUsedAt: string | null;
+}
+
+export type OAuthAuthorizationRequestStatus = "pending" | "approved" | "denied";
+
+export interface OAuthAuthorizationRequestRecord {
+  id: string;
+  clientId: string;
+  redirectUri: string;
+  scopes: TokenScope[];
+  state: string | null;
+  codeChallenge: string;
+  codeChallengeMethod: "S256";
+  resource: string;
+  createdAt: string;
+  expiresAt: string;
+  status: OAuthAuthorizationRequestStatus;
+  userId: string | null;
+  projectId: string | null;
+  decidedAt: string | null;
+}
+
+export interface OAuthAuthorizationCodeRecord {
+  codeHash: string;
+  clientId: string;
+  userId: string;
+  projectId: string;
+  scopes: TokenScope[];
+  redirectUri: string;
+  codeChallenge: string;
+  resource: string;
+  createdAt: string;
+  expiresAt: string;
+  consumedAt: string | null;
+}
+
+export interface OAuthGrantRecord {
+  id: string;
+  clientId: string;
+  clientName: string | null;
+  userId: string;
+  projectId: string;
+  scopes: TokenScope[];
+  resource: string;
+  accessTokenHash: string;
+  refreshTokenHash: string;
+  previousRefreshTokenHash: string | null;
+  accessExpiresAt: string;
+  refreshExpiresAt: string;
+  createdAt: string;
+  lastUsedAt: string | null;
+  revokedAt: string | null;
+}
+
 export type AuthContext =
   | { method: "session"; user: AuthUser; sessionId: string }
   | {
       method: "token";
+      credential: "api_key" | "oauth";
       user: AuthUser;
       tokenId: string;
       projectId: string;

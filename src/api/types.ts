@@ -117,6 +117,52 @@ export interface CreateTokenResponse {
   tokenInfo: ApiTokenInfo;
 }
 
+export interface OAuthConsentProject {
+  id: string;
+  name: string;
+  color: string;
+}
+
+export interface OAuthConsentRequest {
+  id: string;
+  clientId: string;
+  clientName: string;
+  redirectUri: string;
+  redirectHost: string;
+  scopes: string[];
+  expiresAt: string;
+}
+
+export interface OAuthConsentResponse {
+  request: OAuthConsentRequest;
+  projects: OAuthConsentProject[];
+}
+
+export interface OAuthConsentDecision {
+  decision: "approve" | "deny";
+  projectId?: string;
+  scopes?: Array<"read" | "write">;
+}
+
+export interface OAuthConsentDecisionResponse {
+  redirectTo: string;
+}
+
+export interface OAuthGrantInfo {
+  id: string;
+  clientId: string;
+  clientName: string;
+  scopes: string[];
+  createdAt: string;
+  lastUsedAt: string | null;
+  expiresAt: string;
+  revokedAt: string | null;
+}
+
+export interface OAuthGrantsResponse {
+  grants: OAuthGrantInfo[];
+}
+
 export interface UsersResponse {
   users: AuthUser[];
 }

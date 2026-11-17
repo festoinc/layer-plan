@@ -8,6 +8,7 @@ export const ROUTE_VIEWS = {
   signIn: "sign-in" as const,
   account: "account" as const,
   users: "users" as const,
+  oauthConsent: "oauth-consent" as const,
 };
 
 export type RouteView = (typeof ROUTE_VIEWS)[keyof typeof ROUTE_VIEWS];
@@ -16,6 +17,7 @@ export interface ParsedRoute {
   view: RouteView;
   projectId: string | null;
   chapterId: string | null;
+  oauthRequestId?: string | null;
   legacy: boolean;
   valid: boolean;
 }
@@ -24,6 +26,7 @@ export interface RouteTarget {
   view?: RouteView | string;
   projectId?: string | null;
   chapterId?: string | null;
+  oauthRequestId?: string | null;
 }
 
 const listeners = new Set<() => void>();
@@ -72,6 +75,19 @@ export function parseRoute(hash: string): ParsedRoute {
       chapterId: null,
       legacy: true,
       valid: false,
+    };
+  }
+
+  if (path.startsWith("oauth/consent/")) {
+    const rest = path.slice("oauth/consent/".length);
+    const requestId = rest && !rest.includes("/") ? decode(rest) : null;
+    return {
+      view: ROUTE_VIEWS.oauthConsent,
+      projectId: null,
+      chapterId: null,
+      oauthRequestId: requestId,
+      legacy: false,
+      valid: Boolean(requestId),
     };
   }
 
@@ -223,6 +239,11 @@ export function parseRoute(hash: string): ParsedRoute {
 }
 
 export function routeToHash(route: RouteTarget): string {
+  if (route.view === ROUTE_VIEWS.oauthConsent) {
+    return route.oauthRequestId
+      ? `#/oauth/consent/${encodeURIComponent(route.oauthRequestId)}`
+      : "#/oauth/consent";
+  }
   if (route.view === ROUTE_VIEWS.projects) return "#/projects";
   if (route.view === ROUTE_VIEWS.signIn) return "#/sign-in";
   if (route.view === ROUTE_VIEWS.account) return "#/account";

@@ -5,6 +5,7 @@ import type {
 } from "fastify";
 import type { ServerConfig } from "../config";
 import type { AuthStore } from "../db/authStore";
+import type { OAuthStore } from "../db/oauthStore";
 import { ApiError } from "../api/errors";
 import { INTERNAL_AUTH_HEADER, createInternalAuth } from "./internal";
 import type { InternalAuth } from "./internal";
@@ -18,6 +19,7 @@ const TOKEN_TOUCH_INTERVAL_MS = 5 * 60 * 1000;
 export interface AuthHookOptions {
   config: ServerConfig;
   authStore: AuthStore;
+  oauthStore: OAuthStore;
   now?: () => string;
 }
 
@@ -93,6 +95,7 @@ function internalHeaderValue(request: FastifyRequest): string | null {
 export function createAuthHooks({
   config,
   authStore,
+  oauthStore,
   now = () => new Date().toISOString(),
 }: AuthHookOptions): AuthHooks {
   const internalAuth = createInternalAuth();
@@ -125,6 +128,7 @@ export function createAuthHooks({
         }
         request.auth = {
           method: "token",
+          credential: "api_key",
           user: publicUser(user),
           tokenId: context.tokenId,
           projectId: context.projectId,
@@ -138,8 +142,56 @@ export function createAuthHooks({
     if (authorization) {
       const match = /^Bearer\s+(.+)$/i.exec(authorization.trim());
       if (!match) throw unauthenticated("The bearer token is invalid.");
-      const token = authStore.findApiTokenByHash(hashToken(match[1].trim()));
+      const presented = match[1].trim();
       const timestamp = now();
+
+      if (presented.startsWith("loa_")) {
+        if (!config.oauth) {
+          throw unauthenticated("OAuth is not configured for this server.");
+        }
+        const grant = oauthStore.findGrantByAccessTokenHash(
+          hashToken(presented),
+        );
+        if (
+          !grant ||
+          grant.revokedAt ||
+          Date.parse(grant.accessExpiresAt) <= Date.parse(timestamp) ||
+          grant.resource !== config.oauth.resource
+        ) {
+          throw unauthenticated(
+            "The OAuth access token is invalid or expired.",
+          );
+        }
+        const user = authStore.getUser(grant.userId);
+        if (!user || user.disabledAt) {
+          throw unauthenticated("The account is disabled.");
+        }
+        if (!mcp) {
+          throw new ApiError(
+            403,
+            "forbidden",
+            "MCP OAuth tokens are only valid for the MCP endpoint.",
+          );
+        }
+        if (
+          !grant.lastUsedAt ||
+          Date.parse(timestamp) - Date.parse(grant.lastUsedAt) >
+            TOKEN_TOUCH_INTERVAL_MS
+        ) {
+          oauthStore.touchGrant(grant.id, timestamp);
+        }
+        request.auth = {
+          method: "token",
+          credential: "oauth",
+          user: publicUser(user),
+          tokenId: grant.id,
+          projectId: grant.projectId,
+          scopes: grant.scopes,
+        };
+        return;
+      }
+
+      const token = authStore.findApiTokenByHash(hashToken(presented));
       if (
         !token ||
         token.revokedAt ||
@@ -168,6 +220,7 @@ export function createAuthHooks({
       }
       request.auth = {
         method: "token",
+        credential: "api_key",
         user: publicUser(user),
         tokenId: token.id,
         projectId: token.projectId,

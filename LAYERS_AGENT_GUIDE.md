@@ -57,9 +57,9 @@ This repository contains Layers, a local project-specification workspace.
 - SQLite database: `data/layers.sqlite` by default
 
 The REST API is local-only by default and authenticated. Browser clients use an
-`HttpOnly` session cookie. MCP clients use a project API key for `/mcp`; never
-ask the person for their password or key. Do not expose the REST API beyond
-loopback. Do not change `HOST` to a public interface unless the person explicitly
+`HttpOnly` session cookie. MCP clients use a project API key or an OAuth
+connection for `/mcp`; never ask the person for their password, key, OAuth code
+or access token. Do not expose the REST API beyond loopback. Do not change `HOST` to a public interface unless the person explicitly
 asks for that and understands the security implications.
 
 The API is the source of truth. Do not edit SQLite directly, do not use browser
@@ -67,12 +67,15 @@ The API is the source of truth. Do not edit SQLite directly, do not use browser
 
 ## Authentication for agents
 
-Use the Layers MCP endpoint at `/mcp` with a project API key. The person creates
-the key in the project actions menu (**API keys**). The key is bound to exactly
-one project and is accepted only by `/mcp`; it cannot call the REST API. Never
-ask for the key in chat. Put it in the MCP client environment, for example
+Use the Layers MCP endpoint at `/mcp` with a project API key or an OAuth
+connection. The person creates a key in the project actions menu (**MCP
+access**), or approves an OAuth client through the Layers consent page. The
+credential is bound to exactly one project and is accepted only by `/mcp`; it
+cannot call the REST API. Never ask for a key, OAuth code or access token in
+chat. For a key, put it in the MCP client environment, for example
 `LAYERS_API_TOKEN`, and configure the client to send it as a bearer token to
-`https://<domain>/mcp`.
+`https://<domain>/mcp`. OAuth-only clients discover the authorization server
+from the same URL; the person approves one project in the browser.
 
 The REST examples below are for a signed-in browser session, not for a project
 key. Use a cookie jar from `curl -c` / `curl -b`:
@@ -85,9 +88,11 @@ Use `$AUTH` on every REST call. Project ids are private to their owner. Another
 user's project returns `404`, including for the super admin. Never assume a
 project id belongs to the current session's user.
 
-When MCP returns `401 unauthenticated`, stop and ask for a new key. Do not retry
-in a loop. `403 forbidden` means the key scope does not allow the operation or
-the project does not match the key.
+When MCP returns `401 unauthenticated`, stop and ask the person to reconnect
+through the MCP client's authorization flow, or create a new key. Do not retry
+in a loop and do not ask for credentials in chat. `403 forbidden` means the
+credential scope does not allow the operation or the project does not match the
+bound project.
 
 ## Start or check the stack
 
@@ -459,9 +464,11 @@ Relevant files:
 server/api/openapi.yaml       API contract
 server/api/schemas.ts         runtime validation
 server/api/routes/            route handlers
-server/auth/                  password, project API keys, sessions and guards
+server/auth/                  password, project keys, OAuth tokens and guards
+server/oauth/                 OAuth discovery, consent, token and revoke handlers
 server/db/store.ts            SQLite project queries and transactions
 server/db/authStore.ts        users, sessions and project API keys
+server/db/oauthStore.ts       OAuth clients, requests, codes and grants
 server/db/bootstrap.ts        super-admin and ownership bootstrap
 server/db/migrations/         schema migrations
 src/domain/                   shared domain rules
@@ -514,9 +521,9 @@ Keep the report concise and factual.
 
 When connected through the Layers MCP server, use its project and document
 tools instead of the REST examples above. The server sends adapted instructions
-during initialization. The key is bound to one project: `list_projects` returns
-only that project, and every other tool requires its project id. The key cannot
-create, import, duplicate or activate projects. A read-only key can read; a
-read-write key can edit. Project metadata and document writes require their
+during initialization. The credential is bound to one project: `list_projects`
+returns only that project, and every other tool requires its project id. It
+cannot create, import, duplicate or activate projects. A read-only credential
+can read; a read-write credential can edit. Project metadata and document writes require their
 respective ETags; reread and rebase on a conflict. See `docs/api.md` for Codex
 configuration, HTTPS requirements and limits. Ask before destructive changes.

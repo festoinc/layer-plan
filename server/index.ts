@@ -4,6 +4,7 @@ import { createPasswordHasher } from "./auth/password";
 import { openDatabase } from "./db/client";
 import { runMigrations } from "./db/migrate";
 import { SqliteAuthStore } from "./db/authStore";
+import { SqliteOAuthStore } from "./db/oauthStore";
 import { SqliteStore } from "./db/store";
 import { bootstrap } from "./db/bootstrap";
 
@@ -12,10 +13,17 @@ const db = openDatabase(config.dbPath);
 runMigrations(db);
 const store = new SqliteStore(db);
 const authStore = new SqliteAuthStore(db);
+const oauthStore = new SqliteOAuthStore(db);
 const passwordHasher = createPasswordHasher({ testMode: config.testMode });
 await bootstrap({ config, store, authStore, passwordHasher });
 
-const app = await buildApp({ config, store, authStore, passwordHasher });
+const app = await buildApp({
+  config,
+  store,
+  authStore,
+  oauthStore,
+  passwordHasher,
+});
 
 async function shutdown(signal: string) {
   app.log.info({ signal }, "Shutting down");

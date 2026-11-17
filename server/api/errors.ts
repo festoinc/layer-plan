@@ -1,5 +1,6 @@
 import type { FastifyError, FastifyReply, FastifyRequest } from "fastify";
 import { ZodError } from "zod";
+import { OAuthProtocolError } from "../oauth/errors";
 
 export class ApiError extends Error {
   readonly status: number;
@@ -46,6 +47,17 @@ export function sendError(reply: FastifyReply, error: ApiError) {
     .send(errorBody(error.code, error.message, error.details));
 }
 
+export function sendOAuthError(reply: FastifyReply, error: OAuthProtocolError) {
+  reply.header("Cache-Control", "no-store").header("Pragma", "no-cache");
+  for (const [key, value] of Object.entries(error.headers ?? {})) {
+    reply.header(key, value);
+  }
+  return reply.code(error.status).send({
+    error: error.code,
+    ...(error.description ? { error_description: error.description } : {}),
+  });
+}
+
 export function notFoundHandler(_request: FastifyRequest, reply: FastifyReply) {
   return reply
     .code(404)
@@ -57,6 +69,10 @@ export function errorHandler(
   request: FastifyRequest,
   reply: FastifyReply,
 ) {
+  if (error instanceof OAuthProtocolError) {
+    return sendOAuthError(reply, error);
+  }
+
   if (error instanceof ApiError) {
     return sendError(reply, error);
   }

@@ -1,6 +1,6 @@
 # Layers agent instructions
 
-Layers MCP tools are the source of truth. This API key is bound to exactly one project: its owner and the project id are fixed by the credential. Never ask for a password, API key, or another project id in chat. Use list_projects to see the bound project and use that project id on every project tool. A different project id returns not_found. The REST API is not available to this key.
+Layers MCP tools are the source of truth. This MCP connection is bound to exactly one project: its owner and the project id are fixed by the credential. The credential may be a project API key or an OAuth connection; the credential type does not change the tools or permissions. Never ask for a password, API key, OAuth code, access token, or another project id in chat. Use list_projects to see the bound project and use that project id on every project tool. A different project id returns not_found. The REST API is not available to this credential.
 
 Read the project and document before changing them. Never invent project, chapter, criterion, or activity IDs or existing content. Work on one document at a time unless the user explicitly requests a batch.
 
@@ -8,4 +8,4 @@ Use get_document and replace_document to edit chapters, criteria, verification r
 
 Use the exact ETag returned by get_document for document writes, and the separate ETag returned by get_project for metadata writes or project deletion. On a revision conflict, reread and rebase; never blindly retry or overwrite. Ask the user to confirm before deleting the project or a chapter, removing existing criteria or content, or overwriting conflicting changes. Record meaningful documentation changes in activity.
 
-Coverage is declaration-based: only eligible non-root chapters with a non-empty auto-test command count as covered; tests are not executed. The project key cannot create, import, duplicate, or activate projects. Deleting the bound project also invalidates this key. Exported instructions describe the export format. Report changes, revision, verification results, and unresolved questions.
+Coverage is declaration-based: only eligible non-root chapters with a non-empty auto-test command count as covered; tests are not executed. This connection cannot create, import, duplicate, or activate projects. Deleting the bound project also invalidates this connection. If authentication fails, ask the user to reconnect through the MCP client's Layers authorization flow rather than asking for a token in chat. Exported instructions describe the export format. Report changes, revision, verification results, and unresolved questions.

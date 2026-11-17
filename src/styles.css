@@ -3013,3 +3013,115 @@ ul {
     display: none;
   }
 }
+
+/* MCP OAuth consent and connected apps */
+.token-section-title {
+  margin: 24px 0 6px;
+  font-family: Manrope, sans-serif;
+  font-size: 16px;
+  letter-spacing: -0.3px;
+}
+.inline-confirm {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.oauth-consent-page {
+  align-items: start;
+  padding-top: 56px;
+}
+.oauth-consent-card {
+  width: min(560px, 100%);
+}
+.oauth-consent-eyebrow {
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin-bottom: 6px;
+}
+.oauth-redirect-host {
+  overflow-wrap: anywhere;
+}
+.oauth-consent-form {
+  display: grid;
+  gap: 16px;
+}
+.oauth-consent-field {
+  display: grid;
+  gap: 7px;
+}
+.oauth-consent-field label,
+.oauth-scope-fieldset legend {
+  font-size: 12px;
+  font-weight: 650;
+  color: #3f4560;
+}
+.oauth-consent-field select {
+  width: 100%;
+  border: 1px solid #dcdae6;
+  border-radius: 7px;
+  background: #fff;
+  padding: 10px 12px;
+  font-size: 13px;
+  color: #24283e;
+}
+.oauth-consent-field select:focus {
+  border-color: #a49bed;
+  outline: 2px solid #e4e1fb;
+  outline-offset: 1px;
+}
+.oauth-scope-fieldset {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px 14px;
+  display: grid;
+  gap: 11px;
+}
+.oauth-scope-fieldset legend {
+  padding: 0 4px;
+}
+.oauth-scope-fieldset label {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  cursor: pointer;
+}
+.oauth-scope-fieldset input {
+  margin-top: 3px;
+  accent-color: var(--accent);
+}
+.oauth-scope-fieldset span {
+  display: grid;
+  gap: 2px;
+}
+.oauth-scope-fieldset strong {
+  font-size: 13px;
+}
+.oauth-scope-fieldset small {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.5;
+}
+.oauth-consent-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+@media (max-width: 720px) {
+  .oauth-consent-page {
+    padding-top: 24px;
+  }
+  .oauth-consent-card {
+    padding: 24px;
+  }
+  .oauth-consent-actions {
+    flex-direction: column;
+  }
+  .oauth-consent-actions .primary-button,
+  .oauth-consent-actions .secondary-button {
+    width: 100%;
+  }
+}

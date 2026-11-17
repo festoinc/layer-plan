@@ -13,21 +13,25 @@ import { registerCoverageRoutes } from "./api/routes/coverage";
 import { registerDocumentRoutes } from "./api/routes/document";
 import { registerExportRoutes } from "./api/routes/exports";
 import { registerHealthRoutes } from "./api/routes/health";
+import { registerOAuthGrantRoutes } from "./api/routes/oauthGrants";
 import { registerProjectRoutes } from "./api/routes/projects";
 import { registerProjectTokenRoutes } from "./api/routes/projectTokens";
 import { registerTestRoutes } from "./api/routes/test";
 import { registerUserRoutes } from "./api/routes/users";
 import type { ServerConfig } from "./config";
 import type { AuthStore } from "./db/authStore";
+import type { OAuthStore } from "./db/oauthStore";
 import type { ProjectStore } from "./db/store";
 import type { PasswordHasher } from "./auth/password";
 import { createAuthHooks } from "./auth/middleware";
 import { registerMcpRoutes } from "./mcp/routes";
+import { registerOAuthRoutes } from "./oauth/routes";
 
 export interface BuildAppOptions {
   config: ServerConfig;
   store: ProjectStore;
   authStore: AuthStore;
+  oauthStore: OAuthStore;
   passwordHasher: PasswordHasher;
   logger?: boolean;
   now?: () => string;
@@ -41,6 +45,7 @@ export async function buildApp({
   config,
   store,
   authStore,
+  oauthStore,
   passwordHasher,
   logger = true,
   now,
@@ -78,13 +83,34 @@ export async function buildApp({
       ),
   });
 
-  app.setErrorHandler(errorHandler);
+  app.setErrorHandler((error, request, reply) => {
+    if (
+      config.oauth &&
+      error instanceof ApiError &&
+      error.status === 401 &&
+      (request.raw.url ?? "").split("?")[0] === "/mcp"
+    ) {
+      reply.header(
+        "WWW-Authenticate",
+        `Bearer resource_metadata="${config.oauth.resourceMetadataUrl}", scope="read write"`,
+      );
+    }
+    return errorHandler(error as Error, request, reply);
+  });
+  app.addHook("onSend", async (_request, reply, payload) => {
+    if (String(reply.getHeader("content-type") ?? "").startsWith("text/html")) {
+      reply.header("X-Frame-Options", "DENY");
+    }
+    return payload;
+  });
   app.setNotFoundHandler((request, reply) => {
     const url = request.raw.url ?? "";
     const wantsHtml =
       request.method === "GET" &&
       !url.startsWith("/api/") &&
       !url.startsWith("/assets/") &&
+      !url.startsWith("/oauth/") &&
+      !url.startsWith("/.well-known/") &&
       fs.existsSync(config.staticRoot);
     if (wantsHtml) {
       return reply
@@ -94,7 +120,7 @@ export async function buildApp({
     return notFoundHandler(request, reply);
   });
 
-  const hooks = createAuthHooks({ config, authStore, now });
+  const hooks = createAuthHooks({ config, authStore, oauthStore, now });
   const openapiYaml = readOpenApi(config.openapiPath);
   const openapi = parseYaml(openapiYaml) as Record<string, unknown>;
 
@@ -114,15 +140,30 @@ export async function buildApp({
   registerHealthRoutes(app, store);
   registerAuthRoutes(app, { config, authStore, hooks, passwordHasher });
   registerProjectTokenRoutes(app, store, authStore, hooks, now);
+  registerOAuthGrantRoutes(app, store, oauthStore, hooks, now);
   registerUserRoutes(app, authStore, hooks, passwordHasher);
   registerProjectRoutes(app, store, hooks);
   registerDocumentRoutes(app, store, hooks);
   registerActivityRoutes(app, store, hooks);
   registerCoverageRoutes(app, store, hooks);
   registerExportRoutes(app, store, hooks);
+  registerOAuthRoutes(app, {
+    config,
+    store,
+    authStore,
+    oauthStore,
+    hooks,
+    now,
+  });
   registerMcpRoutes(app, hooks, config);
   if (config.testMode) {
-    registerTestRoutes(app, { config, store, authStore, passwordHasher });
+    registerTestRoutes(app, {
+      config,
+      store,
+      authStore,
+      oauthStore,
+      passwordHasher,
+    });
   }
 
   if (fs.existsSync(config.staticRoot)) {
