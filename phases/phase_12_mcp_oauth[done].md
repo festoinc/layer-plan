@@ -1,29 +1,56 @@
 # Phase 12 — OAuth connections for MCP
 
-Status: implementation complete; remote acceptance pending  
+Status: delivered  
 Updated: 2026-11-17
 
-CI `verify` passed on PR #5 (unit, API, contract, build and Playwright).
-Remote OAuth and API-key acceptance on the published image is still pending.
+## Delivery and verification
+
+- CI `verify` passed on PR #5 and on the merge to `main`, including unit, API,
+  contract, build and Playwright suites.
+- The Docker job published `latest` and `sha-36ada96` at
+  `sha256:9eb5a8df70359af1fcbb8f337bf1cc30f52bdc6e1b6a463a5227506606db815f`.
+- The exact `sha-36ada96` image ran on the shared test host in an isolated
+  `layers-e2e-oauth` container and volume behind the existing HTTPS virtual
+  host, with `LAYERS_PUBLIC_URL=https://layered-plan.fesiuk.com` and secure
+  cookies. Root, health, OpenAPI, docs and the test-reset `404` behaved as
+  expected.
+- Remote HTTPS checks passed for discovery metadata, the MCP `401` challenge,
+  dynamic client registration, consent, PKCE code exchange, OAuth-backed MCP
+  tools, REST rejection of OAuth tokens, refresh rotation, refresh-replay
+  revocation, read-only write denial, session revocation and revoking the
+  connection. An existing project API key continued to work.
+- An OAuth document write succeeded and a repeated write with the stale ETag
+  returned `412 revision_conflict`.
+- Codex CLI 0.169.0 used its DCR OAuth login flow (no bearer token) and called
+  `list_projects` successfully through the OAuth connection.
+- Container logs contained no access tokens, refresh tokens, authorization
+  codes, client secrets, API keys or session cookies. Only standard authorize
+  query metadata (client id, state, PKCE challenge) appeared in request logs.
+- Cleanup removed the test container, volume, network, checkout and temporary
+  scripts. Test ports are free; nginx, satia and n8n are still running. The
+  previously running Layers test container and volume were removed at the
+  user's direction.
+- The test backend was removed after verification, so the HTTPS domain returns
+  `502` until the next test or deployment starts a backend on the configured
+  loopback port.
 
 ## Why this phase
 
-The MCP endpoint currently accepts only a project API key. Some MCP clients and
-hosted connectors do not offer a bearer-token field and can only connect through
-an OAuth flow. This phase adds OAuth 2.1 authorization to the existing `/mcp`
-endpoint without changing the API-key path.
+The MCP endpoint previously accepted only a project API key. Some MCP clients
+and hosted connectors do not offer a bearer-token field and can only connect
+through an OAuth flow. This phase adds OAuth 2.1 authorization to the existing
+`/mcp` endpoint without changing the API-key path.
 
 An MCP request is authenticated by **either** a project API key **or** an
 OAuth-issued access token. The client chooses one; there is no combined
 credential and no fallback between them. Both resolve to the same owner, bound
 project and scopes.
 
-## Decisions to confirm before coding
+## Decisions
 
-The draft below follows the recommendation in each row. Change a row before the
-phase starts if a different choice is wanted.
+The delivered implementation follows the choice in each row.
 
-| # | Decision | Recommendation |
+| # | Decision | Choice |
 | --- | --- | --- |
 | 1 | Is an OAuth connection bound to one project or to the whole account? | **One project**, selected on the consent page. Keeps the phase 10 security boundary and the existing ten-tool surface unchanged. |
 | 2 | Do we implement both Dynamic Client Registration (DCR) and Client ID Metadata Documents (CIMD)? | **DCR first.** It is the fallback supported by today's OAuth-only MCP clients. Add CIMD only if the chosen acceptance client cannot use DCR. CIMD requires an SSRF-safe metadata fetcher. |
