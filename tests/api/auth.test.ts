@@ -81,7 +81,7 @@ describe("authentication API", () => {
       payload: { email: TEST_SUPER_ADMIN.email, password: "wrong-password" },
       headers: { "content-type": "application/json" },
     });
-    expect(wrong.statusCode).toBe(403);
+    expect(wrong.statusCode).toBe(401);
     expect(json(wrong).error.code).toBe("invalid_credentials");
 
     const unknown = await api.app.inject({
