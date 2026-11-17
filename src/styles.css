@@ -3343,3 +3343,105 @@ ul {
     width: 100%;
   }
 }
+
+/* Attachments */
+.attachments-dialog {
+  width: min(640px, 100%);
+}
+.attachments-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+.attachments-toolbar .secondary-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+.attachments-count {
+  color: var(--muted);
+  font-size: 12px;
+}
+.attachment-list {
+  display: grid;
+  gap: 8px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.attachment-list li {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid #ecebf1;
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+.attachment-icon {
+  display: inline-flex;
+  color: var(--accent);
+  flex: none;
+}
+.attachment-details {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  flex: 1;
+}
+.attachment-details strong {
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+.attachment-details span {
+  color: var(--muted);
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+.attachment-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+}
+.attachment-actions .danger-button,
+.attachment-actions .secondary-button {
+  padding: 5px 9px;
+  font-size: 11px;
+}
+.attachments-empty {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.7;
+  border: 1px dashed #dcdae6;
+  border-radius: 8px;
+  padding: 16px;
+  margin: 0;
+}
+.attachments-notice {
+  color: #23624a;
+  background: #eef8f2;
+  border: 1px solid #c3e4d2;
+  border-radius: 7px;
+  padding: 9px 11px;
+  font-size: 12px;
+  margin: 10px 0;
+}
+.workspace-tools button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+@media (max-width: 560px) {
+  .attachment-list li {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+  .attachment-actions {
+    width: 100%;
+    justify-content: flex-end;
+  }
+}

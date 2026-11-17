@@ -424,6 +424,211 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/projects/{projectId}/attachments": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        projectId: components["parameters"]["ProjectId"];
+      };
+      cookie?: never;
+    };
+    /** List the project document's attachments */
+    get: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path: {
+          projectId: components["parameters"]["ProjectId"];
+        };
+        cookie?: never;
+      };
+      requestBody?: never;
+      responses: {
+        /** @description Attachments, newest first, with the active limits */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": components["schemas"]["AttachmentList"];
+          };
+        };
+        401: components["responses"]["Unauthorized"];
+        403: components["responses"]["Forbidden"];
+        404: components["responses"]["Error"];
+      };
+    };
+    put?: never;
+    /**
+     * Attach a PDF, CSV, JPEG, PNG or XLS file
+     * @description Send raw base64 content without a data-URL prefix. The request body is
+     *     limited to slightly more than the base64 size of a 10 MiB attachment;
+     *     the decoded content must be at most 10 MiB. A project can have at most
+     *     20 attachments.
+     */
+    post: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path: {
+          projectId: components["parameters"]["ProjectId"];
+        };
+        cookie?: never;
+      };
+      requestBody: {
+        content: {
+          "application/json": components["schemas"]["AttachmentUpload"];
+        };
+      };
+      responses: {
+        /** @description Stored attachment metadata */
+        201: {
+          headers: {
+            Location?: string;
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": components["schemas"]["Attachment"];
+          };
+        };
+        401: components["responses"]["Unauthorized"];
+        403: components["responses"]["Forbidden"];
+        404: components["responses"]["Error"];
+        409: components["responses"]["Error"];
+        413: components["responses"]["Error"];
+        415: components["responses"]["Error"];
+        422: components["responses"]["ValidationError"];
+      };
+    };
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/projects/{projectId}/attachments/{attachmentId}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        projectId: components["parameters"]["ProjectId"];
+        attachmentId: components["parameters"]["AttachmentId"];
+      };
+      cookie?: never;
+    };
+    /** Read one attachment's metadata */
+    get: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path: {
+          projectId: components["parameters"]["ProjectId"];
+          attachmentId: components["parameters"]["AttachmentId"];
+        };
+        cookie?: never;
+      };
+      requestBody?: never;
+      responses: {
+        /** @description Attachment metadata without content */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "application/json": components["schemas"]["Attachment"];
+          };
+        };
+        401: components["responses"]["Unauthorized"];
+        403: components["responses"]["Forbidden"];
+        404: components["responses"]["Error"];
+      };
+    };
+    put?: never;
+    post?: never;
+    /** Delete one attachment */
+    delete: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path: {
+          projectId: components["parameters"]["ProjectId"];
+          attachmentId: components["parameters"]["AttachmentId"];
+        };
+        cookie?: never;
+      };
+      requestBody?: never;
+      responses: {
+        /** @description Attachment deleted */
+        204: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content?: never;
+        };
+        401: components["responses"]["Unauthorized"];
+        403: components["responses"]["Forbidden"];
+        404: components["responses"]["Error"];
+      };
+    };
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/projects/{projectId}/attachments/{attachmentId}/content": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        projectId: components["parameters"]["ProjectId"];
+        attachmentId: components["parameters"]["AttachmentId"];
+      };
+      cookie?: never;
+    };
+    /**
+     * Download the attachment content
+     * @description Returns the stored bytes as an attachment with the type selected by the
+     *     file extension. Cache-Control is no-store and responses are never
+     *     rendered inline.
+     */
+    get: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path: {
+          projectId: components["parameters"]["ProjectId"];
+          attachmentId: components["parameters"]["AttachmentId"];
+        };
+        cookie?: never;
+      };
+      requestBody?: never;
+      responses: {
+        /** @description Attachment content */
+        200: {
+          headers: {
+            "Content-Disposition"?: string;
+            "X-Content-Type-Options"?: "nosniff";
+            "Cache-Control"?: "no-store";
+            [name: string]: unknown;
+          };
+          content: {
+            "application/octet-stream": string;
+          };
+        };
+        401: components["responses"]["Unauthorized"];
+        403: components["responses"]["Forbidden"];
+        404: components["responses"]["Error"];
+      };
+    };
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/projects/{projectId}/activity": {
     parameters: {
       query?: never;
@@ -1370,6 +1575,37 @@ export interface components {
         details?: unknown;
       };
     };
+    Attachment: {
+      id: string;
+      projectId: string;
+      filename: string;
+      /** @enum {string} */
+      contentType:
+        | "application/pdf"
+        | "text/csv"
+        | "image/jpeg"
+        | "image/png"
+        | "application/vnd.ms-excel";
+      sizeBytes: number;
+      sha256: string;
+      /** Format: date-time */
+      createdAt: string;
+      createdByName: string | null;
+    };
+    AttachmentList: {
+      attachments: components["schemas"]["Attachment"][];
+      /** @constant */
+      maxAttachments: 20;
+      /** @constant */
+      maxAttachmentBytes: 10485760;
+      allowedExtensions: string[];
+    };
+    AttachmentUpload: {
+      /** @description Basename with a supported extension. */
+      filename: string;
+      /** @description Raw base64 content, without a data-URL prefix. */
+      contentBase64: string;
+    };
     ProjectSummary: {
       id: string;
       name: string;
@@ -1811,6 +2047,7 @@ export interface components {
     SearchOffset: number;
     /** @description Quoted revision returned by the last write or read. */
     IfMatch: string;
+    AttachmentId: string;
   };
   requestBodies: never;
   headers: {

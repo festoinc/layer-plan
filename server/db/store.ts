@@ -1,4 +1,10 @@
+import { createHash } from "node:crypto";
 import type { DatabaseConnection } from "./client";
+import {
+  MAX_ATTACHMENTS,
+  MAX_ATTACHMENT_BYTES,
+  type AttachmentInfo,
+} from "../../src/domain/attachments";
 import {
   createActivityEntry,
   MAX_ACTIVITY_ENTRIES,
@@ -92,6 +98,16 @@ export interface ImportProjectResult {
   issues: string[];
 }
 
+export interface AddAttachmentInput {
+  filename: string;
+  contentType: string;
+  content: Buffer;
+}
+
+export interface AttachmentRecord extends AttachmentInfo {
+  content: Buffer;
+}
+
 export interface ProjectListResult {
   projects: ProjectSummary[];
   activeProjectId: string | null;
@@ -140,6 +156,22 @@ interface ActivityRow {
   actor_name: string | null;
 }
 
+interface AttachmentRow {
+  id: string;
+  project_id: string;
+  filename: string;
+  content_type: string;
+  size_bytes: number;
+  sha256: string;
+  created_at: string;
+  created_by: string | null;
+  created_by_name: string | null;
+}
+
+interface AttachmentContentRow extends AttachmentRow {
+  content: Buffer;
+}
+
 export interface ProjectStoreOptions {
   now?: () => string;
   newId?: () => string;
@@ -182,6 +214,18 @@ export interface ProjectStore {
     id: string,
     input: CreateActivityInput,
   ): ActivityEntry[];
+  listAttachments(ownerId: string, id: string): AttachmentInfo[];
+  getAttachment(
+    ownerId: string,
+    id: string,
+    attachmentId: string,
+  ): AttachmentRecord | null;
+  addAttachment(
+    ownerId: string,
+    id: string,
+    input: AddAttachmentInput,
+  ): AttachmentInfo;
+  deleteAttachment(ownerId: string, id: string, attachmentId: string): void;
   getCoverage(ownerId: string, id: string): CoverageResult | null;
   exportProject(ownerId: string, id: string): ProjectExport | null;
   importProject(ownerId: string, raw: unknown): ImportProjectResult;
@@ -233,6 +277,19 @@ function activityFromRow(row: ActivityRow): ActivityEntry {
     time: row.created_at,
     ...(row.actor_user_id ? { actorUserId: row.actor_user_id } : {}),
     ...(row.actor_name ? { actorName: row.actor_name } : {}),
+  };
+}
+
+function attachmentFromRow(row: AttachmentRow): AttachmentInfo {
+  return {
+    id: row.id,
+    projectId: row.project_id,
+    filename: row.filename,
+    contentType: row.content_type,
+    sizeBytes: row.size_bytes,
+    sha256: row.sha256,
+    createdAt: row.created_at,
+    createdByName: row.created_by_name,
   };
 }
 
@@ -718,6 +775,29 @@ export class SqliteStore implements ProjectStore {
         timestamp,
       );
       this.insertDocumentRow(project.id, chapters, selectedId, timestamp);
+      const sourceAttachments = this.db
+        .prepare("SELECT * FROM attachments WHERE project_id = ?")
+        .all(id) as AttachmentContentRow[];
+      for (const attachment of sourceAttachments) {
+        this.db
+          .prepare(
+            `INSERT INTO attachments (
+              id, project_id, filename, content_type, size_bytes, sha256,
+              content, created_at, created_by
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          )
+          .run(
+            this.newId(),
+            project.id,
+            attachment.filename,
+            attachment.content_type,
+            attachment.size_bytes,
+            attachment.sha256,
+            attachment.content,
+            timestamp,
+            attachment.created_by,
+          );
+      }
       this.activityMessage(
         project.id,
         `Duplicated from ${source.name}`,
@@ -1055,6 +1135,149 @@ export class SqliteStore implements ProjectStore {
     });
     transaction();
     return this.listActivity(ownerId, id);
+  }
+
+  listAttachments(ownerId: string, id: string): AttachmentInfo[] {
+    this.requireProject(ownerId, id);
+    const rows = this.db
+      .prepare(
+        `SELECT a.*, u.display_name AS created_by_name
+         FROM attachments a
+         LEFT JOIN users u ON u.id = a.created_by
+         WHERE a.project_id = ?
+         ORDER BY a.created_at DESC, a.id DESC`,
+      )
+      .all(id) as AttachmentRow[];
+    return rows.map(attachmentFromRow);
+  }
+
+  getAttachment(
+    ownerId: string,
+    id: string,
+    attachmentId: string,
+  ): AttachmentRecord | null {
+    this.requireProject(ownerId, id);
+    const row = this.db
+      .prepare(
+        `SELECT a.*, u.display_name AS created_by_name
+         FROM attachments a
+         LEFT JOIN users u ON u.id = a.created_by
+         WHERE a.project_id = ? AND a.id = ?`,
+      )
+      .get(id, attachmentId) as AttachmentContentRow | undefined;
+    if (!row) return null;
+    return { ...attachmentFromRow(row), content: row.content };
+  }
+
+  addAttachment(
+    ownerId: string,
+    id: string,
+    input: AddAttachmentInput,
+  ): AttachmentInfo {
+    const project = this.requireProject(ownerId, id);
+    const size = input.content.byteLength;
+    if (!size) {
+      throw new ApiError(422, "validation_failed", "The attachment is empty.");
+    }
+    if (size > MAX_ATTACHMENT_BYTES) {
+      throw new ApiError(
+        413,
+        "attachment_too_large",
+        `An attachment can be at most ${MAX_ATTACHMENT_BYTES} bytes.`,
+        { maxAttachmentBytes: MAX_ATTACHMENT_BYTES },
+      );
+    }
+
+    const timestamp = this.now();
+    const attachmentId = this.newId();
+    const sha256 = createHash("sha256").update(input.content).digest("hex");
+    const creator = this.db
+      .prepare("SELECT display_name FROM users WHERE id = ?")
+      .get(ownerId) as { display_name: string } | undefined;
+
+    const transaction = this.db.transaction(() => {
+      const count = (
+        this.db
+          .prepare(
+            "SELECT COUNT(*) AS count FROM attachments WHERE project_id = ?",
+          )
+          .get(id) as { count: number }
+      ).count;
+      if (count >= MAX_ATTACHMENTS) {
+        throw new ApiError(
+          409,
+          "attachment_limit_reached",
+          `A project can have at most ${MAX_ATTACHMENTS} attachments.`,
+          { maxAttachments: MAX_ATTACHMENTS },
+        );
+      }
+      this.db
+        .prepare(
+          `INSERT INTO attachments (
+            id, project_id, filename, content_type, size_bytes, sha256,
+            content, created_at, created_by
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        )
+        .run(
+          attachmentId,
+          id,
+          input.filename,
+          input.contentType,
+          size,
+          sha256,
+          input.content,
+          timestamp,
+          ownerId,
+        );
+      this.activityMessage(
+        id,
+        `Attached ${input.filename}`,
+        project.name,
+        null,
+        ownerId,
+      );
+    });
+    transaction();
+
+    return {
+      id: attachmentId,
+      projectId: id,
+      filename: input.filename,
+      contentType: input.contentType,
+      sizeBytes: size,
+      sha256,
+      createdAt: timestamp,
+      createdByName: creator?.display_name ?? null,
+    };
+  }
+
+  deleteAttachment(ownerId: string, id: string, attachmentId: string): void {
+    const project = this.requireProject(ownerId, id);
+    const row = this.db
+      .prepare(
+        "SELECT filename FROM attachments WHERE project_id = ? AND id = ?",
+      )
+      .get(id, attachmentId) as { filename: string } | undefined;
+    if (!row) {
+      throw new ApiError(
+        404,
+        "attachment_not_found",
+        "The attachment does not exist.",
+      );
+    }
+    const transaction = this.db.transaction(() => {
+      this.db
+        .prepare("DELETE FROM attachments WHERE project_id = ? AND id = ?")
+        .run(id, attachmentId);
+      this.activityMessage(
+        id,
+        `Removed ${row.filename}`,
+        project.name,
+        null,
+        ownerId,
+      );
+    });
+    transaction();
   }
 
   getCoverage(ownerId: string, id: string): CoverageResult | null {

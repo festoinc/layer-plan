@@ -127,31 +127,34 @@ npm run api:lint      # validate the OpenAPI document
 
 Base URL: `http://127.0.0.1:3001/api/v1`
 
-| Method       | Path                            | Purpose                            |
-| ------------ | ------------------------------- | ---------------------------------- |
-| `POST`       | `/auth/login`                   | Browser sign-in; sets a cookie     |
-| `POST`       | `/auth/logout`                  | Browser sign-out                   |
-| `GET`        | `/auth/session`                 | Current browser session            |
-| `GET`        | `/me`                           | Current user for a browser session |
-| `GET/DELETE` | `/auth/sessions`                | List or revoke other sessions      |
-| `GET/POST`   | `/projects/:id/tokens`          | List or create MCP keys            |
-| `DELETE`     | `/projects/:id/tokens/:tokenId` | Revoke a project key               |
-| `GET/POST`   | `/users`                        | Super-admin user management        |
-| `GET`        | `/projects`                     | List projects and active project   |
-| `POST`       | `/projects`                     | Create a project                   |
-| `GET`        | `/projects/:id`                 | Read metadata and guidelines       |
-| `PATCH`      | `/projects/:id`                 | Update metadata or guidelines      |
-| `DELETE`     | `/projects/:id`                 | Delete a project                   |
-| `POST`       | `/projects/:id/duplicate`       | Duplicate a project                |
-| `POST`       | `/projects/:id/activate`        | Set the active project             |
-| `GET`        | `/projects/:id/document`        | Read the document                  |
-| `PUT`        | `/projects/:id/document`        | Replace the document               |
-| `GET`        | `/projects/:id/activity`        | Read activity                      |
-| `POST`       | `/projects/:id/activity`        | Append an activity entry           |
-| `GET`        | `/projects/:id/coverage`        | Read verification coverage         |
-| `GET`        | `/projects/:id/search`          | Search one project                 |
-| `GET`        | `/projects/:id/export`          | Download a project file            |
-| `POST`       | `/projects/import`              | Import a project file              |
+| Method       | Path                                              | Purpose                             |
+| ------------ | ------------------------------------------------- | ----------------------------------- |
+| `POST`       | `/auth/login`                                     | Browser sign-in; sets a cookie      |
+| `POST`       | `/auth/logout`                                    | Browser sign-out                    |
+| `GET`        | `/auth/session`                                   | Current browser session             |
+| `GET`        | `/me`                                             | Current user for a browser session  |
+| `GET/DELETE` | `/auth/sessions`                                  | List or revoke other sessions       |
+| `GET/POST`   | `/projects/:id/tokens`                            | List or create MCP keys             |
+| `DELETE`     | `/projects/:id/tokens/:tokenId`                   | Revoke a project key                |
+| `GET/POST`   | `/users`                                          | Super-admin user management         |
+| `GET`        | `/projects`                                       | List projects and active project    |
+| `POST`       | `/projects`                                       | Create a project                    |
+| `GET`        | `/projects/:id`                                   | Read metadata and guidelines        |
+| `PATCH`      | `/projects/:id`                                   | Update metadata or guidelines       |
+| `DELETE`     | `/projects/:id`                                   | Delete a project                    |
+| `POST`       | `/projects/:id/duplicate`                         | Duplicate a project                 |
+| `POST`       | `/projects/:id/activate`                          | Set the active project              |
+| `GET`        | `/projects/:id/document`                          | Read the document                   |
+| `PUT`        | `/projects/:id/document`                          | Replace the document                |
+| `GET/POST`   | `/projects/:id/attachments`                       | List or upload document attachments |
+| `GET/DELETE` | `/projects/:id/attachments/:attachmentId`         | Read metadata or delete one         |
+| `GET`        | `/projects/:id/attachments/:attachmentId/content` | Download content                    |
+| `GET`        | `/projects/:id/activity`                          | Read activity                       |
+| `POST`       | `/projects/:id/activity`                          | Append an activity entry            |
+| `GET`        | `/projects/:id/coverage`                          | Read verification coverage          |
+| `GET`        | `/projects/:id/search`                            | Search one project                  |
+| `GET`        | `/projects/:id/export`                            | Download a project file             |
+| `POST`       | `/projects/import`                                | Import a project file               |
 
 See `server/api/openapi.yaml` for exact request and response schemas. When the
 contract and an old example disagree, the OpenAPI document wins.
@@ -384,6 +387,53 @@ Example chapter field:
 Record the change in `activity` when a commit is linked or removed, for example
 `Linked commit 4f2a9c1` or `Removed commit 4f2a9c1`.
 
+## Attachments
+
+Attachments belong to the project document and are shared by all of its
+chapters. They are a separate collection, not part of the chapter tree or the
+document revision. Uploading or deleting an attachment does not invalidate a
+document ETag.
+
+Allowed types and limits:
+
+- `.pdf`, `.csv`, `.jpg`, `.jpeg`, `.png`, `.xls`;
+- at most 10 MiB (10 × 1024 × 1024 bytes) of decoded content per file;
+- at most 20 attachments per project.
+
+Upload with raw base64 JSON, not multipart and not a data-URL prefix:
+
+```sh
+BASE64=$(base64 < /tmp/report.pdf | tr -d '\n')
+curl -sS $AUTH \
+  -X POST "http://127.0.0.1:3001/api/v1/projects/$PROJECT_ID/attachments" \
+  -H 'Content-Type: application/json' \
+  -d "{\"filename\":\"report.pdf\",\"contentBase64\":\"$BASE64\"}"
+```
+
+List, read metadata, download and delete:
+
+```sh
+curl -sS $AUTH \
+  "http://127.0.0.1:3001/api/v1/projects/$PROJECT_ID/attachments"
+curl -sS $AUTH \
+  "http://127.0.0.1:3001/api/v1/projects/$PROJECT_ID/attachments/$ATTACHMENT_ID"
+curl -sS $AUTH -OJ \
+  "http://127.0.0.1:3001/api/v1/projects/$PROJECT_ID/attachments/$ATTACHMENT_ID/content"
+curl -sS $AUTH -X DELETE \
+  "http://127.0.0.1:3001/api/v1/projects/$PROJECT_ID/attachments/$ATTACHMENT_ID"
+```
+
+The extension selects the content type. The server also checks common file
+signatures and rejects mismatches. Downloads are served with
+`Content-Disposition: attachment`, `X-Content-Type-Options: nosniff` and
+`Cache-Control: no-store`; never render attachment bytes inline. Attachment
+changes appear in activity as `Attached <name>` and `Removed <name>`.
+Duplicating a project copies its attachments. Export/import does not include
+attachment content.
+
+Do not invent attachment ids or filenames. Ask before deleting an attachment.
+Never upload a file you have not been given.
+
 ## Search
 
 Use search to find a chapter before reading it. Search is always scoped to one
@@ -490,6 +540,10 @@ Common codes:
 - `email_taken`
 - `rate_limited`
 - `project_limit`
+- `attachment_limit_reached`
+- `attachment_too_large`
+- `attachment_not_found`
+- `unsupported_attachment_type`
 - `payload_too_large`
 - `stored_data_invalid`
 - `database_unavailable`
@@ -578,7 +632,10 @@ tools instead of the REST examples above. The server sends adapted instructions
 during initialization. The credential is bound to one project: `list_projects`
 returns only that project, and every other tool requires its project id.
 `search_project` uses the same project-scoped rules as the REST search endpoint;
-read a matched chapter with `get_document` before editing it. It
+read a matched chapter with `get_document` before editing it. Attachment tools
+are `list_attachments`, `get_attachment`, `add_attachment` and
+`delete_attachment`; they use the same 20-file and 10 MiB limits. `get_attachment`
+returns metadata plus base64 content, and `add_attachment` accepts raw base64. It
 cannot create, import, duplicate or activate projects. A read-only credential
 can read; a read-write credential can edit. Project metadata and document writes require their
 respective ETags; reread and rebase on a conflict. See `docs/api.md` for Codex

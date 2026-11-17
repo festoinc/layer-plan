@@ -96,7 +96,7 @@ export function errorHandler(
       .send(
         errorBody(
           "payload_too_large",
-          "The request body is larger than the 10 MB limit.",
+          "The request body is larger than the allowed limit.",
         ),
       );
   }

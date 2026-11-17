@@ -65,6 +65,9 @@ const expectedPaths = [
   "/projects/{projectId}",
   "/projects/{projectId}/activate",
   "/projects/{projectId}/activity",
+  "/projects/{projectId}/attachments",
+  "/projects/{projectId}/attachments/{attachmentId}",
+  "/projects/{projectId}/attachments/{attachmentId}/content",
   "/projects/{projectId}/coverage",
   "/projects/{projectId}/document",
   "/projects/{projectId}/duplicate",
@@ -337,6 +340,68 @@ describe("OpenAPI contract", () => {
       json(search),
       "search",
     );
+  });
+
+  it("matches attachment upload, list and metadata responses", async () => {
+    const pdf = Buffer.from("%PDF-1.4\n%%EOF\n");
+    const upload = await api.app.inject({
+      method: "POST",
+      url: "/api/v1/projects/website/attachments",
+      headers: {
+        ...authHeaders(superCookie),
+        "content-type": "application/json",
+      },
+      payload: {
+        filename: "contract.pdf",
+        contentBase64: pdf.toString("base64"),
+      },
+    });
+    expect(upload.statusCode).toBe(201);
+    const attachment = json(upload);
+    expectValid(apiDoc.components.schemas.Attachment, attachment, "attachment");
+
+    const list = await api.app.inject({
+      method: "GET",
+      url: "/api/v1/projects/website/attachments",
+      headers: authHeaders(superCookie),
+    });
+    expect(list.statusCode).toBe(200);
+    expectValid(
+      schemaAt("/projects/{projectId}/attachments", "get", "200"),
+      json(list),
+      "attachment list",
+    );
+
+    const metadata = await api.app.inject({
+      method: "GET",
+      url: `/api/v1/projects/website/attachments/${attachment.id}`,
+      headers: authHeaders(superCookie),
+    });
+    expect(metadata.statusCode).toBe(200);
+    expectValid(
+      schemaAt(
+        "/projects/{projectId}/attachments/{attachmentId}",
+        "get",
+        "200",
+      ),
+      json(metadata),
+      "attachment metadata",
+    );
+
+    const download = await api.app.inject({
+      method: "GET",
+      url: `/api/v1/projects/website/attachments/${attachment.id}/content`,
+      headers: authHeaders(superCookie),
+    });
+    expect(download.statusCode).toBe(200);
+    expect(download.rawPayload.equals(pdf)).toBe(true);
+
+    const removed = await api.app.inject({
+      method: "DELETE",
+      url: `/api/v1/projects/website/attachments/${attachment.id}`,
+      headers: authHeaders(superCookie),
+    });
+    expect(removed.statusCode).toBe(204);
   });
 
   it("matches activity and import responses with a browser session", async () => {
