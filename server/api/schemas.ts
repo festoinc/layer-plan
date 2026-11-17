@@ -3,6 +3,8 @@ import {
   COMMIT_HASH_PATTERN,
   MAX_COMMITS_PER_CHAPTER,
 } from "../../src/domain/commits";
+import { MAX_CHAPTER_TITLE } from "../../src/domain/chapters";
+import { MAX_CRITERION_TEXT } from "../../src/domain/criteria";
 import { PROJECT_COLORS } from "../../src/domain/projects";
 import {
   SEARCH_MAX_LIMIT,
@@ -26,7 +28,7 @@ export const verificationSchema = z
 export const criterionSchema = z
   .object({
     id: idSchema,
-    text: z.string().max(20000),
+    text: z.string().max(MAX_CRITERION_TEXT),
     checked: z.boolean(),
     chapterId: idSchema.optional(),
   })
@@ -42,7 +44,7 @@ export const chapterSchema = z
   .object({
     id: idSchema,
     parentId: z.string().max(128).nullable(),
-    title: z.string().max(200),
+    title: z.string().max(MAX_CHAPTER_TITLE),
     description: z.string().max(100000),
     finalLevel: z.boolean(),
     verification: verificationSchema,

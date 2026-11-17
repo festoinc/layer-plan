@@ -736,6 +736,19 @@ ul {
   background: #f9eeee;
   color: #b97878;
 }
+.criterion-link {
+  opacity: 0;
+  padding: 3px;
+  color: #8a8fb0;
+}
+.criterion:hover .criterion-link,
+.criterion-link:focus-visible {
+  opacity: 1;
+}
+.criterion-link:hover {
+  background: #eef0fb;
+  color: var(--accent);
+}
 .add-criterion {
   display: flex;
   align-items: flex-start;
@@ -2783,6 +2796,30 @@ ul {
   font-size: 12px;
   line-height: 1.7;
   margin-bottom: 14px;
+}
+.criterion-source-note {
+  color: #6d7489;
+  font-size: 12px;
+  line-height: 1.7;
+  margin: 2px 0 10px;
+}
+.inline-link {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+.inline-link:hover {
+  color: #1f1a8a;
+}
+.inline-link:focus-visible {
+  outline: 2px solid #e5dff6;
+  outline-offset: 2px;
+  border-radius: 2px;
 }
 
 /* Authentication, account and user management */

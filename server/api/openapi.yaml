@@ -1175,7 +1175,7 @@ components:
           maxLength: 128
         text:
           type: string
-          maxLength: 20000
+          maxLength: 100000
         checked:
           type: boolean
         chapterId:
@@ -1372,6 +1372,7 @@ components:
             - stats
             - activity
             - createdSubchapters
+            - criterionSync
           properties:
             stats:
               $ref: "#/components/schemas/Stats"
@@ -1383,6 +1384,8 @@ components:
               type: array
               items:
                 $ref: "#/components/schemas/CreatedCriterionSubchapter"
+            criterionSync:
+              $ref: "#/components/schemas/CriterionSync"
     CreatedCriterionSubchapter:
       type: object
       required:
@@ -1398,6 +1401,77 @@ components:
         criterionId:
           type: string
         title:
+          type: string
+    CriterionSync:
+      type: object
+      description: >
+        What the backend changed to keep success criteria and their subchapters
+        synchronized. Arrays are empty when the request already matched the
+        stored document.
+      required:
+        - updatedSubchapters
+        - removedSubchapters
+        - removedCriteria
+      properties:
+        updatedSubchapters:
+          type: array
+          items:
+            $ref: "#/components/schemas/UpdatedCriterionSubchapter"
+        removedSubchapters:
+          type: array
+          items:
+            $ref: "#/components/schemas/RemovedCriterionSubchapter"
+        removedCriteria:
+          type: array
+          items:
+            $ref: "#/components/schemas/RemovedCriterion"
+    UpdatedCriterionSubchapter:
+      type: object
+      required:
+        - id
+        - parentId
+        - criterionId
+        - title
+        - description
+      properties:
+        id:
+          type: string
+        parentId:
+          type: string
+        criterionId:
+          type: string
+        title:
+          type: string
+        description:
+          type: string
+    RemovedCriterionSubchapter:
+      type: object
+      required:
+        - id
+        - parentId
+        - criterionId
+        - title
+      properties:
+        id:
+          type: string
+        parentId:
+          type: string
+        criterionId:
+          type: string
+        title:
+          type: string
+    RemovedCriterion:
+      type: object
+      required:
+        - chapterId
+        - criterionId
+        - text
+      properties:
+        chapterId:
+          type: string
+        criterionId:
+          type: string
+        text:
           type: string
     VerificationSummary:
       type: object

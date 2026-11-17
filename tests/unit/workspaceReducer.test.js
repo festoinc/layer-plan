@@ -441,3 +441,137 @@ describe("workspace reducer", () => {
     expect(createId()).not.toBe(createId());
   });
 });
+
+describe("workspace reducer: criterion subchapter sync", () => {
+  const linkedText = "Reset email\n\nOne unique link.";
+
+  function linkedState() {
+    const base = baseState();
+    const chapters = {
+      ...base.chapters,
+      byId: {
+        ...base.chapters.byId,
+        parent: {
+          ...base.chapters.byId.parent,
+          childIds: ["s1"],
+          criteria: [
+            ...base.chapters.byId.parent.criteria,
+            { id: "c2", text: linkedText, checked: false, chapterId: "s1" },
+          ],
+        },
+        s1: createChapter({
+          id: "s1",
+          parentId: "parent",
+          title: "Reset email",
+          description: linkedText,
+        }),
+      },
+    };
+    return workspaceReducer(base, { type: "applyServerChapters", chapters });
+  }
+
+  it("mirrors a criterion edit into the subchapter", () => {
+    const state = linkedState();
+    const next = workspaceReducer(state, {
+      type: "setCriterionText",
+      chapterId: "parent",
+      criterionId: "c2",
+      text: "New title\n\nNew details.",
+    });
+    expect(next.chapters.byId.s1.title).toBe("New title");
+    expect(next.chapters.byId.s1.description).toBe("New title\n\nNew details.");
+    expect(next.chapters.byId.parent.criteria[1].text).toBe(
+      "New title\n\nNew details.",
+    );
+    expect(next.events).toBe(state.events);
+  });
+
+  it("mirrors a subchapter description edit into the criterion", () => {
+    const state = linkedState();
+    const next = workspaceReducer(state, {
+      type: "setChapterField",
+      id: "s1",
+      field: "description",
+      value: "Only the description changed.",
+    });
+    expect(next.chapters.byId.parent.criteria[1].text).toBe(
+      "Only the description changed.",
+    );
+    expect(next.chapters.byId.s1.title).toBe("Only the description changed.");
+  });
+
+  it("rewrites only the first line for a subchapter title edit", () => {
+    const state = linkedState();
+    const next = workspaceReducer(state, {
+      type: "setChapterField",
+      id: "s1",
+      field: "title",
+      value: "New title",
+    });
+    expect(next.chapters.byId.parent.criteria[1].text).toBe(
+      "New title\n\nOne unique link.",
+    );
+    expect(next.chapters.byId.s1.description).toBe(
+      "New title\n\nOne unique link.",
+    );
+  });
+
+  it("deletes the subchapter subtree when its criterion is removed", () => {
+    const state = linkedState();
+    const withChild = workspaceReducer(state, {
+      type: "applyServerChapters",
+      chapters: {
+        ...state.chapters,
+        byId: {
+          ...state.chapters.byId,
+          s1: {
+            ...state.chapters.byId.s1,
+            childIds: ["s2"],
+            criteria: [
+              {
+                id: "c3",
+                text: "Check 6 digits",
+                checked: false,
+                chapterId: "s2",
+              },
+            ],
+          },
+          s2: createChapter({
+            id: "s2",
+            parentId: "s1",
+            title: "Check 6 digits",
+            description: "Check 6 digits",
+          }),
+        },
+      },
+    });
+    const next = workspaceReducer(withChild, {
+      type: "removeCriterion",
+      chapterId: "parent",
+      criterionId: "c2",
+      activityId: "a1",
+      time,
+    });
+    expect(next.chapters.byId.s1).toBeUndefined();
+    expect(next.chapters.byId.s2).toBeUndefined();
+    expect(next.chapters.byId.parent.criteria.map((item) => item.id)).toEqual([
+      "c1",
+    ]);
+    expect(next.events.map((event) => event.message)).toEqual([
+      "Deleted subchapter from success criterion",
+      "Removed criterion: Reset email\n\nOne unique link.",
+    ]);
+  });
+
+  it("keeps standalone criteria unchanged when a chapter is deleted", () => {
+    const state = baseState();
+    const next = workspaceReducer(state, {
+      type: "deleteChapter",
+      id: "parent",
+      activityId: "a1",
+      time,
+    });
+    expect(next.chapters.rootIds).toEqual([]);
+    expect(next.events[0].message).toBe("Deleted chapter: Parent");
+  });
+});

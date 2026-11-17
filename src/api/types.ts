@@ -1,5 +1,6 @@
 import type { ActivityEntry } from "../domain/activity";
 import type { ChapterDocument } from "../domain/chapters";
+import type { CriterionSync } from "../domain/criterionLinks";
 import type { ProjectStats, ProjectSummary } from "../domain/projects";
 import type { CoverageRow, VerificationSummary } from "../domain/verification";
 
@@ -42,7 +43,15 @@ export interface DocumentWriteResponse extends DocumentResponse {
   stats: ProjectStats;
   activity: ActivityEntry[];
   createdSubchapters: CreatedCriterionSubchapter[];
+  criterionSync: CriterionSync;
 }
+
+export type {
+  CriterionSync,
+  RemovedCriterion,
+  RemovedCriterionSubchapter,
+  UpdatedCriterionSubchapter,
+} from "../domain/criterionLinks";
 
 export interface ActivityListResponse {
   events: ActivityEntry[];

@@ -85,7 +85,7 @@ const operations: Operation[] = [
   {
     name: "replace_document",
     description:
-      "Replace the bound project's complete document using its current ETag. The backend creates subchapters for new non-final criteria; do not add them yourself. Ask before removing content.",
+      "Replace the bound project's complete document using its current ETag. The backend creates subchapters for new non-final criteria and keeps every criterion/subchapter pair synchronized; deleting either side deletes the other. Ask before removing content.",
     method: "PUT",
     path: (a) => `${projectPath(a)}/document`,
     schema: { projectId, ifMatch, body: putDocumentSchema },

@@ -1516,12 +1516,37 @@ export interface components {
       stats: components["schemas"]["Stats"];
       activity: components["schemas"]["ActivityEntry"][];
       createdSubchapters: components["schemas"]["CreatedCriterionSubchapter"][];
+      criterionSync: components["schemas"]["CriterionSync"];
     };
     CreatedCriterionSubchapter: {
       id: string;
       parentId: string;
       criterionId: string;
       title: string;
+    };
+    /** @description What the backend changed to keep success criteria and their subchapters synchronized. Arrays are empty when the request already matched the stored document. */
+    CriterionSync: {
+      updatedSubchapters: components["schemas"]["UpdatedCriterionSubchapter"][];
+      removedSubchapters: components["schemas"]["RemovedCriterionSubchapter"][];
+      removedCriteria: components["schemas"]["RemovedCriterion"][];
+    };
+    UpdatedCriterionSubchapter: {
+      id: string;
+      parentId: string;
+      criterionId: string;
+      title: string;
+      description: string;
+    };
+    RemovedCriterionSubchapter: {
+      id: string;
+      parentId: string;
+      criterionId: string;
+      title: string;
+    };
+    RemovedCriterion: {
+      chapterId: string;
+      criterionId: string;
+      text: string;
     };
     VerificationSummary: {
       total: number;

@@ -168,3 +168,9 @@ describe("criteria", () => {
     expect(toggleCriterion(document, "parent", "missing")).toBe(document);
   });
 });
+
+describe("criterion titles: limits", () => {
+  it("clamps a long derived title to the chapter title limit", () => {
+    expect(deriveCriterionTitle("x".repeat(300))).toHaveLength(200);
+  });
+});

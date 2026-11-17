@@ -25,6 +25,7 @@ import {
   removeCriterion as removeCriterionFromDocument,
   toggleCriterion as toggleCriterionInDocument,
 } from "../domain/criteria";
+import { reconcileCriterionLinks } from "../domain/criterionLinks";
 import { createId, Workspace } from "../domain/schema";
 import {
   VerificationMode,
@@ -79,6 +80,34 @@ function withActivity(state: Workspace, input: ActivityInput): Workspace {
     time: input.time ?? nowIso(),
   });
   return { ...state, events: appendActivity(state.events, entry) };
+}
+
+/**
+ * Apply the shared criterion-pair rule after a local edit so the browser shows
+ * the same document the backend will store.
+ */
+function reconcileChapters(
+  state: Workspace,
+  previous: ChapterDocument,
+  options: { selectedId?: string | null } = {},
+): Workspace {
+  const reconciled = reconcileCriterionLinks(previous, state.chapters);
+  if (!reconciled.activity.length && reconciled.document === state.chapters) {
+    return state;
+  }
+  const selectedId =
+    options.selectedId === undefined
+      ? getDefaultId(reconciled.document, state.selectedId)
+      : options.selectedId;
+  let next: Workspace = {
+    ...state,
+    chapters: reconciled.document,
+    selectedId,
+  };
+  for (const event of reconciled.activity) {
+    next = withActivity(next, event);
+  }
+  return next;
 }
 
 export type WorkspaceAction =
@@ -178,6 +207,7 @@ export type WorkspaceAction =
   | {
       type: "applyServerChapters";
       chapters: ChapterDocument;
+      selectedId?: string | null;
     };
 
 export function workspaceReducer(
@@ -218,7 +248,7 @@ export function workspaceReducer(
       const { document, removedIds } = deleteSubtree(state.chapters, action.id);
       if (!removedIds.length) return state;
       const selectedId = getDefaultId(document, current.parentId);
-      return withActivity(
+      const next = withActivity(
         { ...state, chapters: document, selectedId },
         {
           id: action.activityId,
@@ -228,6 +258,7 @@ export function workspaceReducer(
           time: action.time,
         },
       );
+      return reconcileChapters(next, state.chapters, { selectedId });
     }
 
     case "setChapterField": {
@@ -250,7 +281,11 @@ export function workspaceReducer(
       const chapters = patchChapter(state.chapters, action.id, {
         [action.field]: value,
       });
-      return { ...state, chapters };
+      const next = { ...state, chapters };
+      if (action.field === "title" || action.field === "description") {
+        return reconcileChapters(next, state.chapters);
+      }
+      return next;
     }
 
     case "addCommit": {
@@ -328,17 +363,15 @@ export function workspaceReducer(
       if (!current) return state;
       const text = String(action.text ?? "");
       if (current.text === text) return state;
-      return {
-        ...state,
-        chapters: patchCriterion(
-          state.chapters,
-          action.chapterId,
-          action.criterionId,
-          {
-            text,
-          },
-        ),
-      };
+      const chapters = patchCriterion(
+        state.chapters,
+        action.chapterId,
+        action.criterionId,
+        {
+          text,
+        },
+      );
+      return reconcileChapters({ ...state, chapters }, state.chapters);
     }
 
     case "setChapterVerificationMode": {
@@ -432,7 +465,7 @@ export function workspaceReducer(
         action.criterionId,
       );
       if (chapters === state.chapters) return state;
-      return withActivity(
+      const next = withActivity(
         { ...state, chapters },
         {
           id: action.activityId,
@@ -442,6 +475,7 @@ export function workspaceReducer(
           time: action.time,
         },
       );
+      return reconcileChapters(next, state.chapters);
     }
 
     case "replaceActivity": {
@@ -449,8 +483,15 @@ export function workspaceReducer(
     }
 
     case "applyServerChapters": {
-      if (action.chapters === state.chapters) return state;
-      return { ...state, chapters: action.chapters };
+      const selectedId =
+        action.selectedId === undefined ? state.selectedId : action.selectedId;
+      if (
+        action.chapters === state.chapters &&
+        selectedId === state.selectedId
+      ) {
+        return state;
+      }
+      return { ...state, chapters: action.chapters, selectedId };
     }
 
     case "replaceWorkspace": {
