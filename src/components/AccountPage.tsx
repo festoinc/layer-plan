@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useState } from "react";
-import { ArrowLeft, ShieldCheck } from "lucide-react";
+import { FormEvent, useCallback, useEffect, useId, useState } from "react";
+import { ArrowLeft, KeyRound, ShieldCheck } from "lucide-react";
 import { errorMessage } from "../api/client";
 import type { SessionInfo } from "../api/types";
 import { ROUTE_VIEWS, useRoute } from "../hooks/useRoute";
@@ -17,6 +17,13 @@ export function AccountPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [changingPassword, setChangingPassword] = useState(false);
+  const currentPasswordId = useId();
+  const newPasswordId = useId();
+  const confirmPasswordId = useId();
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -63,6 +70,38 @@ export function AccountPage() {
 
   const user = auth.user;
   if (!user) return null;
+
+  async function changePassword(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (changingPassword) return;
+    setError("");
+    setNotice("");
+    if (newPassword.length < 12) {
+      setError("The new password must be at least 12 characters.");
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setError("The new passwords do not match.");
+      return;
+    }
+    if (newPassword === currentPassword) {
+      setError("Choose a new password that differs from the current one.");
+      return;
+    }
+    setChangingPassword(true);
+    try {
+      await auth.changePassword({ currentPassword, newPassword });
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+      setNotice("Password changed. Other sessions were signed out.");
+      await load();
+    } catch (caught) {
+      setError(errorMessage(caught));
+    } finally {
+      setChangingPassword(false);
+    }
+  }
 
   return (
     <main className="account-page">
@@ -115,9 +154,71 @@ export function AccountPage() {
           </div>
         </dl>
         <p className="account-hint">
-          Password changes and recovery are not available in this version.
+          {user.role === "super_admin"
+            ? "Change your password below. Password recovery is not available."
+            : "Password changes and recovery are not available for member accounts."}
         </p>
       </section>
+
+      {user.role === "super_admin" && (
+        <section className="account-section" aria-labelledby="account-password">
+          <h2 id="account-password">Change password</h2>
+          <p className="account-hint">
+            Confirm with your current password. Other browser sessions will be
+            signed out.
+          </p>
+          <form
+            className="token-form password-form"
+            onSubmit={(event) => void changePassword(event)}
+          >
+            <div>
+              <label htmlFor={currentPasswordId}>Current password</label>
+              <input
+                id={currentPasswordId}
+                type="password"
+                autoComplete="current-password"
+                value={currentPassword}
+                onChange={(event) => setCurrentPassword(event.target.value)}
+                required
+              />
+            </div>
+            <div>
+              <label htmlFor={newPasswordId}>New password</label>
+              <input
+                id={newPasswordId}
+                type="password"
+                autoComplete="new-password"
+                minLength={12}
+                maxLength={200}
+                value={newPassword}
+                onChange={(event) => setNewPassword(event.target.value)}
+                required
+              />
+            </div>
+            <div>
+              <label htmlFor={confirmPasswordId}>Confirm new password</label>
+              <input
+                id={confirmPasswordId}
+                type="password"
+                autoComplete="new-password"
+                minLength={12}
+                maxLength={200}
+                value={confirmPassword}
+                onChange={(event) => setConfirmPassword(event.target.value)}
+                required
+              />
+            </div>
+            <button
+              className="primary-button"
+              type="submit"
+              disabled={changingPassword}
+            >
+              <KeyRound size={15} />
+              {changingPassword ? "Changing…" : "Change password"}
+            </button>
+          </form>
+        </section>
+      )}
 
       <section className="account-section" aria-labelledby="account-sessions">
         <div className="section-heading">

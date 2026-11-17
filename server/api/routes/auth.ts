@@ -6,7 +6,7 @@ import { SESSION_COOKIE, sessionExpiry } from "../../auth/middleware";
 import type { PasswordHasher } from "../../auth/password";
 import { createSessionCredential, hashToken } from "../../auth/tokens";
 import { ApiError } from "../errors";
-import { loginSchema, parseBody } from "../schemas";
+import { changePasswordSchema, loginSchema, parseBody } from "../schemas";
 import { loginSessionJson, sessionJson, userJson } from "../serializers";
 
 export interface AuthRouteOptions {
@@ -131,6 +131,62 @@ export function registerAuthRoutes(
   app.get("/api/v1/me", { preHandler: hooks.requireAuth }, async (request) => ({
     user: request.auth!.user,
   }));
+
+  app.post(
+    "/api/v1/me/password",
+    {
+      preHandler: hooks.requireSession,
+      config: {
+        rateLimit: {
+          max: config.loginRateLimit,
+          timeWindow: config.loginRateWindowMinutes * 60 * 1000,
+          hook: "preHandler",
+          keyGenerator: (request) => request.ip,
+        },
+      },
+    },
+    async (request, reply) => {
+      const auth = request.auth;
+      if (auth?.method !== "session") {
+        throw new ApiError(403, "forbidden", "A browser session is required.");
+      }
+      if (auth.user.role !== "super_admin") {
+        throw new ApiError(
+          403,
+          "forbidden",
+          "Only the super admin can change the password.",
+        );
+      }
+      const input = parseBody(changePasswordSchema, request.body);
+      const user = authStore.getUser(auth.user.id);
+      if (!user) {
+        throw new ApiError(401, "unauthenticated", "Sign in to continue.");
+      }
+      const valid = await passwordHasher.verify(
+        user.passwordHash,
+        input.currentPassword,
+      );
+      if (!valid) {
+        throw new ApiError(
+          403,
+          "invalid_credentials",
+          "The current password is incorrect.",
+        );
+      }
+      if (input.currentPassword === input.newPassword) {
+        throw new ApiError(
+          422,
+          "password_unchanged",
+          "Choose a new password that differs from the current password.",
+        );
+      }
+      const passwordHash = await passwordHasher.hash(input.newPassword);
+      authStore.updateUserPassword(user.id, passwordHash);
+      authStore.deleteOtherSessions(user.id, auth.sessionId);
+      reply.header("Cache-Control", "no-store");
+      return reply.code(204).send();
+    },
+  );
 
   app.get(
     "/api/v1/auth/sessions",

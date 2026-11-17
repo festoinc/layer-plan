@@ -58,6 +58,7 @@ const expectedPaths = [
   "/auth/sessions",
   "/auth/sessions/{sessionId}",
   "/me",
+  "/me/password",
   "/users",
   "/users/{userId}",
   "/projects",
@@ -149,6 +150,19 @@ describe("OpenAPI contract", () => {
       headers: authHeaders(superCookie),
     });
     expectValid(schemaAt("/me", "get", "200"), json(me), "me");
+
+    const changedPassword = await api.app.inject({
+      method: "POST",
+      url: "/api/v1/me/password",
+      ...docRequest(
+        {
+          currentPassword: TEST_SUPER_ADMIN.password,
+          newPassword: "contract-super-admin-password",
+        },
+        authHeaders(superCookie),
+      ),
+    });
+    expect(changedPassword.statusCode).toBe(204);
 
     const sessions = await api.app.inject({
       method: "GET",
@@ -405,10 +419,11 @@ describe("OpenAPI contract", () => {
     );
   });
 
-  it("does not document password change or recovery endpoints", () => {
+  it("documents only the super-admin password change, not recovery", () => {
     const paths = Object.keys(apiDoc.paths).join(" ");
-    expect(paths).not.toContain("password");
+    expect(paths).toContain("/me/password");
     expect(paths).not.toContain("forgot");
     expect(paths).not.toContain("reset-password");
+    expect(paths).not.toContain("recover");
   });
 });

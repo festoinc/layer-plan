@@ -32,6 +32,10 @@ export interface AuthContextValue {
   listSessions: () => Promise<SessionInfo[]>;
   revokeSession: (id: string) => Promise<void>;
   revokeOtherSessions: () => Promise<void>;
+  changePassword: (input: {
+    currentPassword: string;
+    newPassword: string;
+  }) => Promise<void>;
   listUsers: () => Promise<AuthUser[]>;
   createUser: (input: {
     email: string;
@@ -133,6 +137,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await authApi.revokeOtherSessions();
   }, []);
 
+  const changePassword = useCallback(
+    async (input: { currentPassword: string; newPassword: string }) => {
+      await authApi.changePassword(input);
+    },
+    [],
+  );
+
   const listUsers = useCallback(async () => {
     const result = await authApi.listUsers();
     return result.users;
@@ -163,6 +174,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       listSessions,
       revokeSession,
       revokeOtherSessions,
+      changePassword,
       listUsers,
       createUser,
       setUserDisabled,
@@ -179,6 +191,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       listSessions,
       revokeSession,
       revokeOtherSessions,
+      changePassword,
       listUsers,
       createUser,
       setUserDisabled,

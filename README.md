@@ -127,8 +127,9 @@ docker run -d --name layers --restart unless-stopped -p 80:3001 \
 The image defaults `HOST=0.0.0.0`, `LAYERS_ALLOW_REMOTE=1`,
 `LAYERS_DB_PATH=/app/data/layers.sqlite` and `LAYERS_SEED_SAMPLES=0`.
 `LAYERS_SUPER_ADMIN_EMAIL` and `LAYERS_SUPER_ADMIN_PASSWORD` are always
-required. Changing the password in `.env` and restarting re-syncs the super
-admin and revokes their sessions.
+required. The password bootstraps the super admin on a fresh database. After
+that, change it from `#/account`; editing `.env` no longer overwrites the stored
+password.
 
 ### Persistence and backup
 
@@ -150,12 +151,14 @@ behind HTTPS. The health endpoint is `GET /api/v1/health`.
 ## Authentication and accounts
 
 - The super admin is configured in `.env` and synchronized into SQLite at
-  startup. Changing the password in `.env` and restarting revokes the super
-  admin's sessions.
+  startup. The env password creates the account on a fresh database; the stored
+  password is changed from the account page.
 - Sign in at `#/sign-in` with the super-admin email and password.
 - The super admin creates member accounts at `#/users` by entering an email and
-  password. No email is sent. Passwords cannot be changed or recovered in this
-  phase.
+  password. No email is sent. Member passwords cannot be changed or recovered.
+- The super admin changes their own password at `#/account` by entering the
+  current password and the new password twice. Other browser sessions are signed
+  out; the current session stays signed in.
 - Each user owns their projects. Another user's project returns `404`, including
   for the super admin. The super admin manages users but does not bypass project
   ownership.
@@ -310,6 +313,7 @@ suffix on name collisions. Older v1/v2 files remain importable.
 | `POST`       | `/api/v1/auth/logout`                  | Sign out                           |
 | `GET`        | `/api/v1/auth/session`                 | Current browser session            |
 | `GET`        | `/api/v1/me`                           | Current user for a browser session |
+| `POST`       | `/api/v1/me/password`                  | Change the super-admin password    |
 | `GET/DELETE` | `/api/v1/auth/sessions`                | List or revoke other sessions      |
 | `GET/POST`   | `/api/v1/projects/:id/tokens`          | List or create MCP API keys        |
 | `DELETE`     | `/api/v1/projects/:id/tokens/:tokenId` | Revoke a project API key           |
@@ -371,7 +375,7 @@ resets it before each test. The production smoke test builds the UI and server,
 resets a temporary database and runs Chromium against `npm start`.
 
 The browser suite covers the phase 1–6 scenarios plus sign-in and session
-handling, project API-key management, super-admin user creation and
+handling, project API-key management, super-admin password change, super-admin user creation and
 disablement, two-user project isolation, API-backed persistence, optimistic
 conflict handling, retry after API failure, export/import, project lifecycle,
 project-scoped routing, activity, verification modes, coverage counting,
@@ -381,8 +385,9 @@ accessibility (axe) and focus management.
 
 - Authentication and private project ownership are available. Collaboration,
   project roles, sharing and invitations are not.
-- No password change, password recovery, email verification or email delivery.
-  A forgotten password requires disabling the account and creating a new one.
+- Super-admin self-service password change is available. Member password
+  changes, password recovery, admin resets, email verification and email
+  delivery are not.
 - A public `linux/amd64` Docker image is published, but deployment is manual.
   There is no TLS, reverse proxy, automated deployment, ARM image or database
   selection yet. All SQL stays behind `server/db` so that work can be added

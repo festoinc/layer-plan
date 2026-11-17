@@ -348,7 +348,7 @@ docker image rm <untagged-id>   # only if you created it
 - Runtime: non-root `node`, port `3001`, database `/app/data/layers.sqlite`.
 - Image defaults: `HOST=0.0.0.0`, `LAYERS_ALLOW_REMOTE=1`,
   `LAYERS_DB_PATH=/app/data/layers.sqlite`, `LAYERS_SEED_SAMPLES=0`.
-- Super-admin credentials come from runtime env; `.env` is never in the image.
+- Super-admin credentials bootstrap from runtime env; the stored password is changed from the account page. `.env` is never in the image.
 - Provenance and SBOM attestations are disabled (`provenance: false`,
   `sbom: false`). GHCR otherwise creates a manifest index, and retention can
   delete the child image manifest while keeping the index, breaking `latest`.

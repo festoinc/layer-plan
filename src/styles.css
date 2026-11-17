@@ -2862,6 +2862,9 @@ ul {
   gap: 7px;
   white-space: nowrap;
 }
+.password-form {
+  grid-template-columns: repeat(3, minmax(150px, 1fr)) auto;
+}
 .token-form > div,
 .user-form > div {
   display: grid;

@@ -502,6 +502,30 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "403":
           $ref: "#/components/responses/Forbidden"
+  /me/password:
+    post:
+      tags:
+        - auth
+      summary: Change the super-admin password
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChangePassword"
+      responses:
+        "204":
+          description: Password changed; other sessions were revoked
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+        "429":
+          $ref: "#/components/responses/RateLimited"
   /auth/sessions:
     get:
       tags:
@@ -1470,6 +1494,20 @@ components:
           minimum: 1
           maximum: 3650
           description: Defaults to 3650 days.
+    ChangePassword:
+      type: object
+      required:
+        - currentPassword
+        - newPassword
+      properties:
+        currentPassword:
+          type: string
+          minLength: 1
+          maxLength: 200
+        newPassword:
+          type: string
+          minLength: 12
+          maxLength: 200
     CreateTokenResponse:
       type: object
       required:

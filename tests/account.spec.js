@@ -45,6 +45,50 @@ test("project actions manage MCP API keys", async ({ page }) => {
   await expect(page.locator(".token-list")).toContainText("Revoked");
 });
 
+test("super admin changes the password from the account page", async ({
+  page,
+  request,
+}) => {
+  await page.goto("/#/account");
+  await expect(
+    page.getByRole("heading", { name: "Change password" }),
+  ).toBeVisible();
+
+  const otherSession = await loginCookie(
+    request,
+    superAdmin.email,
+    superAdmin.password,
+  );
+
+  await page.getByLabel("Current password").fill(superAdmin.password);
+  await page
+    .getByLabel("New password", { exact: true })
+    .fill("changed-password-123");
+  await page.getByLabel("Confirm new password").fill("different-password-123");
+  await page.getByRole("button", { name: "Change password" }).click();
+  await expect(page.getByText("The new passwords do not match.")).toBeVisible();
+
+  await page.getByLabel("Confirm new password").fill("changed-password-123");
+  await page.getByRole("button", { name: "Change password" }).click();
+  await expect(page.getByText(/Password changed/)).toBeVisible();
+
+  const oldLogin = await request.post(`${apiBase}/auth/login`, {
+    data: { email: superAdmin.email, password: superAdmin.password },
+  });
+  expect(oldLogin.status()).toBe(401);
+  const newCookie = await loginCookie(
+    request,
+    superAdmin.email,
+    "changed-password-123",
+  );
+  expect(newCookie).toContain("layers_session=");
+
+  const revoked = await request.get(`${apiBase}/auth/session`, {
+    headers: { cookie: otherSession },
+  });
+  expect(revoked.status()).toBe(401);
+});
+
 test("super admin creates and disables a member", async ({ page }) => {
   await page.goto("/#/users");
   await expect(

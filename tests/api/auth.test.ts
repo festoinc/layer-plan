@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import {
   authHeaders,
+  bearerHeaders,
   createTestApi,
   json,
   TEST_SUPER_ADMIN,
@@ -284,11 +285,154 @@ describe("authentication API", () => {
     }
   });
 
-  it("re-synchronizes the super admin from environment values", async () => {
+  it("changes the super-admin password, keeps the current session and revokes others", async () => {
+    api = await createTestApi();
+    const current = await superCookie(api);
+    const other = await api.login(
+      TEST_SUPER_ADMIN.email,
+      TEST_SUPER_ADMIN.password,
+    );
+
+    const changed = await api.app.inject({
+      method: "POST",
+      url: "/api/v1/me/password",
+      payload: {
+        currentPassword: TEST_SUPER_ADMIN.password,
+        newPassword: "new-super-admin-password",
+      },
+      headers: authHeaders(current),
+    });
+    expect(changed.statusCode).toBe(204);
+
+    const currentSession = await api.app.inject({
+      method: "GET",
+      url: "/api/v1/auth/session",
+      headers: authHeaders(current),
+    });
+    expect(currentSession.statusCode).toBe(200);
+    const otherSession = await api.app.inject({
+      method: "GET",
+      url: "/api/v1/auth/session",
+      headers: authHeaders(other.cookie),
+    });
+    expect(otherSession.statusCode).toBe(401);
+
+    const oldLogin = await api.app.inject({
+      method: "POST",
+      url: "/api/v1/auth/login",
+      payload: {
+        email: TEST_SUPER_ADMIN.email,
+        password: TEST_SUPER_ADMIN.password,
+      },
+      headers: { "content-type": "application/json" },
+    });
+    expect(oldLogin.statusCode).toBe(401);
+    const newLogin = await api.app.inject({
+      method: "POST",
+      url: "/api/v1/auth/login",
+      payload: {
+        email: TEST_SUPER_ADMIN.email,
+        password: "new-super-admin-password",
+      },
+      headers: { "content-type": "application/json" },
+    });
+    expect(newLogin.statusCode).toBe(200);
+  });
+
+  it("rejects wrong, short, unchanged and member password changes", async () => {
+    api = await createTestApi();
+    const cookie = await superCookie(api);
+    const before = api.authStore.getSuperAdmin()!.passwordHash;
+
+    const wrong = await api.app.inject({
+      method: "POST",
+      url: "/api/v1/me/password",
+      payload: {
+        currentPassword: "wrong-password",
+        newPassword: "new-super-admin-password",
+      },
+      headers: authHeaders(cookie),
+    });
+    expect(wrong.statusCode).toBe(403);
+    expect(json(wrong).error.code).toBe("invalid_credentials");
+    expect(api.authStore.getSuperAdmin()!.passwordHash).toBe(before);
+
+    const short = await api.app.inject({
+      method: "POST",
+      url: "/api/v1/me/password",
+      payload: {
+        currentPassword: TEST_SUPER_ADMIN.password,
+        newPassword: "short",
+      },
+      headers: authHeaders(cookie),
+    });
+    expect(short.statusCode).toBe(422);
+
+    const unchanged = await api.app.inject({
+      method: "POST",
+      url: "/api/v1/me/password",
+      payload: {
+        currentPassword: TEST_SUPER_ADMIN.password,
+        newPassword: TEST_SUPER_ADMIN.password,
+      },
+      headers: authHeaders(cookie),
+    });
+    expect(unchanged.statusCode).toBe(422);
+    expect(json(unchanged).error.code).toBe("password_unchanged");
+    expect(api.authStore.getSuperAdmin()!.passwordHash).toBe(before);
+
+    const member = await api.createMember(cookie, {
+      email: "password-member@example.test",
+    });
+    const forbidden = await api.app.inject({
+      method: "POST",
+      url: "/api/v1/me/password",
+      payload: {
+        currentPassword: member.password,
+        newPassword: "new-member-password",
+      },
+      headers: authHeaders(member.cookie),
+    });
+    expect(forbidden.statusCode).toBe(403);
+
+    const missing = await api.app.inject({
+      method: "POST",
+      url: "/api/v1/me/password",
+      payload: {
+        currentPassword: TEST_SUPER_ADMIN.password,
+        newPassword: "new-super-admin-password",
+      },
+    });
+    expect(missing.statusCode).toBe(401);
+    const projectKey = await api.createToken(cookie, "website");
+    const keyAttempt = await api.app.inject({
+      method: "POST",
+      url: "/api/v1/me/password",
+      payload: {
+        currentPassword: TEST_SUPER_ADMIN.password,
+        newPassword: "new-super-admin-password",
+      },
+      headers: bearerHeaders(projectKey),
+    });
+    expect(keyAttempt.statusCode).toBe(403);
+  });
+
+  it("synchronizes the super-admin email and name without overwriting the password", async () => {
     api = await createTestApi();
     const oldCookie = await superCookie(api);
     const before = api.authStore.getSuperAdmin();
     expect(before).toBeTruthy();
+
+    const changed = await api.app.inject({
+      method: "POST",
+      url: "/api/v1/me/password",
+      payload: {
+        currentPassword: TEST_SUPER_ADMIN.password,
+        newPassword: "changed-super-admin-password",
+      },
+      headers: authHeaders(oldCookie),
+    });
+    expect(changed.statusCode).toBe(204);
 
     const { bootstrap } = await import("../../server/db/bootstrap");
     const { createPasswordHasher } = await import("../../server/auth/password");
@@ -306,15 +450,33 @@ describe("authentication API", () => {
     const after = api.authStore.getSuperAdmin();
     expect(after?.id).toBe(before?.id);
     expect(after?.displayName).toBe("Renamed Super Admin");
-    expect(
-      api.db.prepare("SELECT COUNT(*) AS count FROM sessions").get(),
-    ).toEqual({ count: 0 });
 
     const oldSession = await api.app.inject({
       method: "GET",
       url: "/api/v1/projects",
       headers: authHeaders(oldCookie),
     });
-    expect(oldSession.statusCode).toBe(401);
+    expect(oldSession.statusCode).toBe(200);
+
+    const changedLogin = await api.app.inject({
+      method: "POST",
+      url: "/api/v1/auth/login",
+      payload: {
+        email: TEST_SUPER_ADMIN.email,
+        password: "changed-super-admin-password",
+      },
+      headers: { "content-type": "application/json" },
+    });
+    expect(changedLogin.statusCode).toBe(200);
+    const envLogin = await api.app.inject({
+      method: "POST",
+      url: "/api/v1/auth/login",
+      payload: {
+        email: TEST_SUPER_ADMIN.email,
+        password: "another-super-admin-password",
+      },
+      headers: { "content-type": "application/json" },
+    });
+    expect(envLogin.statusCode).toBe(401);
   });
 });

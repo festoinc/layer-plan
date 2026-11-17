@@ -196,14 +196,18 @@ only exported files, then add query endpoints and an MCP tool.
 **Source:** phase 6 boundary: the super admin creates accounts, but passwords
 cannot be changed, reset or recovered.
 
-**What:** self-service password change, admin password reset, and a recovery
-flow that works without email delivery.
+**What:** member self-service password change, admin password reset, and a
+recovery flow that works without email delivery.
 
-**Why deferred:** phase 6 deliberately avoided password lifecycle work; no
-email provider exists.
+**Status:** phase 11 delivered super-admin self-service password change from the
+account page. Members still cannot change their own passwords, and there is no
+admin reset or recovery.
+
+**Why the remainder is deferred:** no email provider exists and member password
+management needs an admin reset/recovery policy first.
 
 **Next step:** decide whether recovery is local-only (recovery code or CLI) or
-requires SMTP, then add endpoints, UI and session revocation.
+requires SMTP, then add the remaining endpoints, UI and session revocation.
 
 ### P-18 — Project transfer and user deletion
 

@@ -787,6 +787,48 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/me/password": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Change the super-admin password */
+    post: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody: {
+        content: {
+          "application/json": components["schemas"]["ChangePassword"];
+        };
+      };
+      responses: {
+        /** @description Password changed; other sessions were revoked */
+        204: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content?: never;
+        };
+        401: components["responses"]["Unauthorized"];
+        403: components["responses"]["Forbidden"];
+        422: components["responses"]["ValidationError"];
+        429: components["responses"]["RateLimited"];
+      };
+    };
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/auth/sessions": {
     parameters: {
       query?: never;
@@ -1377,6 +1419,10 @@ export interface components {
       scopes?: ("read" | "write")[];
       /** @description Defaults to 3650 days. */
       expiresInDays?: number;
+    };
+    ChangePassword: {
+      currentPassword: string;
+      newPassword: string;
     };
     CreateTokenResponse: {
       token: string;
