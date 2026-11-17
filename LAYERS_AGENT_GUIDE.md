@@ -234,12 +234,13 @@ Rules to preserve:
 - Every chapter has `parentId`, `childIds`, `criteria`, `commits` and
   `verification`.
 - Every criterion has `id`, `text` and `checked`.
-- Adding a new criterion to a non-final chapter also creates a subchapter with a
-  fresh id, a title derived from the criterion's first line, the full criterion
-  Markdown as its description, the parent id, and a `chapterId` link on the
-  criterion. Do the same in MCP document writes. Final-level chapters,
-  existing criteria and explicit standalone-criterion requests are exceptions;
-  never backfill old criteria.
+- Adding a new criterion to a non-final chapter creates a subchapter on the
+  backend with a fresh id, a title derived from the criterion's first line, the
+  full criterion Markdown as its description, the parent id, and a `chapterId`
+  link on the criterion. Do not create that subchapter yourself in an MCP
+  document write; send the criterion without `chapterId` and use the chapter
+  returned by the write. Final-level chapters, existing criteria, already-linked
+  criteria and empty text are skipped. Never backfill old criteria.
 - A criterion may have `chapterId` when it created a subchapter. Keep that link
   consistent.
 - `verification.mode` is exactly `auto`, `human` or `ai`.

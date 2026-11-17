@@ -197,7 +197,14 @@ The request body is:
 timestamps, ignores duplicate `(projectId, eventId)` pairs, records the acting
 user and keeps the newest 100 entries.
 
-The response contains the saved document, `stats`, and the latest `activity`.
+The response contains the saved document, `stats`, the latest `activity`, and
+`createdSubchapters`. The backend creates a subchapter for each new criterion on
+a non-final chapter and returns its id, parent id, criterion id and derived
+title. Use the returned `chapters` and `createdSubchapters` as the new working
+copy; do not create the subchapter yourself. Existing criteria are not
+backfilled, and final-level chapters, already-linked criteria and empty criterion
+text are skipped.
+
 Use the new `ETag` for the next write.
 
 ### Commit references
@@ -500,10 +507,11 @@ in URLs or commit them to files. The credential is bound to one project, so
 `create_project`, `duplicate_project`, `activate_project` and `import_project`
 are not available.
 Project and document updates use separate ETags, exposed in tool results. When
-an agent adds a criterion to a non-final chapter, the MCP instructions require
-it to create the matching subchapter in the same document write, mirroring the
-UI. On a revision conflict, fetch the latest content and reapply the intended
-change.
+a document write adds a new criterion to a non-final chapter, the backend
+creates the matching subchapter and returns it in `createdSubchapters`. MCP
+agents send the criterion without `chapterId` and must not create the
+subchapter themselves. On a revision conflict, fetch the latest content and
+reapply the intended change.
 MCP requests and responses are limited to 2 MiB; larger documents must be
 handled through the existing API. The read-only `search_project` tool uses the
 same project-scoped rules and returns the same search response. The agent is instructed to seek confirmation

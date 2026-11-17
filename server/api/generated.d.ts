@@ -1515,6 +1515,13 @@ export interface components {
     DocumentWriteResponse: components["schemas"]["Document"] & {
       stats: components["schemas"]["Stats"];
       activity: components["schemas"]["ActivityEntry"][];
+      createdSubchapters: components["schemas"]["CreatedCriterionSubchapter"][];
+    };
+    CreatedCriterionSubchapter: {
+      id: string;
+      parentId: string;
+      criterionId: string;
+      title: string;
     };
     VerificationSummary: {
       total: number;

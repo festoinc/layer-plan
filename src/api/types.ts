@@ -31,9 +31,17 @@ export interface DocumentResponse {
   selectedId: string | null;
 }
 
+export interface CreatedCriterionSubchapter {
+  id: string;
+  parentId: string;
+  criterionId: string;
+  title: string;
+}
+
 export interface DocumentWriteResponse extends DocumentResponse {
   stats: ProjectStats;
   activity: ActivityEntry[];
+  createdSubchapters: CreatedCriterionSubchapter[];
 }
 
 export interface ActivityListResponse {

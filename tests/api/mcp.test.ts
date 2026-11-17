@@ -65,7 +65,7 @@ describe("remote MCP", () => {
     );
     expect(init.body.result.instructions).toContain("confirm before deleting");
     expect(init.body.result.instructions).toContain(
-      "mirror the UI in the same replace_document call",
+      "createdSubchapters returned by replace_document",
     );
     const list = await mcpRpc(api, read, "tools/list");
     const tools = list.body.result.tools as Array<{ name: string }>;
@@ -140,6 +140,56 @@ describe("remote MCP", () => {
     const conflict = await mcpCall(api, write, "replace_document", args);
     expect(conflict.envelope.status).toBe(412);
     expect(conflict.envelope.body.error.code).toBe("revision_conflict");
+  });
+
+  it("creates criterion subchapters on MCP document writes", async () => {
+    api = await createTestApi();
+    const cookie = await superCookie(api);
+    const token = await api.createToken(cookie, "website");
+    const doc = (
+      await mcpCall(api, token, "get_document", {
+        projectId: "website",
+      })
+    ).envelope;
+    const chapters = structuredClone(doc.body.chapters);
+    chapters.byId["password-reset"].criteria.push({
+      id: "mcp-criterion",
+      text: "Created through MCP",
+      checked: false,
+    });
+
+    const result = await mcpCall(api, token, "replace_document", {
+      projectId: "website",
+      ifMatch: doc.etag,
+      body: {
+        chapters,
+        selectedId: doc.body.selectedId,
+      },
+    });
+    expect(result.envelope.status).toBe(200);
+    expect(result.envelope.body.createdSubchapters).toHaveLength(1);
+    const created = result.envelope.body.createdSubchapters[0];
+    expect(created).toMatchObject({
+      parentId: "password-reset",
+      criterionId: "mcp-criterion",
+      title: "Created through MCP",
+    });
+    expect(
+      result.envelope.body.chapters.byId["password-reset"].criteria.find(
+        (item: { id: string }) => item.id === "mcp-criterion",
+      ).chapterId,
+    ).toBe(created.id);
+    expect(result.envelope.body.chapters.byId[created.id]).toMatchObject({
+      parentId: "password-reset",
+      title: "Created through MCP",
+      description: "Created through MCP",
+    });
+    expect(
+      result.envelope.body.activity.some(
+        (event: { message: string }) =>
+          event.message === "Created subchapter from success criterion",
+      ),
+    ).toBe(true);
   });
 
   it("isolates users and rejects cookies, bad hosts and forged internal auth", async () => {

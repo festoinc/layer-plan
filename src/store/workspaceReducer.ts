@@ -5,6 +5,7 @@ import {
 } from "../domain/activity";
 import {
   Chapter,
+  ChapterDocument,
   createChapter,
   deleteSubtree,
   getChapter,
@@ -20,7 +21,6 @@ import {
 import {
   addCriterion as addCriterionToDocument,
   createCriterion,
-  createSubchapterFromCriterion,
   patchCriterion,
   removeCriterion as removeCriterionFromDocument,
   toggleCriterion as toggleCriterionInDocument,
@@ -131,10 +131,7 @@ export type WorkspaceAction =
       chapterId: string;
       text: string;
       criterionId?: string;
-      subchapterId?: string;
-      createSubchapter?: boolean;
       activityId?: string;
-      subchapterActivityId?: string;
       time?: string;
     }
   | {
@@ -177,6 +174,10 @@ export type WorkspaceAction =
   | {
       type: "replaceWorkspace";
       workspace: Workspace;
+    }
+  | {
+      type: "applyServerChapters";
+      chapters: ChapterDocument;
     };
 
 export function workspaceReducer(
@@ -303,36 +304,21 @@ export function workspaceReducer(
         id: action.criterionId ?? createId(),
         text,
       });
-      const subchapter =
-        chapter.finalLevel || action.createSubchapter === false
-          ? null
-          : createSubchapterFromCriterion({
-              id: action.subchapterId ?? createId(),
-              text,
-            });
-
       const chapters = addCriterionToDocument(
         state.chapters,
         chapter.id,
         criterion,
-        subchapter,
       );
-      const next = { ...state, chapters };
-      const added = withActivity(next, {
-        id: action.activityId,
-        message: `Added criterion: ${text}`,
-        chapterId: chapter.id,
-        chapterName: chapter.title,
-        time: action.time,
-      });
-      if (!subchapter) return added;
-      return withActivity(added, {
-        id: action.subchapterActivityId,
-        message: "Created subchapter from success criterion",
-        chapterId: subchapter.id,
-        chapterName: subchapter.title,
-        time: action.time,
-      });
+      return withActivity(
+        { ...state, chapters },
+        {
+          id: action.activityId,
+          message: `Added criterion: ${text}`,
+          chapterId: chapter.id,
+          chapterName: chapter.title,
+          time: action.time,
+        },
+      );
     }
 
     case "setCriterionText": {
@@ -460,6 +446,11 @@ export function workspaceReducer(
 
     case "replaceActivity": {
       return { ...state, events: action.events.slice(0, 100) };
+    }
+
+    case "applyServerChapters": {
+      if (action.chapters === state.chapters) return state;
+      return { ...state, chapters: action.chapters };
     }
 
     case "replaceWorkspace": {

@@ -18,6 +18,7 @@ import type {
 import { getActivity, getDocument, saveDocument } from "../api/workspace";
 import type { ActivityEntry } from "../domain/activity";
 import type { ChapterDocument } from "../domain/chapters";
+import { applyCreatedSubchapters } from "../domain/criteria";
 import { createId, createWorkspace, Workspace } from "../domain/schema";
 import {
   VerificationMode,
@@ -226,15 +227,46 @@ export function WorkspaceProvider({
       );
 
       revisionRef.current = response.revision;
+      const current = stateRef.current;
+      const created = response.createdSubchapters ?? [];
+      const nextChapters = created.length
+        ? current.chapters === snapshot.chapters
+          ? response.chapters
+          : applyCreatedSubchapters(
+              current.chapters,
+              created,
+              response.chapters,
+            )
+        : current.chapters;
       lastSavedRef.current = {
-        chapters: snapshot.chapters,
-        selectedId: snapshot.selectedId,
+        chapters: created.length ? response.chapters : snapshot.chapters,
+        selectedId: created.length ? response.selectedId : snapshot.selectedId,
       };
       acknowledgedEvents.current = new Set(
         response.activity.map((event) => event.id),
       );
 
-      const current = stateRef.current;
+      if (pendingRef.current && created.length) {
+        pendingRef.current = {
+          ...pendingRef.current,
+          chapters: applyCreatedSubchapters(
+            pendingRef.current.chapters,
+            created,
+            response.chapters,
+          ),
+        };
+      }
+      if (nextChapters !== current.chapters) {
+        lastAction.current = {
+          type: "applyServerChapters",
+          chapters: nextChapters,
+        };
+        rawDispatch({
+          type: "applyServerChapters",
+          chapters: nextChapters,
+        });
+      }
+
       const snapshotIds = new Set(snapshot.events.map((event) => event.id));
       const responseIds = new Set(response.activity.map((event) => event.id));
       const newer = current.events.filter(
@@ -466,9 +498,7 @@ export function WorkspaceProvider({
           chapterId,
           text,
           criterionId: createId(),
-          subchapterId: createId(),
           activityId: createId(),
-          subchapterActivityId: createId(),
           time: new Date().toISOString(),
         }),
       setCriterionText: (chapterId, criterionId, text) =>

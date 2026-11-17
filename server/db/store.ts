@@ -8,8 +8,11 @@ import {
 import {
   createChapter,
   getDefaultId,
+  insertChapter,
+  patchChapter,
   type ChapterDocument,
 } from "../../src/domain/chapters";
+import { createSubchapterFromCriterion } from "../../src/domain/criteria";
 import {
   isSafeProjectId,
   MAX_PROJECTS,
@@ -64,10 +67,18 @@ export interface SaveDocumentInput {
   activity?: CreateActivityInput[];
 }
 
+export interface CreatedCriterionSubchapter {
+  id: string;
+  parentId: string;
+  criterionId: string;
+  title: string;
+}
+
 export interface SaveDocumentResult {
   document: DocumentSnapshot;
   activity: ActivityEntry[];
   stats: ProjectStats;
+  createdSubchapters: CreatedCriterionSubchapter[];
 }
 
 export interface ImportProjectResult {
@@ -781,8 +792,8 @@ export class SqliteStore implements ProjectStore {
         { issues: normalized.issues.slice(0, 20) },
       );
     }
-    const chapters = normalized.document;
-    const chapterCount = Object.keys(chapters.byId).length;
+    const normalizedChapters = normalized.document;
+    const chapterCount = Object.keys(normalizedChapters.byId).length;
     if (chapterCount > 5000) {
       throw new ApiError(
         422,
@@ -790,7 +801,7 @@ export class SqliteStore implements ProjectStore {
         "The document has more than 5000 chapters.",
       );
     }
-    for (const chapter of Object.values(chapters.byId)) {
+    for (const chapter of Object.values(normalizedChapters.byId)) {
       if (chapter.criteria.length > 500) {
         throw new ApiError(
           422,
@@ -799,7 +810,10 @@ export class SqliteStore implements ProjectStore {
         );
       }
     }
-    if (input.selectedId !== null && !chapters.byId[input.selectedId]) {
+    if (
+      input.selectedId !== null &&
+      !normalizedChapters.byId[input.selectedId]
+    ) {
       throw new ApiError(
         422,
         "validation_failed",
@@ -807,6 +821,12 @@ export class SqliteStore implements ProjectStore {
       );
     }
 
+    const previousCriteria = this.previousCriterionKeys(row.chapters_json);
+    const expanded = this.expandCriterionSubchapters(
+      normalizedChapters,
+      previousCriteria,
+    );
+    const chapters = expanded.document;
     const selectedId = input.selectedId;
     const stats = summarizeDocument(chapters);
     const chaptersJson = JSON.stringify(chapters);
@@ -840,7 +860,11 @@ export class SqliteStore implements ProjectStore {
             ownerId,
           );
       }
-      this.insertNewActivity(id, input.activity ?? [], ownerId);
+      this.insertNewActivity(
+        id,
+        [...(input.activity ?? []), ...expanded.activity],
+        ownerId,
+      );
     });
     transaction();
 
@@ -855,7 +879,125 @@ export class SqliteStore implements ProjectStore {
       },
       activity: this.listActivity(ownerId, id),
       stats,
+      createdSubchapters: expanded.created,
     };
+  }
+
+  private previousCriterionKeys(chaptersJson: string): Set<string> {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(chaptersJson);
+    } catch {
+      throw new ApiError(
+        500,
+        "stored_data_invalid",
+        "The stored project document could not be read.",
+      );
+    }
+    if (!parsed || typeof parsed !== "object") {
+      throw new ApiError(
+        500,
+        "stored_data_invalid",
+        "The stored project document could not be read.",
+      );
+    }
+    const byId = (parsed as { byId?: unknown }).byId;
+    if (!byId || typeof byId !== "object" || Array.isArray(byId)) {
+      throw new ApiError(
+        500,
+        "stored_data_invalid",
+        "The stored project document could not be read.",
+      );
+    }
+    const keys = new Set<string>();
+    for (const rawChapter of Object.values(byId as Record<string, unknown>)) {
+      if (!rawChapter || typeof rawChapter !== "object") continue;
+      const chapter = rawChapter as { id?: unknown; criteria?: unknown };
+      if (typeof chapter.id !== "string" || !Array.isArray(chapter.criteria)) {
+        continue;
+      }
+      for (const rawCriterion of chapter.criteria) {
+        if (
+          rawCriterion &&
+          typeof rawCriterion === "object" &&
+          typeof (rawCriterion as { id?: unknown }).id === "string"
+        ) {
+          keys.add(`${chapter.id}:${(rawCriterion as { id: string }).id}`);
+        }
+      }
+    }
+    return keys;
+  }
+
+  private expandCriterionSubchapters(
+    input: ChapterDocument,
+    previousCriteria: Set<string>,
+  ): {
+    document: ChapterDocument;
+    created: CreatedCriterionSubchapter[];
+    activity: CreateActivityInput[];
+  } {
+    let document = input;
+    const created: CreatedCriterionSubchapter[] = [];
+    const activity: CreateActivityInput[] = [];
+    for (const parent of Object.values(input.byId)) {
+      if (parent.finalLevel) continue;
+      for (const criterion of parent.criteria) {
+        if (previousCriteria.has(`${parent.id}:${criterion.id}`)) continue;
+        if (criterion.chapterId) continue;
+        if (!criterion.text.trim()) continue;
+        const currentParent = document.byId[parent.id];
+        const currentCriterion = currentParent?.criteria.find(
+          (item) => item.id === criterion.id,
+        );
+        if (!currentParent || !currentCriterion || currentCriterion.chapterId) {
+          continue;
+        }
+        const subchapterId = this.uniqueChapterId(document);
+        const subchapter = createSubchapterFromCriterion({
+          id: subchapterId,
+          text: currentCriterion.text,
+        });
+        document = insertChapter(document, {
+          ...subchapter,
+          parentId: parent.id,
+        });
+        const withLink = document.byId[parent.id];
+        if (!withLink) continue;
+        document = patchChapter(document, parent.id, {
+          criteria: withLink.criteria.map((item) =>
+            item.id === currentCriterion.id
+              ? { ...item, chapterId: subchapterId }
+              : item,
+          ),
+        });
+        created.push({
+          id: subchapterId,
+          parentId: parent.id,
+          criterionId: currentCriterion.id,
+          title: subchapter.title,
+        });
+        activity.push({
+          id: this.newId(),
+          message: "Created subchapter from success criterion",
+          chapterId: subchapterId,
+          chapterName: subchapter.title,
+        });
+      }
+    }
+    return { document, created, activity };
+  }
+
+  private uniqueChapterId(document: ChapterDocument): string {
+    for (let attempt = 0; attempt < 20; attempt += 1) {
+      const id = this.newId();
+      if (!document.byId[id]) return id;
+    }
+    throw new ApiError(
+      500,
+      "id_generation_failed",
+      "A unique chapter id could not be generated.",
+    );
   }
 
   listActivity(

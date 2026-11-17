@@ -210,8 +210,8 @@ description or checklist item to edit its Markdown, or focus it and press
 Enter/F2. Press Escape or Ctrl/Cmd+Enter to finish editing.
 
 Adding a success criterion also creates a subchapter under the current chapter
-unless **Final level** is checked. Its title comes from the first line of the
-criterion. Manually created subchapters do not add checklist items. Press Enter
+unless **Final level** is checked. The backend applies the same rule for REST
+and MCP document writes. Its title comes from the first line of the criterion. Manually created subchapters do not add checklist items. Press Enter
 to add a criterion and Shift+Enter for a new line. Changes save automatically to
 the local API.
 

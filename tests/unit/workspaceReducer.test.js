@@ -150,15 +150,13 @@ describe("workspace reducer", () => {
     ).toBe(state);
   });
 
-  it("records an added criterion and its subchapter, newest first", () => {
+  it("records an added criterion without creating a local subchapter", () => {
     const next = workspaceReducer(baseState(), {
       type: "addCriterion",
       chapterId: "parent",
       text: "  **Ship it** today  ",
       criterionId: "c2",
-      subchapterId: "s1",
       activityId: "a1",
-      subchapterActivityId: "a2",
       time,
     });
 
@@ -166,16 +164,14 @@ describe("workspace reducer", () => {
       id: "c2",
       text: "**Ship it** today",
       checked: false,
-      chapterId: "s1",
     });
-    expect(next.chapters.byId.s1.title).toBe("Ship it today");
+    expect(next.chapters.byId.parent.childIds).toEqual([]);
     expect(next.events.map((event) => event.message)).toEqual([
-      "Created subchapter from success criterion",
       "Added criterion: **Ship it** today",
     ]);
   });
 
-  it("does not create subchapters for final-level chapters", () => {
+  it("still adds criteria to final-level chapters without children", () => {
     const state = workspaceReducer(baseState(), {
       type: "setChapterField",
       id: "parent",
@@ -187,15 +183,31 @@ describe("workspace reducer", () => {
       chapterId: "parent",
       text: "Stay here",
       criterionId: "c2",
-      subchapterId: "s1",
       activityId: "a1",
-      subchapterActivityId: "a2",
       time,
     });
 
     expect(next.chapters.byId.parent.childIds).toEqual([]);
-    expect(next.chapters.byId.s1).toBeUndefined();
+    expect(next.chapters.byId.parent.criteria.at(-1).chapterId).toBeUndefined();
     expect(next.events).toHaveLength(1);
+  });
+
+  it("adopts server chapters without changing activity", () => {
+    const state = baseState();
+    const chapters = {
+      ...state.chapters,
+      byId: {
+        ...state.chapters.byId,
+        parent: { ...state.chapters.byId.parent, title: "Server title" },
+      },
+    };
+    const next = workspaceReducer(state, {
+      type: "applyServerChapters",
+      chapters,
+    });
+    expect(next.chapters).toBe(chapters);
+    expect(next.events).toBe(state.events);
+    expect(next.selectedId).toBe(state.selectedId);
   });
 
   it("logs the previous text when toggling and removing", () => {
@@ -265,26 +277,48 @@ describe("workspace reducer", () => {
   });
 
   it("deletes a chapter subtree and its linked parent criterion", () => {
-    let state = baseState();
-    state = workspaceReducer(state, {
-      type: "addCriterion",
-      chapterId: "parent",
-      text: "Enter password",
-      criterionId: "c2",
-      subchapterId: "s1",
-      activityId: "a1",
-      subchapterActivityId: "a2",
-      time,
-    });
-    state = workspaceReducer(state, {
-      type: "addCriterion",
-      chapterId: "s1",
-      text: "Check 6 digits",
-      criterionId: "c3",
-      subchapterId: "s2",
-      activityId: "a3",
-      subchapterActivityId: "a4",
-      time,
+    const base = baseState();
+    const chapters = {
+      ...base.chapters,
+      byId: {
+        ...base.chapters.byId,
+        parent: {
+          ...base.chapters.byId.parent,
+          childIds: ["s1"],
+          criteria: [
+            ...base.chapters.byId.parent.criteria,
+            {
+              id: "c2",
+              text: "Enter password",
+              checked: false,
+              chapterId: "s1",
+            },
+          ],
+        },
+        s1: createChapter({
+          id: "s1",
+          parentId: "parent",
+          title: "Enter password",
+          childIds: ["s2"],
+          criteria: [
+            {
+              id: "c3",
+              text: "Check 6 digits",
+              checked: false,
+              chapterId: "s2",
+            },
+          ],
+        }),
+        s2: createChapter({
+          id: "s2",
+          parentId: "s1",
+          title: "Check 6 digits",
+        }),
+      },
+    };
+    let state = workspaceReducer(base, {
+      type: "applyServerChapters",
+      chapters,
     });
     expect(state.chapters.byId.parent.criteria.map((item) => item.id)).toEqual([
       "c1",
