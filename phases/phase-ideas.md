@@ -1,12 +1,11 @@
 # Phase ideas — deferred backlog
 
 Status: living document  
-Updated: 2026-11-16
+Updated: 2026-11-17
 
-Ideas captured while delivering phase 1 and phase 2 that were deliberately left
-out, plus a few candidates raised while planning phase 3. They are consolidated
-here so they can be reviewed, promoted into a phase, or dropped without
-re-reading the delivery notes.
+Ideas captured during phase delivery and planning that were deliberately left
+out. They are consolidated here so they can be reviewed, promoted into a phase,
+or dropped without re-reading the delivery notes.
 
 How to use this file:
 
@@ -30,47 +29,58 @@ chapters and a conflict-resolution model.
 **Next step:** decide the collaboration model (presence plus last-write-wins,
 CRDT, or server-sequenced operations) before UI work.
 
-### P-03 — Cross-device sync and cloud backup
+### P-03 — Automated backup and restore
 
-**Source:** phase 1 persistence boundary ("data is specific to the browser and
-origin; there is no cross-device synchronization").
+**Source:** phase 1 persistence boundary; cross-device access was delivered by
+the API cutover in phase 5 and project ownership in phase 6.
 
-**What:** projects available on another browser or device, automatic remote
-backup.
+**What:** scheduled server-side backups with a retention policy, plus a tested
+restore procedure.
 
-**Why deferred:** identity is available after phase 6, but remote hosting, TLS
-and a sync protocol are still missing. Project export/import is the current
-manual workaround.
+**Status:** projects are server-side and available from any browser or device.
+Phase 8 documented manual Docker-volume backup and restore; export/import remains
+the manual per-project workaround.
 
-**Next step:** reuse the project export format as the sync payload.
+**Why deferred:** automatic scheduling needs a backup target and retention
+policy, and restore verification belongs on the deployment host rather than in
+the app.
+
+**Next step:** choose the backup target (host directory, object storage or
+database dump), schedule it, and automate a restore check.
 
 ### P-04 — Durable server-side activity audit log
 
 **Source:** phase 1 boundaries ("activity is a browser-local change history,
 not a server audit log").
 
-**Status:** partially advanced by phase 5, which moved activity to the server.
-The current history is still capped at 100 entries and has no attribution.
+**Status:** phase 5 moved activity to SQLite and phase 6 added actor
+attribution. History is still capped at 100 entries per project and exposed only
+through the project activity feed.
 
-**What:** durable, attributable activity history that supports auditing.
+**What:** durable, attributable history with a retention policy, audit queries
+and an expanded event schema.
 
-**Why deferred:** phase 6 adds identity and actor attribution, but there is
-still no retention policy, audit query surface or durable event schema.
+**Why deferred:** there is no retention policy, audit permission model, export
+or expanded event schema yet.
 
-**Next step:** define the retention policy, audit query surface and expanded
-event schema.
+**Next step:** define retention and audit access, then add an audit query/export
+surface and an event schema migration.
 
 ## Specification editing
 
-### P-05 — Chapter management UI: delete, move, reorder, duplicate
+### P-05 — Chapter move, reorder and duplicate UI
 
 **Source:** phase 1 boundaries, phase 2 out of scope.  
-**What:** expose the phase 2 domain operations in the UI: delete a subtree with
-confirmation, move a chapter to another parent, reorder siblings and criteria,
-duplicate a subtree, and drag-and-drop reordering.  
-**Why deferred:** phase 2 delivered and unit-tested `deleteSubtree`,
-`moveChapter`, `reorderCriteria`, `moveCriterion` and `duplicateSubtree`, but no
-controls.  
+**Status:** chapter deletion with confirmation and criterion add/remove are
+delivered; moving, reordering and duplicating chapters still have no controls.
+
+**What:** expose the remaining domain operations: move a chapter to another
+parent, reorder siblings and criteria, duplicate a subtree, and drag-and-drop
+reordering.
+
+**Why deferred:** the domain operations exist and are unit-tested, but the
+editor has no move/reorder/duplicate affordances.
+
 **Next step:** add a chapter actions menu and drag handles; reuse the existing
 focus and confirmation patterns.
 
