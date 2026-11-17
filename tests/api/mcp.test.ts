@@ -32,6 +32,7 @@ const projectTools = [
   "list_activity",
   "list_projects",
   "replace_document",
+  "search_project",
   "update_project",
 ].sort();
 
@@ -91,6 +92,25 @@ describe("remote MCP", () => {
     });
     expect(wrongProject.envelope.status).toBe(404);
     expect(wrongProject.envelope.body.error.code).toBe("not_found");
+
+    const searched = await mcpCall(api, read, "search_project", {
+      projectId: "website",
+      q: "reset email",
+      limit: 1,
+    });
+    expect(searched.envelope.status).toBe(200);
+    expect(searched.envelope.etag).toBeNull();
+    expect(searched.envelope.body.query).toBe("reset email");
+    expect(searched.envelope.body.limit).toBe(1);
+    expect(searched.envelope.body.results.length).toBe(1);
+    expect(searched.envelope.body.results[0].chapterId).toBe("password-reset");
+
+    const wrongSearch = await mcpCall(api, read, "search_project", {
+      projectId: "another-project",
+      q: "reset",
+    });
+    expect(wrongSearch.envelope.status).toBe(404);
+    expect(wrongSearch.envelope.body.error.code).toBe("not_found");
 
     const denied = await mcpCall(api, read, "append_activity", {
       projectId: "website",

@@ -29,6 +29,8 @@ tags:
     description: Append-only project activity.
   - name: coverage
     description: Declaration-based verification coverage.
+  - name: search
+    description: Project-scoped document search.
   - name: files
     description: Project export and import files.
 paths:
@@ -370,6 +372,35 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/Error"
+  /projects/{projectId}/search:
+    parameters:
+      - $ref: "#/components/parameters/ProjectId"
+    get:
+      tags:
+        - search
+      operationId: searchProject
+      summary: Search chapter text, commits and verification content
+      parameters:
+        - $ref: "#/components/parameters/SearchQuery"
+        - $ref: "#/components/parameters/SearchLimit"
+        - $ref: "#/components/parameters/SearchOffset"
+      responses:
+        "200":
+          description: Ranked chapter-level search results
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SearchResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/Error"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+        "429":
+          $ref: "#/components/responses/RateLimited"
   /projects/{projectId}/export:
     parameters:
       - $ref: "#/components/parameters/ProjectId"
@@ -867,6 +898,30 @@ components:
         type: string
         minLength: 1
         maxLength: 64
+    SearchQuery:
+      name: q
+      in: query
+      required: true
+      description: Text or commit prefix to find in one project.
+      schema:
+        type: string
+        minLength: 2
+        maxLength: 200
+    SearchLimit:
+      name: limit
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 20
+    SearchOffset:
+      name: offset
+      in: query
+      schema:
+        type: integer
+        minimum: 0
+        default: 0
     IfMatch:
       name: If-Match
       in: header
@@ -914,7 +969,7 @@ components:
           schema:
             $ref: "#/components/schemas/Error"
     RateLimited:
-      description: Too many authentication attempts
+      description: Too many requests
       content:
         application/json:
           schema:
@@ -1403,6 +1458,109 @@ components:
             $ref: "#/components/schemas/CoverageRow"
         testGuidelines:
           type: string
+    SearchField:
+      type: string
+      enum:
+        - title
+        - description
+        - criterion
+        - commit
+        - verification.auto
+        - verification.human
+        - verification.ai
+    SearchPathItem:
+      type: object
+      required:
+        - id
+        - title
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+    SearchMatch:
+      type: object
+      required:
+        - field
+        - snippet
+        - ranges
+      properties:
+        field:
+          $ref: "#/components/schemas/SearchField"
+        criterionId:
+          type: string
+        commit:
+          type: string
+        snippet:
+          type: string
+        ranges:
+          type: array
+          description: Half-open [start, end) offsets into the snippet.
+          items:
+            type: array
+            minItems: 2
+            maxItems: 2
+            items:
+              type: integer
+    SearchResult:
+      type: object
+      required:
+        - chapterId
+        - title
+        - path
+        - matchCount
+        - matches
+      properties:
+        chapterId:
+          type: string
+        title:
+          type: string
+        path:
+          type: array
+          items:
+            $ref: "#/components/schemas/SearchPathItem"
+        matchCount:
+          type: integer
+          minimum: 1
+        matches:
+          type: array
+          maxItems: 5
+          items:
+            $ref: "#/components/schemas/SearchMatch"
+    SearchResponse:
+      type: object
+      required:
+        - projectId
+        - query
+        - documentRevision
+        - total
+        - offset
+        - limit
+        - truncated
+        - results
+      properties:
+        projectId:
+          type: string
+        query:
+          type: string
+        documentRevision:
+          type: integer
+        total:
+          type: integer
+          minimum: 0
+        offset:
+          type: integer
+          minimum: 0
+        limit:
+          type: integer
+          minimum: 1
+          maximum: 100
+        truncated:
+          type: boolean
+        results:
+          type: array
+          items:
+            $ref: "#/components/schemas/SearchResult"
     AuthUser:
       type: object
       required:

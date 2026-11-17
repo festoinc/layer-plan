@@ -4,6 +4,11 @@ import {
   MAX_COMMITS_PER_CHAPTER,
 } from "../../src/domain/commits";
 import { PROJECT_COLORS } from "../../src/domain/projects";
+import {
+  SEARCH_MAX_LIMIT,
+  SEARCH_MAX_QUERY_LENGTH,
+  SEARCH_MIN_QUERY_LENGTH,
+} from "../../src/domain/search";
 import { VERIFICATION_MODES } from "../../src/domain/verificationTypes";
 import { ApiError, zodDetails } from "./errors";
 
@@ -115,6 +120,18 @@ export const activityQuerySchema = z
   .object({
     limit: z.coerce.number().int().min(1).optional(),
     before: z.coerce.number().int().positive().optional(),
+  })
+  .strict();
+
+export const searchQuerySchema = z
+  .object({
+    q: z
+      .string()
+      .trim()
+      .min(SEARCH_MIN_QUERY_LENGTH)
+      .max(SEARCH_MAX_QUERY_LENGTH),
+    limit: z.coerce.number().int().min(1).max(SEARCH_MAX_LIMIT).optional(),
+    offset: z.coerce.number().int().min(0).optional(),
   })
   .strict();
 

@@ -11,6 +11,7 @@ describe("project routes", () => {
       view: ROUTE_VIEWS.projects,
       projectId: null,
       chapterId: null,
+      searchQuery: "",
       legacy: false,
       valid: true,
     });
@@ -47,6 +48,20 @@ describe("project routes", () => {
       projectId: "website",
       valid: true,
     });
+    expect(parseRoute("#/projects/website/search")).toMatchObject({
+      view: ROUTE_VIEWS.search,
+      projectId: "website",
+      searchQuery: "",
+      valid: true,
+    });
+    expect(parseRoute("#/projects/website/search?q=reset+email")).toMatchObject(
+      {
+        view: ROUTE_VIEWS.search,
+        projectId: "website",
+        searchQuery: "reset email",
+        valid: true,
+      },
+    );
   });
 
   it("parses and round-trips OAuth consent routes", () => {
@@ -96,6 +111,7 @@ describe("project routes", () => {
     expect(parseRoute("#/projects/website/chapters/one/extra").valid).toBe(
       false,
     );
+    expect(parseRoute("#/projects/website/search/extra").valid).toBe(false);
     expect(parseRoute("#/nope").valid).toBe(false);
   });
 
@@ -110,6 +126,16 @@ describe("project routes", () => {
       },
       { view: ROUTE_VIEWS.coverage, projectId: "website" },
       { view: ROUTE_VIEWS.activity, projectId: "website" },
+      {
+        view: ROUTE_VIEWS.search,
+        projectId: "website",
+        searchQuery: "reset email",
+      },
+      {
+        view: ROUTE_VIEWS.search,
+        projectId: "website",
+        searchQuery: "a+b & c?",
+      },
     ];
     for (const target of cases) {
       const hash = routeToHash(target);
@@ -119,6 +145,7 @@ describe("project routes", () => {
       expect(parsed.view).toBe(target.view);
       expect(parsed.projectId ?? null).toBe(target.projectId ?? null);
       expect(parsed.chapterId ?? null).toBe(target.chapterId ?? null);
+      expect(parsed.searchQuery ?? "").toBe(target.searchQuery ?? "");
     }
   });
 

@@ -15,3 +15,9 @@ export const ProjectsView = lazy(() =>
     default: module.ProjectsView,
   })),
 );
+
+export const SearchView = lazy(() =>
+  import("../components/SearchView").then((module) => ({
+    default: module.SearchView,
+  })),
+);

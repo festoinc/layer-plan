@@ -3,6 +3,14 @@ import type { ChapterDocument } from "../domain/chapters";
 import type { ProjectStats, ProjectSummary } from "../domain/projects";
 import type { CoverageRow, VerificationSummary } from "../domain/verification";
 
+export type {
+  SearchField,
+  SearchMatch,
+  SearchPathItem,
+  SearchResponse,
+  SearchResult,
+} from "../domain/search";
+
 export interface ProjectDetail extends ProjectSummary {
   testGuidelines: string;
   metadataRevision: number;

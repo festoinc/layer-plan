@@ -28,13 +28,19 @@ import {
   useWorkspaceStatus,
 } from "../store/WorkspaceProvider";
 import { ErrorBoundary } from "./ErrorBoundary";
-import { ActivityView, ProjectsView, TestCoverageView } from "./lazyViews";
+import {
+  ActivityView,
+  ProjectsView,
+  SearchView,
+  TestCoverageView,
+} from "./lazyViews";
 
 const VIEW_LABELS: Record<string, string> = {
   [ROUTE_VIEWS.projects]: "Projects",
   [ROUTE_VIEWS.specifications]: "Specifications",
   [ROUTE_VIEWS.coverage]: "Test coverage",
   [ROUTE_VIEWS.activity]: "Activity",
+  [ROUTE_VIEWS.search]: "Search",
 };
 
 export interface WorkspaceShellProps {
@@ -140,11 +146,18 @@ export function WorkspaceShell({ projectId }: WorkspaceShellProps) {
       return;
     }
     const targetChapter = view === ROUTE_VIEWS.specifications ? activeId : null;
+    const targetSearchQuery =
+      view === ROUTE_VIEWS.search ? route.searchQuery : null;
     const needsProject = route.projectId !== projectId;
     const needsChapter =
       view === ROUTE_VIEWS.specifications && route.chapterId !== targetChapter;
     if (needsProject || needsChapter || !route.valid || route.legacy) {
-      route.replace({ view, projectId, chapterId: targetChapter });
+      route.replace({
+        view,
+        projectId,
+        chapterId: targetChapter,
+        searchQuery: targetSearchQuery,
+      });
     }
   }, [view, route, activeId, projectId]);
 
@@ -179,6 +192,12 @@ export function WorkspaceShell({ projectId }: WorkspaceShellProps) {
         view: nextView,
         projectId,
         chapterId: nextView === ROUTE_VIEWS.specifications ? activeId : null,
+        searchQuery:
+          nextView === ROUTE_VIEWS.search
+            ? route.view === ROUTE_VIEWS.search
+              ? route.searchQuery
+              : ""
+            : null,
       });
     },
     [activeId, projectId, route],
@@ -315,6 +334,7 @@ export function WorkspaceShell({ projectId }: WorkspaceShellProps) {
         view: nextView,
         projectId: id,
         chapterId: null,
+        searchQuery: nextView === ROUTE_VIEWS.search ? "" : null,
       });
     },
     [route, setActiveProject, view],
@@ -324,6 +344,18 @@ export function WorkspaceShell({ projectId }: WorkspaceShellProps) {
     setNavOpen(false);
     route.navigate({ view: ROUTE_VIEWS.projects });
   }, [route]);
+
+  const updateSearchQuery = useCallback(
+    (value: string) => {
+      route.replace({
+        view: ROUTE_VIEWS.search,
+        projectId,
+        chapterId: null,
+        searchQuery: value,
+      });
+    },
+    [projectId, route],
+  );
 
   const exportProjectById = useCallback(
     (id: string) => {
@@ -527,6 +559,16 @@ export function WorkspaceShell({ projectId }: WorkspaceShellProps) {
           {view === ROUTE_VIEWS.activity && (
             <Suspense fallback={<p className="page-loading">Loading…</p>}>
               <ActivityView onSelectChapter={selectChapter} />
+            </Suspense>
+          )}
+          {view === ROUTE_VIEWS.search && (
+            <Suspense fallback={<p className="page-loading">Loading…</p>}>
+              <SearchView
+                projectId={projectId}
+                query={route.searchQuery}
+                onQueryChange={updateSearchQuery}
+                onSelectChapter={selectChapter}
+              />
             </Suspense>
           )}
         </ErrorBoundary>

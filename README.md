@@ -198,6 +198,10 @@ projects page where you can create, rename, duplicate, export, import and delete
 projects. Each project keeps its own chapters, verification rules, activity,
 selected chapter, test coverage and test guidelines.
 
+Each project also has a **Search** view. Search is limited to the current
+project and covers chapter titles, descriptions, criteria, commit hashes and
+verification text. Results link back to the matching chapter.
+
 Inside a project, use the **+** next to a chapter to add a subchapter, or **New
 chapter** to create a top-level chapter. Click a chapter to edit its title,
 description, and checklist. Descriptions and success criteria support
@@ -226,6 +230,15 @@ reads a git repository or contacts a git host, and it does not store commit
 messages, authors, dates or URLs. The **Test coverage** page shows each
 chapter's newest commit.
 
+### Search
+
+Open **Search** in the project sidebar to find a chapter by keyword or commit
+prefix. Search covers chapter titles, descriptions, criteria, commit hashes and
+the Auto-test, Human and AI verification text. It searches only the current
+project; activity and project metadata are not included. Results show the
+chapter path and highlighted snippets, and selecting one opens the chapter.
+Search never changes the document or its revision.
+
 ### Verification and coverage
 
 Subchapters get a **Verification Rules** section between Description and Success
@@ -253,8 +266,8 @@ its parent that created it.
 
 ```text
 server/          Fastify API, SQLite store, migrations, seed, OpenAPI routes
-src/domain/      Pure models: projects, chapters, criteria, commits, verification, schema
-src/api/         Fetch client and typed project/document/activity calls
+src/domain/      Pure models: projects, chapters, criteria, commits, search, verification
+src/api/         Fetch client and typed project/document/activity/search calls
 src/store/       Auth, project catalog and active workspace providers
 src/hooks/       Hash router, memoized chapter tree, focus trap
 src/components/  Sidebar, projects, auth/account/users pages, editor, banners
@@ -350,6 +363,7 @@ suffix on name collisions. Older v1/v2 files remain importable.
 | `GET`        | `/api/v1/projects/:id/activity`               | Read activity                      |
 | `POST`       | `/api/v1/projects/:id/activity`               | Append activity                    |
 | `GET`        | `/api/v1/projects/:id/coverage`               | Derived verification coverage      |
+| `GET`        | `/api/v1/projects/:id/search`                 | Search one project                 |
 | `GET`        | `/api/v1/projects/:id/export`                 | Download a project file            |
 | `POST`       | `/api/v1/projects/import`                     | Import a project file              |
 
@@ -370,6 +384,7 @@ Hash routing keeps every project and chapter linkable and survives reload:
 - `#/projects/<projectId>/chapters/<chapterId>` — specifications
 - `#/projects/<projectId>/coverage` — automated test coverage
 - `#/projects/<projectId>/activity` — project activity
+- `#/projects/<projectId>/search?q=<query>` — project search
 
 Unknown project ids return to the project list; unknown chapter ids fall back to
 the first chapter and the URL is rewritten. The active project is stored per
@@ -400,7 +415,7 @@ handling, project API-key management, super-admin password change, super-admin u
 disablement, two-user project isolation, API-backed persistence, optimistic
 conflict handling, retry after API failure, export/import, project lifecycle,
 project-scoped routing, activity, verification modes, coverage counting,
-accessibility (axe) and focus management.
+project search, accessibility (axe) and focus management.
 
 ## Runtime boundaries
 

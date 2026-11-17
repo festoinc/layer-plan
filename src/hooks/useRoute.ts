@@ -5,6 +5,7 @@ export const ROUTE_VIEWS = {
   specifications: "specifications" as const,
   coverage: "coverage" as const,
   activity: "activity" as const,
+  search: "search" as const,
   signIn: "sign-in" as const,
   account: "account" as const,
   users: "users" as const,
@@ -17,6 +18,7 @@ export interface ParsedRoute {
   view: RouteView;
   projectId: string | null;
   chapterId: string | null;
+  searchQuery: string;
   oauthRequestId?: string | null;
   legacy: boolean;
   valid: boolean;
@@ -26,6 +28,7 @@ export interface RouteTarget {
   view?: RouteView | string;
   projectId?: string | null;
   chapterId?: string | null;
+  searchQuery?: string | null;
   oauthRequestId?: string | null;
 }
 
@@ -63,11 +66,19 @@ function decode(value: string | undefined): string | null {
 }
 
 export function parseRoute(hash: string): ParsedRoute {
-  const path = String(hash ?? "")
+  const raw = String(hash ?? "")
     .replace(/^#/, "")
-    .replace(/^\//, "")
-    .replace(/\/$/, "");
+    .replace(/^\//, "");
+  const [pathPart = "", queryPart = ""] = raw.split("?", 2);
+  const parsed = parsePathRoute(pathPart.replace(/\/$/, ""));
+  const searchQuery =
+    parsed.view === ROUTE_VIEWS.search
+      ? (new URLSearchParams(queryPart).get("q") ?? "")
+      : "";
+  return { ...parsed, searchQuery };
+}
 
+function parsePathRoute(path: string): Omit<ParsedRoute, "searchQuery"> {
   if (!path) {
     return {
       view: ROUTE_VIEWS.specifications,
@@ -190,6 +201,15 @@ export function parseRoute(hash: string): ParsedRoute {
         valid: true,
       };
     }
+    if (section === ROUTE_VIEWS.search && segments.length === 3) {
+      return {
+        view: ROUTE_VIEWS.search,
+        projectId,
+        chapterId: null,
+        legacy: false,
+        valid: true,
+      };
+    }
     return {
       view: ROUTE_VIEWS.specifications,
       projectId,
@@ -258,6 +278,13 @@ export function routeToHash(route: RouteTarget): string {
   }
 
   const base = `#/projects/${encodeURIComponent(route.projectId)}`;
+  if (route.view === ROUTE_VIEWS.search) {
+    const query =
+      typeof route.searchQuery === "string" ? route.searchQuery : "";
+    return query
+      ? `${base}/search?q=${encodeURIComponent(query)}`
+      : `${base}/search`;
+  }
   if (route.view === ROUTE_VIEWS.coverage) return `${base}/coverage`;
   if (route.view === ROUTE_VIEWS.activity) return `${base}/activity`;
   return route.chapterId

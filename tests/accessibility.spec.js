@@ -60,6 +60,13 @@ test("specifications, activity and coverage pages are accessible", async ({
     page.getByRole("heading", { name: "Test coverage", exact: true }),
   ).toBeVisible();
   await expectNoViolations(page, "test coverage");
+
+  await page.getByRole("button", { name: "Search", exact: true }).click();
+  await page
+    .getByRole("searchbox", { name: "Search this project" })
+    .fill("reset email");
+  await expect(page.locator(".search-result").first()).toBeVisible();
+  await expectNoViolations(page, "search");
 });
 
 test("skip link, chapter selection and the mobile drawer manage focus", async ({
