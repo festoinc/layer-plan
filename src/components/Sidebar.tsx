@@ -7,6 +7,7 @@ import {
   LayoutGrid,
   LucideIcon,
   Plus,
+  Search,
   X,
 } from "lucide-react";
 import { ChapterTree } from "./ChapterTree";
@@ -21,6 +22,7 @@ const VIEWS: [string, string, LucideIcon][] = [
   ["specifications", "Specifications", FileText],
   ["coverage", "Test coverage", ChartNoAxesColumnIncreasing],
   ["activity", "Activity", Clock3],
+  ["search", "Search", Search],
 ];
 
 export interface SidebarProps {

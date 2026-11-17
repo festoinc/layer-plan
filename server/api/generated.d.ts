@@ -542,6 +542,25 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/projects/{projectId}/search": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        projectId: components["parameters"]["ProjectId"];
+      };
+      cookie?: never;
+    };
+    /** Search chapter text, commits and verification content */
+    get: operations["searchProject"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/projects/{projectId}/export": {
     parameters: {
       query?: never;
@@ -1524,6 +1543,44 @@ export interface components {
       rows: components["schemas"]["CoverageRow"][];
       testGuidelines: string;
     };
+    /** @enum {string} */
+    SearchField:
+      | "title"
+      | "description"
+      | "criterion"
+      | "commit"
+      | "verification.auto"
+      | "verification.human"
+      | "verification.ai";
+    SearchPathItem: {
+      id: string;
+      title: string;
+    };
+    SearchMatch: {
+      field: components["schemas"]["SearchField"];
+      criterionId?: string;
+      commit?: string;
+      snippet: string;
+      /** @description Half-open [start, end) offsets into the snippet. */
+      ranges: number[][];
+    };
+    SearchResult: {
+      chapterId: string;
+      title: string;
+      path: components["schemas"]["SearchPathItem"][];
+      matchCount: number;
+      matches: components["schemas"]["SearchMatch"][];
+    };
+    SearchResponse: {
+      projectId: string;
+      query: string;
+      documentRevision: number;
+      total: number;
+      offset: number;
+      limit: number;
+      truncated: boolean;
+      results: components["schemas"]["SearchResult"][];
+    };
     AuthUser: {
       id: string;
       /** Format: email */
@@ -1704,7 +1761,7 @@ export interface components {
         "application/json": components["schemas"]["Error"];
       };
     };
-    /** @description Too many authentication attempts */
+    /** @description Too many requests */
     RateLimited: {
       headers: {
         [name: string]: unknown;
@@ -1716,6 +1773,10 @@ export interface components {
   };
   parameters: {
     ProjectId: string;
+    /** @description Text or commit prefix to find in one project. */
+    SearchQuery: string;
+    SearchLimit: number;
+    SearchOffset: number;
     /** @description Quoted revision returned by the last write or read. */
     IfMatch: string;
   };
@@ -1727,4 +1788,37 @@ export interface components {
   pathItems: never;
 }
 export type $defs = Record<string, never>;
-export type operations = Record<string, never>;
+export interface operations {
+  searchProject: {
+    parameters: {
+      query: {
+        /** @description Text or commit prefix to find in one project. */
+        q: components["parameters"]["SearchQuery"];
+        limit?: components["parameters"]["SearchLimit"];
+        offset?: components["parameters"]["SearchOffset"];
+      };
+      header?: never;
+      path: {
+        projectId: components["parameters"]["ProjectId"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Ranked chapter-level search results */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["SearchResponse"];
+        };
+      };
+      401: components["responses"]["Unauthorized"];
+      403: components["responses"]["Forbidden"];
+      404: components["responses"]["Error"];
+      422: components["responses"]["ValidationError"];
+      429: components["responses"]["RateLimited"];
+    };
+  };
+}

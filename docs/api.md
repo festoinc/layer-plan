@@ -240,6 +240,69 @@ activity entry if the change should appear on the activity page:
 }
 ```
 
+### Search a project
+
+Search is always scoped to one project. There is no global search endpoint.
+
+```sh
+curl $AUTH \
+  "http://127.0.0.1:3001/api/v1/projects/website/search?q=reset%20email&limit=20"
+```
+
+`q` is required and must be 2–200 characters after trimming. `limit` defaults
+to 20 and is capped at 100; `offset` defaults to 0 and paginates the ranked
+results.
+
+Search covers chapter titles, descriptions, criterion text, commit hashes and
+the Auto-test, Human and AI verification text. It does not search activity,
+project metadata, test guidelines or ids. Matching is case-insensitive
+substring matching: every whitespace-separated term must appear somewhere in the
+same chapter. A query term of 4–40 hexadecimal characters also matches commit
+hashes by prefix. There is no fuzzy matching, regex or query language.
+
+Results are chapter-level and ranked by match type: exact commit, commit prefix,
+title, criterion, description, then verification text. Each result contains the
+chapter path, up to five plain-text snippets and highlight ranges:
+
+```json
+{
+  "projectId": "website",
+  "query": "reset email",
+  "documentRevision": 4,
+  "total": 2,
+  "offset": 0,
+  "limit": 20,
+  "truncated": false,
+  "results": [
+    {
+      "chapterId": "password-reset",
+      "title": "Password reset",
+      "path": [
+        { "id": "authentication", "title": "Authentication" },
+        { "id": "password-reset", "title": "Password reset" }
+      ],
+      "matchCount": 3,
+      "matches": [
+        {
+          "field": "criterion",
+          "criterionId": "reset-1",
+          "snippet": "A user can request a password reset by email",
+          "ranges": [
+            [30, 35],
+            [39, 44]
+          ]
+        }
+      ]
+    }
+  ]
+}
+```
+
+`documentRevision` tells you which saved document snapshot was searched. Search
+does not return an ETag and does not change the document or activity. Missing
+or another user's project returns `404`; invalid parameters return `422`;
+responses use `Cache-Control: no-store`.
+
 ### Append activity
 
 ```sh
@@ -442,7 +505,8 @@ it to create the matching subchapter in the same document write, mirroring the
 UI. On a revision conflict, fetch the latest content and reapply the intended
 change.
 MCP requests and responses are limited to 2 MiB; larger documents must be
-handled through the existing API. The agent is instructed to seek confirmation
+handled through the existing API. The read-only `search_project` tool uses the
+same project-scoped rules and returns the same search response. The agent is instructed to seek confirmation
 before destructive actions, but instructions are not a server-side approval
 guarantee. In a Codex CLI 0.169.0 test, Codex attempted deletion after a direct
 request without first asking in chat; the client blocked the tool call because

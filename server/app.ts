@@ -16,6 +16,7 @@ import { registerHealthRoutes } from "./api/routes/health";
 import { registerOAuthGrantRoutes } from "./api/routes/oauthGrants";
 import { registerProjectRoutes } from "./api/routes/projects";
 import { registerProjectTokenRoutes } from "./api/routes/projectTokens";
+import { registerSearchRoutes } from "./api/routes/search";
 import { registerTestRoutes } from "./api/routes/test";
 import { registerUserRoutes } from "./api/routes/users";
 import type { ServerConfig } from "./config";
@@ -59,6 +60,23 @@ export async function buildApp({
             "res.headers.set-cookie",
             'res.headers["set-cookie"]',
           ],
+          serializers: {
+            req: (request: {
+              id?: string;
+              method?: string;
+              url?: string;
+              hostname?: string;
+              ip?: string;
+              socket?: { remotePort?: number };
+            }) => ({
+              reqId: request.id,
+              method: request.method,
+              url: (request.url ?? "").split("?")[0],
+              hostname: request.hostname,
+              remoteAddress: request.ip,
+              remotePort: request.socket?.remotePort,
+            }),
+          },
         }
       : false,
     bodyLimit: 10 * 1024 * 1024,
@@ -75,12 +93,9 @@ export async function buildApp({
   await app.register(rateLimit, {
     global: false,
     errorResponseBuilder: (_request, context) =>
-      new ApiError(
-        429,
-        "rate_limited",
-        "Too many sign-in attempts. Try again later.",
-        { retryAfterSeconds: Math.max(1, Math.ceil(context.ttl / 1000)) },
-      ),
+      new ApiError(429, "rate_limited", "Too many requests. Try again later.", {
+        retryAfterSeconds: Math.max(1, Math.ceil(context.ttl / 1000)),
+      }),
   });
 
   app.setErrorHandler((error, request, reply) => {
@@ -146,6 +161,7 @@ export async function buildApp({
   registerDocumentRoutes(app, store, hooks);
   registerActivityRoutes(app, store, hooks);
   registerCoverageRoutes(app, store, hooks);
+  registerSearchRoutes(app, store, hooks);
   registerExportRoutes(app, store, hooks);
   registerOAuthRoutes(app, {
     config,

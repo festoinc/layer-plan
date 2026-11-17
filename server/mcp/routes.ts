@@ -11,6 +11,11 @@ import {
   putDocumentSchema,
   appendActivitySchema,
 } from "../api/schemas";
+import {
+  SEARCH_MAX_LIMIT,
+  SEARCH_MAX_QUERY_LENGTH,
+  SEARCH_MIN_QUERY_LENGTH,
+} from "../../src/domain/search";
 
 const MAX_BYTES = 2 * 1024 * 1024;
 const projectId = z.string().min(1).max(128);
@@ -130,6 +135,30 @@ const operations: Operation[] = [
     method: "GET",
     path: (a) => `${projectPath(a)}/export`,
     schema: { projectId },
+    projectScoped: true,
+    readOnly: true,
+  },
+  {
+    name: "search_project",
+    description:
+      "Search the bound project's chapter titles, descriptions, criteria, commit hashes and verification text. Searches one project only; activity and project metadata are not searched.",
+    method: "GET",
+    path: (a) => {
+      const query = new URLSearchParams({ q: String(a.q) });
+      if (a.limit !== undefined) query.set("limit", String(a.limit));
+      if (a.offset !== undefined) query.set("offset", String(a.offset));
+      return `${projectPath(a)}/search?${query.toString()}`;
+    },
+    schema: {
+      projectId,
+      q: z
+        .string()
+        .trim()
+        .min(SEARCH_MIN_QUERY_LENGTH)
+        .max(SEARCH_MAX_QUERY_LENGTH),
+      limit: z.number().int().min(1).max(SEARCH_MAX_LIMIT).optional(),
+      offset: z.number().int().min(0).optional(),
+    },
     projectScoped: true,
     readOnly: true,
   },

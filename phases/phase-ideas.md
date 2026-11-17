@@ -187,20 +187,6 @@ chapter editor.
 **Next step:** prototype only if a project dashboard becomes a real need; the
 phase 3 projects page is the first step in that direction.
 
-### P-16 — Search
-
-**Source:** phase 7 introduced document commit references; this idea covers
-finding them again.
-
-**What:** MCP and UI search by keyword or commit hash across documents, with
-results linking back to the chapter.
-
-**Why deferred:** phase 7 stores commit hashes but deliberately adds no search
-surface.
-
-**Next step:** decide whether search runs over the project API, SQLite FTS or
-only exported files, then add query endpoints and an MCP tool.
-
 ### P-17 — Password change and recovery
 
 **Source:** phase 6 boundary: the super admin creates accounts, but passwords

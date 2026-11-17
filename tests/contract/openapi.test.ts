@@ -69,6 +69,7 @@ const expectedPaths = [
   "/projects/{projectId}/document",
   "/projects/{projectId}/duplicate",
   "/projects/{projectId}/export",
+  "/projects/{projectId}/search",
   "/projects/{projectId}/tokens",
   "/projects/{projectId}/tokens/{tokenId}",
   "/projects/{projectId}/oauth-grants",
@@ -323,6 +324,18 @@ describe("OpenAPI contract", () => {
       schemaAt("/projects/{projectId}/coverage", "get", "200"),
       json(coverage),
       "coverage",
+    );
+
+    const search = await api.app.inject({
+      method: "GET",
+      url: "/api/v1/projects/website/search?q=reset",
+      headers: authHeaders(superCookie),
+    });
+    expect(search.statusCode).toBe(200);
+    expectValid(
+      schemaAt("/projects/{projectId}/search", "get", "200"),
+      json(search),
+      "search",
     );
   });
 

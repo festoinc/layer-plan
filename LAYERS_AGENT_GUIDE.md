@@ -149,6 +149,7 @@ Base URL: `http://127.0.0.1:3001/api/v1`
 | `GET`        | `/projects/:id/activity`        | Read activity                      |
 | `POST`       | `/projects/:id/activity`        | Append an activity entry           |
 | `GET`        | `/projects/:id/coverage`        | Read verification coverage         |
+| `GET`        | `/projects/:id/search`          | Search one project                 |
 | `GET`        | `/projects/:id/export`          | Download a project file            |
 | `POST`       | `/projects/import`              | Import a project file              |
 
@@ -365,6 +366,35 @@ Example chapter field:
 Record the change in `activity` when a commit is linked or removed, for example
 `Linked commit 4f2a9c1` or `Removed commit 4f2a9c1`.
 
+## Search
+
+Use search to find a chapter before reading it. Search is always scoped to one
+project:
+
+```sh
+curl -sS $AUTH \
+  "http://127.0.0.1:3001/api/v1/projects/$PROJECT_ID/search?q=reset%20email"
+```
+
+Rules:
+
+- `q` is required and must be 2–200 characters after trimming;
+- search covers chapter titles, descriptions, criterion text, commit hashes and
+  all three verification texts;
+- activity, project metadata, test guidelines and ids are not searched;
+- every whitespace-separated term must match somewhere in the same chapter;
+- matching is case-insensitive substring matching, with no fuzzy matching,
+  regex or query language;
+- a term of 4–40 hexadecimal characters matches commit hashes by prefix;
+- results are chapter-level and ranked by exact commit, commit prefix, title,
+  criterion, description, then verification text;
+- `limit` defaults to 20 and is capped at 100; use `offset` for later pages;
+- the response includes `documentRevision`; search does not return an ETag and
+  does not change the document.
+
+Read the matched chapter with `get_document` before editing it. Search results
+reflect the latest saved document, not unsaved browser changes.
+
 ## Verification and coverage
 
 Verification rules belong to chapters, not criteria.
@@ -528,7 +558,9 @@ Keep the report concise and factual.
 When connected through the Layers MCP server, use its project and document
 tools instead of the REST examples above. The server sends adapted instructions
 during initialization. The credential is bound to one project: `list_projects`
-returns only that project, and every other tool requires its project id. It
+returns only that project, and every other tool requires its project id.
+`search_project` uses the same project-scoped rules as the REST search endpoint;
+read a matched chapter with `get_document` before editing it. It
 cannot create, import, duplicate or activate projects. A read-only credential
 can read; a read-write credential can edit. Project metadata and document writes require their
 respective ETags; reread and rebase on a conflict. See `docs/api.md` for Codex
