@@ -81,6 +81,18 @@ describe("remote MCP", () => {
     );
     expect(init.body.result.instructions).toContain("one synchronized pair");
     expect(init.body.result.instructions).toContain("criterionSync");
+    expect(init.body.result.instructions).toContain("## How to plan");
+    expect(init.body.result.instructions).toContain("not a PRD generator");
+    expect(init.body.result.instructions).toContain("Bad — PRD categories");
+    expect(init.body.result.instructions).toContain(
+      "criterion → subchapter, finalLevel: true",
+    );
+    expect(init.body.result.instructions).toContain(
+      "is the claim that the chapter is decomposed far enough",
+    );
+    expect(init.body.result.instructions).toContain(
+      "One observable behaviour belongs in one criterion",
+    );
     const list = await mcpRpc(api, read, "tools/list");
     const tools = list.body.result.tools as Array<{ name: string }>;
     expect(tools.map((tool) => tool.name).sort()).toEqual(projectTools);

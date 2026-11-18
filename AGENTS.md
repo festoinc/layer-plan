@@ -11,7 +11,9 @@ Layers MCP endpoint. It is not repository guidance.
 1. This file.
 2. `phases/phase-ideas.md` for the backlog.
 3. The phase document for the work in `phases/`. Follow its locked decisions.
-4. `README.md`, `docs/api.md` and `server/api/openapi.yaml` as needed.
+4. `README.md` for the product and planning philosophy,
+   `docs/installation.md` for install, configuration and technical details,
+   `docs/api.md` and `server/api/openapi.yaml` for the API.
 
 ## Project facts
 
@@ -27,6 +29,10 @@ Layers MCP endpoint. It is not repository guidance.
 - Default bind: `127.0.0.1:3001`; a non-loopback bind requires
   `LAYERS_ALLOW_REMOTE=1`.
 - Read `server/config.ts` before adding environment variables.
+- License: PolyForm Noncommercial 1.0.0 (`LICENSE`). Free for noncommercial
+  use with attribution to Anatolii Fesiuk; commercial use needs a separate
+  license. Keep the `Required Notice:` line and `LICENSE` in distributions,
+  including the Docker image.
 
 Useful local commands:
 
@@ -394,8 +400,8 @@ When the work is complete:
 - Update the phase document status to `delivered`.
 - Rename the file with the `[done]` suffix, matching earlier phases.
 - Remove the delivered idea from `phases/phase-ideas.md`.
-- Update `README.md`, `docs/api.md` and `LAYERS_AGENT_GUIDE.md` when the API or
-  runtime contract changes.
+- Update `README.md`, `docs/installation.md`, `docs/api.md` and
+  `LAYERS_AGENT_GUIDE.md` when the API or runtime contract changes.
 - Push to `main`, watch `verify` and `docker`, and run the relevant remote
   checks on the exact published digest.
 - Record the tested image tags/digest and the cleanup result in the handoff.

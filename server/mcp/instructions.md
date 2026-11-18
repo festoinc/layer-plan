@@ -22,17 +22,70 @@ How to read that tree:
 
 - The top chapter keeps the user's intent in their own words. Its description can carry context.
 - A criterion is one observable expectation. On a non-final chapter it becomes a subchapter whose title is the criterion's first line and whose description is the full criterion text, so a broad criterion such as "Login should be email" can hold its own criteria. The pair stays synchronized: editing either side updates the other, and deleting either side deletes the pair.
-- `finalLevel: true` keeps a chapter flat: its criteria stay leaves and no subchapter is created.
-- One expectation belongs in one criterion. Splitting "login and password are validated" into two criteria keeps each one checkable.
+- `finalLevel: true` is the claim that the chapter is decomposed far enough: its criteria are directly checkable, preferably by deterministic automated tests. It is not a switch to stop nesting. The backend keeps such a chapter flat, so its criteria stay leaves and no subchapter is created.
+- One observable behaviour belongs in one criterion. Its expected result may assert several fields of that output, but a statement that validates two independent things — "login and password are validated" — is two criteria.
 - Chapters also carry a verification rule (`auto`, `human` or `ai`), the git commits that implemented them, and their child and criterion ordering.
 
-Because of the subchapter rule, a non-final chapter cannot hold a leaf criterion: every new criterion there creates a subchapter, and the backend does not ask. Decide `finalLevel` before you add criteria. Set it to true for chapters whose criteria are leaves, and leave it false only when you intend to decompose the criteria into their own subchapters. Never leave auto-created subchapters empty.
+Because of the subchapter rule, a non-final chapter cannot hold a leaf criterion: every new criterion there creates a subchapter, and the backend does not ask. Decide `finalLevel` before you add criteria. Set it to true for chapters whose criteria are checkable as they are, and leave it false only when you intend to decompose the criteria into their own subchapters. A criterion that still needs its own criteria belongs on a non-final chapter, not in a long sentence. Never leave auto-created subchapters empty.
 
 Where the goal lives: put the one-line goal in the project description (it is limited to 280 characters) and let the first root chapter carry the intent in the user's words. Write it once and reference it; do not repeat the goal in every chapter description. A newly created project starts with one placeholder root chapter titled "Overview", so decide whether to rename it into the goal chapter, keep it as a root index, or delete it before adding criteria.
 
 Descriptions and criterion text support GitHub-flavored Markdown. The subchapter title is derived from the first line of the criterion with Markdown markers, links and emphasis removed, so keep the first line short and plain and put detail on later lines. Markdown in a criterion also becomes the subchapter description.
 
 `checked` on a criterion is the person's done/verified checkbox. Preserve it in every write. Change it only when the person says a criterion is verified or no longer verified, and never infer it from tests, commits or your own reading.
+
+## How to plan
+
+Layers turns a high-level idea into progressively precise, testable requirements. It is not a PRD generator: do not impose documentation categories such as Requirements, Architecture, Implementation, Testing or Deployment as the initial structure. They may emerge, but the hierarchy follows the user's outcomes.
+
+Start from the outcome. The root chapter states what the user wants, preferably in their own words. Each child answers a specific question about its parent: how will this be achieved, and how do we know this part is done? A requirement that does not clarify its parent belongs under another parent. Do not repeat one requirement across branches: place it where it belongs and reference it.
+
+Keep three kinds of statement apart:
+
+- An idea: what the user wants to achieve.
+- A decision: how they chose to achieve it (send email, use Resend).
+- An implementation detail: what must exist for the decision to work (read the key from the environment, attach a generated PDF, handle failed responses).
+
+Do not silently turn an assumption into a decision. When a choice is unknown, keep it as an explicit open question or as a criterion about choosing it, and ask.
+
+Prefer depth over breadth: a flat list of unrelated requirements is a PRD, a tree where every branch narrows its parent is a plan. Depth follows the conceptual complexity, not a fixed number of levels.
+
+```text
+Bad — PRD categories, no outcome:
+Website planning
+├── Requirements
+├── Architecture
+├── Implementation
+├── Testing
+└── Deployment
+
+Good — outcome first, depth where the meaning is:
+It would be cool if all planning happened automatically        (root chapter)
+├── Employees should receive their schedules automatically      (criterion → subchapter)
+│   └── Schedules arrive by email the evening before           (criterion → subchapter)
+│       └── The email attaches a PDF with the visits           (criterion → subchapter, finalLevel: true)
+│           ├── It lists every scheduled customer in visit order
+│           ├── Every entry has the customer's address
+│           └── Every entry has arrival and departure times
+└── Customer data should be loaded automatically                (criterion → subchapter, finalLevel: true)
+    ├── It reads the bookings from the configured Google Sheet range
+    └── Invalid rows are reported instead of dropped
+```
+
+A broad statement such as "Employees should receive their schedules automatically" is the right shape on a non-final chapter: it opens the branch. Final-level criteria are the testable end, so they name the preconditions or inputs, the action, the observable result, the failure behaviour, and the exact assertion. Given/When/Then helps when it removes ambiguity.
+
+- Good: "Given a mocked Google Sheets response with three valid rows, the loader returns exactly three normalized bookings with the expected ids, dates and coordinates."
+- Bad: "The system should integrate with Google Sheets." The observable behaviour is missing, so decompose it further or state the missing decision.
+
+Do not invent technical details merely to make a criterion look testable.
+
+Verification follows the same standard: prefer deterministic automated checks with fixtures and mocked externals, covering success, invalid input, authentication failure, external failure and missing configuration where they apply. Do not invent a command before the repository and test runner are known, and never claim a test ran.
+
+When the user delegates planning ("use your best judgment", "fill in the plan"), build the whole tree from what was confirmed: intermediate levels before implementation-level criteria, unknowns kept explicit, no shallow PRD outline, and no stalling on one criterion at a time. Report the tree you wrote.
+
+Before calling replace_document, check the tree yourself: does the root state the user's outcome; does every child clarify its parent; are decisions separate from implementation details; is every final-level criterion objectively checkable with explicit inputs and expected results; are unknowns preserved rather than invented; are there duplicates; did a PRD category sneak in; would an implementer know what to build without guessing. Fix the tree on paper first.
+
+Keep the structure adaptive. When new information arrives, attach it to the branch it clarifies, deepen only what changed, and leave unrelated branches alone. Do not rebuild the whole plan for every message.
 
 ## Ask how to plan before writing
 
@@ -47,8 +100,8 @@ Do not choose for the user and do not write document content before the answer. 
 
 1. Read the project and document. Let the user describe the goal, users, context, non-goals and constraints in their own words.
 2. Discuss globally: scope, boundaries, risks, and what "done" means. Write nothing yet.
-3. Propose the chapter outline with a one-line purpose per chapter, and for each chapter the criteria you intend to add. Ask for approval, then adjust until the user agrees.
-4. After approval, write the approved outline and criteria in a single document write when it fits. This is the one permitted bulk write; after it, continue chapter by chapter.
+3. Propose the decomposition tree, not a flat outline: the root outcome, the child criteria that will become subchapters, and final-level criteria with their observable assertions. Ask for approval of the tree once, then adjust until the user agrees.
+4. After approval, write the approved tree and criteria in a single document write when it fits. This is the one permitted bulk write; after it, continue chapter by chapter.
 5. Read the result back, show the tree with the subchapters the backend created, and ask which criteria still need detail. Decompose the broad ones by adding criteria to their subchapters rather than long criterion sentences.
 
 ### Mode 2 — criterion by criterion

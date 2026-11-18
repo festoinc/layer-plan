@@ -25,6 +25,7 @@ ARG BUILD_DATE=unknown
 LABEL org.opencontainers.image.source="https://github.com/festoinc/layer-plan" \
       org.opencontainers.image.title="Layers" \
       org.opencontainers.image.description="Local project specification workspace" \
+      org.opencontainers.image.licenses="PolyForm-Noncommercial-1.0.0" \
       org.opencontainers.image.version="${VERSION}" \
       org.opencontainers.image.revision="${REVISION}" \
       org.opencontainers.image.created="${BUILD_DATE}"
@@ -43,6 +44,7 @@ COPY --from=build --chown=node:node /app/dist ./dist
 COPY --from=build --chown=node:node /app/dist-server ./dist-server
 COPY --from=build --chown=node:node /app/server/api/openapi.yaml ./server/api/openapi.yaml
 COPY --from=build --chown=node:node /app/server/mcp/instructions.md ./server/mcp/instructions.md
+COPY --from=build --chown=node:node /app/LICENSE ./LICENSE
 COPY --from=build --chown=node:node /app/server/db/migrations ./server/db/migrations
 COPY --from=build --chown=node:node /app/package.json ./package.json
 
