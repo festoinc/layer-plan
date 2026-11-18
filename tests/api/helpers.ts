@@ -260,6 +260,23 @@ export async function mcpCall(
   };
 }
 
+export async function mcpCallRaw(
+  testApi: TestApi,
+  token: string,
+  name: string,
+  args: object = {},
+) {
+  const result = await mcpRpc(testApi, token, "tools/call", {
+    name,
+    arguments: args,
+  });
+  return {
+    status: result.status,
+    isError: result.body.result.isError === true,
+    text: result.body.result.content[0].text as string,
+  };
+}
+
 export function json(response: { payload: string }) {
   return JSON.parse(response.payload);
 }

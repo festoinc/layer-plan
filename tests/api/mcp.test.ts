@@ -5,6 +5,7 @@ import {
   docRequest,
   json,
   mcpCall,
+  mcpCallRaw,
   mcpRpc,
   TEST_SUPER_ADMIN,
   type TestApi,
@@ -24,14 +25,13 @@ const initialize = {
 
 const projectTools = [
   "add_attachment",
-  "append_activity",
+  "create_root_chapter",
   "delete_attachment",
-  "delete_project",
-  "export_project",
   "get_attachment",
   "get_coverage",
   "get_document",
   "get_project",
+  "how_to_work_with_this_mcp",
   "list_activity",
   "list_attachments",
   "list_projects",
@@ -86,8 +86,10 @@ describe("remote MCP", () => {
     expect(tools.map((tool) => tool.name).sort()).toEqual(projectTools);
     for (const excluded of [
       "create_project",
+      "delete_project",
       "duplicate_project",
       "activate_project",
+      "export_project",
       "import_project",
     ]) {
       expect(tools.map((tool) => tool.name)).not.toContain(excluded);
@@ -96,6 +98,12 @@ describe("remote MCP", () => {
       (tool) => tool.name === "delete_attachment",
     ) as { annotations?: { destructiveHint?: boolean } } | undefined;
     expect(deleteAttachment?.annotations?.destructiveHint).toBe(true);
+
+    const guide = await mcpCallRaw(api, read, "how_to_work_with_this_mcp");
+    expect(guide.isError).toBe(false);
+    expect(guide.text).toContain("# Layers agent instructions");
+    expect(guide.text).toContain("Ask how to plan before writing");
+    expect(guide.text).toContain("criterionSync");
 
     const listed = await mcpCall(api, read, "list_projects");
     expect(listed.envelope.status).toBe(200);
@@ -130,13 +138,10 @@ describe("remote MCP", () => {
     expect(wrongSearch.envelope.status).toBe(404);
     expect(wrongSearch.envelope.body.error.code).toBe("not_found");
 
-    const denied = await mcpCall(api, read, "append_activity", {
+    const denied = await mcpCall(api, read, "update_project", {
       projectId: "website",
-      body: {
-        message: "Denied",
-        chapterId: null,
-        chapterName: "Website",
-      },
+      ifMatch: '"1"',
+      body: { description: "Denied" },
     });
     expect(denied.envelope.status).toBe(403);
 
@@ -158,6 +163,74 @@ describe("remote MCP", () => {
     const conflict = await mcpCall(api, write, "replace_document", args);
     expect(conflict.envelope.status).toBe(412);
     expect(conflict.envelope.body.error.code).toBe("revision_conflict");
+  });
+
+  it("creates a root chapter in one call and logs it", async () => {
+    api = await createTestApi();
+    const cookie = await superCookie(api);
+    const read = await api.createToken(cookie, "website", { scopes: ["read"] });
+    const write = await api.createToken(cookie, "website");
+
+    const denied = await mcpCall(api, read, "create_root_chapter", {
+      projectId: "website",
+      title: "Denied",
+    });
+    expect(denied.envelope.status).toBe(403);
+
+    const before = (
+      await mcpCall(api, write, "get_document", { projectId: "website" })
+    ).envelope;
+    const created = await mcpCall(api, write, "create_root_chapter", {
+      projectId: "website",
+      title: "Agent chapters",
+      description: "Chapters created over MCP.",
+      finalLevel: true,
+    });
+    expect(created.envelope.status).toBe(201);
+    const chapter = created.envelope.body.createdChapter;
+    expect(chapter).toMatchObject({
+      parentId: null,
+      title: "Agent chapters",
+      description: "Chapters created over MCP.",
+      finalLevel: true,
+      criteria: [],
+      childIds: [],
+    });
+    expect(created.envelope.body.selectedId).toBe(chapter.id);
+    expect(created.envelope.etag).toBe(`"${created.envelope.body.revision}"`);
+    expect(created.envelope.body.revision).toBe(before.body.revision + 1);
+    expect(created.envelope.body.stats.chapterCount).toBe(
+      Object.keys(before.body.chapters.byId).length + 1,
+    );
+
+    const after = (
+      await mcpCall(api, write, "get_document", { projectId: "website" })
+    ).envelope;
+    expect(after.body.chapters.rootIds).toEqual([
+      ...before.body.chapters.rootIds,
+      chapter.id,
+    ]);
+    expect(after.body.chapters.byId[chapter.id]).toMatchObject({
+      title: "Agent chapters",
+      parentId: null,
+    });
+    expect(Object.keys(after.body.chapters.byId).sort()).toEqual(
+      [...Object.keys(before.body.chapters.byId), chapter.id].sort(),
+    );
+
+    const activity = await mcpCall(api, write, "list_activity", {
+      projectId: "website",
+    });
+    expect(activity.envelope.body.events[0].message).toBe(
+      'Added chapter "Agent chapters"',
+    );
+    expect(activity.envelope.body.events[0].chapterId).toBe(chapter.id);
+
+    const wrongProject = await mcpCall(api, write, "create_root_chapter", {
+      projectId: "another-project",
+      title: "Nope",
+    });
+    expect(wrongProject.envelope.status).toBe(404);
   });
 
   it("adds, reads and deletes attachments with the write scope", async () => {
@@ -457,30 +530,19 @@ describe("remote MCP", () => {
     });
     expect(stale.envelope.status).toBe(412);
 
-    const appended = await mcpCall(api, token, "append_activity", {
-      projectId: "website",
-      body: {
-        message: "MCP life cycle",
-        chapterId: null,
-        chapterName: "Website project",
-      },
-    });
-    expect(appended.envelope.status).toBe(201);
     const activity = await mcpCall(api, token, "list_activity", {
       projectId: "website",
     });
     expect(activity.envelope.status).toBe(200);
+    // The backend records the metadata change itself; agents no longer log it.
     expect(
       activity.envelope.body.events.some(
-        (event: { message: string }) => event.message === "MCP life cycle",
+        (event: { message: string }) =>
+          event.message === "Updated project settings",
       ),
     ).toBe(true);
     expect(
       (await mcpCall(api, token, "get_coverage", { projectId: "website" }))
-        .envelope.status,
-    ).toBe(200);
-    expect(
-      (await mcpCall(api, token, "export_project", { projectId: "website" }))
         .envelope.status,
     ).toBe(200);
 
@@ -489,11 +551,19 @@ describe("remote MCP", () => {
         projectId: "website",
       })
     ).envelope;
-    const removed = await mcpCall(api, token, "delete_project", {
-      projectId: "website",
-      ifMatch: current.etag,
+    // Project export and deletion are REST-only: they are not MCP tools.
+    const exported = await api.app.inject({
+      method: "GET",
+      url: "/api/v1/projects/website/export",
+      headers: authHeaders(cookie),
     });
-    expect(removed.envelope.status).toBe(200);
+    expect(exported.statusCode).toBe(200);
+    const removed = await api.app.inject({
+      method: "DELETE",
+      url: "/api/v1/projects/website",
+      headers: { ...authHeaders(cookie), "if-match": current.etag },
+    });
+    expect(removed.statusCode).toBe(200);
     const afterDelete = await mcpRpc(api, token, "initialize", initialize);
     expect(afterDelete.status).toBe(401);
   });

@@ -229,4 +229,8 @@ projects are private.
 observable conflict.
 
 **Next step:** deliver with P-02 sharing, where each member needs their own
-selection.
+selection.  
+  
+  
+p-22 show attachmets visually.   
+currently we do not jnow if there are attachments or not

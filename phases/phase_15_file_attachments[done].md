@@ -36,6 +36,14 @@ Updated: 2026-11-17
 - Cleanup removed the container, volume, environment file, state files and
   temporary Docker config. Port `18082` is free, nginx is active, satia and n8n
   still run, and the existing `layers-e2e-app` container remains up.
+- The remote checks above ran on the loopback port and bypassed host nginx. A
+  later check through `https://layered-plan.fesiuk.com` found the vhost's
+  `client_max_body_size 2m` rejecting a 1.7 MiB upload with an nginx HTML `413`,
+  because the base64 request body is about 1.33× the file size. The Layers vhost
+  (`/etc/nginx/sites-available/layers-ui`) was raised to `16m` with the user's
+  explicit authorization, and the fix was verified through HTTPS: 1.7 MiB,
+  9 MiB and 10 MiB uploads returned `201`, and a 10 MiB + 1 byte upload returned
+  the JSON `413 attachment_too_large` from the app rather than an nginx page.
 - The local gate (`lint`, `format:check`, `typecheck`, `api:lint`, `build`)
   passed before every push.
 

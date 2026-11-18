@@ -481,7 +481,10 @@ Layers exposes its project, document and attachment operations over MCP at
 Create an API key for one project in that project's actions menu (**MCP
 access**), or let an OAuth-only client authorize itself through the consent
 page. Either credential is bound to that project and accepted only by `/mcp`;
-it cannot create, import, duplicate or activate projects. Before remote access,
+it cannot create, import, duplicate or activate projects, and project export
+and deletion stay REST and UI only. The agent guide ships
+as the MCP `initialize` instructions and as the `how_to_work_with_this_mcp`
+tool for clients that do not surface them. Before remote access,
 set `LAYERS_MCP_ALLOWED_HOSTS` and, for OAuth, `LAYERS_PUBLIC_URL`, then
 configure HTTPS with a private backend; the default Docker Compose port is
 publicly bound and needs a loopback override behind a local reverse proxy. See

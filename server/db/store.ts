@@ -17,6 +17,7 @@ import {
   insertChapter,
   patchChapter,
   walkChapters,
+  type Chapter,
   type ChapterDocument,
 } from "../../src/domain/chapters";
 import { createSubchapterFromCriterion } from "../../src/domain/criteria";
@@ -91,6 +92,16 @@ export interface SaveDocumentResult {
   stats: ProjectStats;
   createdSubchapters: CreatedCriterionSubchapter[];
   sync: CriterionSync;
+}
+
+export interface CreateRootChapterInput {
+  title: string;
+  description?: string;
+  finalLevel?: boolean;
+}
+
+export interface CreateRootChapterResult extends SaveDocumentResult {
+  chapter: Chapter;
 }
 
 export interface ImportProjectResult {
@@ -204,6 +215,11 @@ export interface ProjectStore {
     input: SaveDocumentInput,
     expectedRevision: number,
   ): SaveDocumentResult;
+  createRootChapter(
+    ownerId: string,
+    id: string,
+    input: CreateRootChapterInput,
+  ): CreateRootChapterResult;
   listActivity(
     ownerId: string,
     id: string,
@@ -993,6 +1009,54 @@ export class SqliteStore implements ProjectStore {
       createdSubchapters: expanded.created,
       sync: reconciled.sync,
     };
+  }
+
+  /**
+   * Append one top-level chapter and select it. Read-modify-write in one
+   * synchronous step, so no ETag round trip is needed and nothing else can
+   * change the document in between.
+   */
+  createRootChapter(
+    ownerId: string,
+    id: string,
+    input: CreateRootChapterInput,
+  ): CreateRootChapterResult {
+    const snapshot = this.getDocument(ownerId, id);
+    if (!snapshot) {
+      throw new ApiError(
+        404,
+        "not_found",
+        "The project document does not exist.",
+      );
+    }
+    const chapter = createChapter({
+      id: this.uniqueChapterId(snapshot.chapters),
+      title: input.title,
+      description: input.description ?? "",
+      finalLevel: input.finalLevel ?? false,
+    });
+    const chapters: ChapterDocument = {
+      byId: { ...snapshot.chapters.byId, [chapter.id]: chapter },
+      rootIds: [...snapshot.chapters.rootIds, chapter.id],
+    };
+    const result = this.saveDocument(
+      ownerId,
+      id,
+      {
+        chapters,
+        selectedId: chapter.id,
+        activity: [
+          {
+            id: this.newId(),
+            message: `Added chapter "${chapter.title}"`,
+            chapterId: chapter.id,
+            chapterName: chapter.title,
+          },
+        ],
+      },
+      snapshot.revision,
+    );
+    return { ...result, chapter };
   }
 
   private previousDocument(chaptersJson: string): ChapterDocument {

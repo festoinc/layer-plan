@@ -438,10 +438,11 @@ describe("MCP OAuth", () => {
     const deniedWrite = await mcpCall(
       api,
       token.body.access_token,
-      "append_activity",
+      "update_project",
       {
         projectId: aliceProject.id,
-        body: { message: "Denied", chapterName: "Alice" },
+        ifMatch: '"1"',
+        body: { description: "Denied" },
       },
     );
     expect(deniedWrite.envelope.status).toBe(403);

@@ -94,14 +94,11 @@ describe("project API key API", () => {
     });
     expect(init.status).toBe(200);
     const write = await mcpRpc(api, token, "tools/call", {
-      name: "append_activity",
+      name: "update_project",
       arguments: {
         projectId: "website",
-        body: {
-          message: "Denied",
-          chapterId: null,
-          chapterName: "Website",
-        },
+        ifMatch: '"1"',
+        body: { description: "Denied" },
       },
     });
     expect(write.status).toBe(200);

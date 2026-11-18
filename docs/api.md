@@ -516,7 +516,7 @@ OAuth-only MCP clients use the same `/mcp` endpoint. Layers acts as both the
 OAuth 2.1 authorization server and the MCP resource server in the existing API
 process. An MCP request is authenticated by either a project API key
 (`lrs_…`) or an OAuth access token (`loa_…`); the credential type does not
-change the fifteen MCP tools or their project binding.
+change the fourteen MCP tools or their project binding.
 
 OAuth is enabled only when `LAYERS_PUBLIC_URL` is set. API keys continue to work
 without it. The value must be the exact public origin users open, for example
@@ -635,7 +635,8 @@ project, or disabling the user blocks future requests. Never place credentials
 in URLs or commit them to files. The credential is bound to one project, so
 `list_projects` returns only that project and
 `create_project`, `duplicate_project`, `activate_project` and `import_project`
-are not available.
+are not available. Project export and project deletion stay REST and UI only:
+the person exports or deletes through the browser session, never through MCP.
 Project and document updates use separate ETags, exposed in tool results. When
 a document write adds a new criterion to a non-final chapter, the backend
 creates the matching subchapter and returns it in `createdSubchapters`. MCP
@@ -652,7 +653,14 @@ content. The attachment tools are `list_attachments`, `get_attachment`,
 `add_attachment` and `delete_attachment`; `add_attachment` takes raw
 `contentBase64` and `get_attachment` returns metadata plus `contentBase64`.
 The read-only `search_project` tool uses the same project-scoped rules and
-returns the same search response. The agent is instructed to seek confirmation
+returns the same search response. The `create_root_chapter` tool appends one
+top-level chapter in a single call: the server reads the document, appends and
+selects the chapter, records the activity entry, and writes it on the current
+revision, so the tool takes no ETag. Chapters nested under a parent still go
+through `replace_document`. The read-only `how_to_work_with_this_mcp`
+tool returns the initialization instructions as plain Markdown, so a client
+that does not expose `initialize` instructions can still fetch them. The agent
+is instructed to seek confirmation
 before destructive actions, but instructions are not a server-side approval
 guarantee. In a Codex CLI 0.169.0 test, Codex attempted deletion after a direct
 request without first asking in chat; the client blocked the tool call because

@@ -10,13 +10,14 @@ import { MCP_BODY_LIMIT } from "../api/attachmentLimits";
 import {
   updateProjectSchema,
   putDocumentSchema,
-  appendActivitySchema,
   uploadAttachmentSchema,
 } from "../api/schemas";
 import {
   ATTACHMENT_EXTENSIONS,
   MAX_ATTACHMENT_BYTES,
 } from "../../src/domain/attachments";
+import { MAX_CHAPTER_TITLE } from "../../src/domain/chapters";
+import { formatEtag } from "../api/etag";
 import type { ProjectStore } from "../db/store";
 import {
   SEARCH_MAX_LIMIT,
@@ -57,6 +58,8 @@ type Operation = {
     args: Record<string, unknown>,
     auth: McpAuth,
   ) => Promise<McpEnvelope> | McpEnvelope;
+  /** Let a run result exceed the regular tool envelope limit. */
+  allowLargeResult?: boolean;
 };
 const projectPath = (args: Record<string, unknown>) =>
   `/api/v1/projects/${encodeURIComponent(String(args.projectId))}`;
@@ -88,16 +91,6 @@ function createOperations(store: ProjectStore): Operation[] {
       path: projectPath,
       schema: { projectId, ifMatch, body: updateProjectSchema },
       projectScoped: true,
-    },
-    {
-      name: "delete_project",
-      description:
-        "Delete the bound project after explicit user confirmation, using its current metadata ETag.",
-      method: "DELETE",
-      path: projectPath,
-      schema: { projectId, ifMatch },
-      projectScoped: true,
-      destructive: true,
     },
     {
       name: "get_document",
@@ -139,12 +132,36 @@ function createOperations(store: ProjectStore): Operation[] {
       readOnly: true,
     },
     {
-      name: "append_activity",
-      description: "Append an activity entry to the bound project.",
+      name: "create_root_chapter",
+      description:
+        "Create one top-level chapter (parentId null) in the bound project, append it to the root order, select it and log it in activity. Returns the updated document and the new chapter. Use replace_document when the new chapter must sit under a parent.",
       method: "POST",
-      path: (a) => `${projectPath(a)}/activity`,
-      schema: { projectId, body: appendActivitySchema },
+      path: (a) => `${projectPath(a)}/document`,
+      schema: {
+        projectId,
+        title: z.string().trim().min(1).max(MAX_CHAPTER_TITLE),
+        description: z.string().max(100000).optional(),
+        finalLevel: z.boolean().optional(),
+      },
       projectScoped: true,
+      run: (args, auth) => {
+        const result = store.createRootChapter(auth.userId, auth.projectId, {
+          title: String(args.title),
+          description:
+            typeof args.description === "string" ? args.description : undefined,
+          finalLevel: args.finalLevel === true,
+        });
+        return {
+          status: 201,
+          body: {
+            ...result.document,
+            createdChapter: result.chapter,
+            stats: result.stats,
+            activity: result.activity,
+          },
+          etag: formatEtag(result.document.revision),
+        };
+      },
     },
     {
       name: "get_coverage",
@@ -152,15 +169,6 @@ function createOperations(store: ProjectStore): Operation[] {
         "Read the bound project's declaration-based verification coverage.",
       method: "GET",
       path: (a) => `${projectPath(a)}/coverage`,
-      schema: { projectId },
-      projectScoped: true,
-      readOnly: true,
-    },
-    {
-      name: "export_project",
-      description: "Return the bound project's export as JSON.",
-      method: "GET",
-      path: (a) => `${projectPath(a)}/export`,
       schema: { projectId },
       projectScoped: true,
       readOnly: true,
@@ -208,6 +216,7 @@ function createOperations(store: ProjectStore): Operation[] {
       schema: { projectId, attachmentId },
       projectScoped: true,
       readOnly: true,
+      allowLargeResult: true,
       run: (args, auth) => {
         const attachment = store.getAttachment(
           auth.userId,
@@ -347,6 +356,18 @@ export function registerMcpRoutes(
         { name: "layers", version: "1.0.0" },
         { instructions },
       );
+      server.registerTool(
+        "how_to_work_with_this_mcp",
+        {
+          description:
+            "Return this server's full working guide: the project model, the two planning modes, tool result envelopes, ETag and revision rules, and the document read/write contract. Call it first, before other tools, and follow it.",
+          inputSchema: {},
+          annotations: { readOnlyHint: true, destructiveHint: false },
+        },
+        async () => ({
+          content: [{ type: "text" as const, text: instructions }],
+        }),
+      );
       for (const operation of createOperations(store)) {
         server.registerTool(
           operation.name,
@@ -363,11 +384,43 @@ export function registerMcpRoutes(
             if (operation.projectScoped && input.projectId !== auth.projectId) {
               return notFoundResult();
             }
+            // `run` tools bypass the REST scope check, so enforce it here.
+            if (!operation.readOnly && !auth.scopes.includes("write")) {
+              return textResult(
+                {
+                  status: 403,
+                  body: {
+                    error: {
+                      code: "forbidden",
+                      message: "The API key does not allow this operation.",
+                      details: { requiredScope: "write" },
+                    },
+                  },
+                  etag: null,
+                },
+                true,
+              );
+            }
             if (operation.run) {
               const envelope = await operation.run(input, {
                 userId: auth.user.id,
                 projectId: auth.projectId,
               });
+              const text = JSON.stringify(envelope);
+              if (
+                !operation.allowLargeResult &&
+                Buffer.byteLength(text) > MAX_BYTES
+              ) {
+                return textResult(
+                  {
+                    error: {
+                      code: "payload_too_large",
+                      message: "MCP response exceeds the allowed limit.",
+                    },
+                  },
+                  true,
+                );
+              }
               return textResult(envelope, envelope.status >= 400);
             }
             const payload = operation.payload

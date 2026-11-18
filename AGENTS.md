@@ -102,17 +102,23 @@ the domain and host address are in `.agents.local.md`. It was configured with
 the user's explicit authorization. The existing restriction on changing nginx
 still applies to future work unless the user explicitly authorizes it.
 
-- The enabled configuration is `/etc/nginx/sites-enabled/layers-e2e-phase9`,
-  linked to `/etc/nginx/sites-available/layers-e2e-phase9`. It does not change
-  the existing satia or n8n virtual hosts.
+- The enabled configuration is `/etc/nginx/sites-enabled/layers-ui`, linked to
+  `/etc/nginx/sites-available/layers-ui` (the phase 9 test vhost
+  `layers-e2e-phase9` no longer exists). It does not change the existing satia
+  or n8n virtual hosts. Back up the file to `/root/` before editing it.
 - Port 80 serves ACME challenges from `/var/www/layers-mcp-acme` and redirects
   other requests to HTTPS. Port 443 uses the domain's Certbot-managed Let's
   Encrypt certificate under `/etc/letsencrypt/live/<domain>/`; the Certbot
   renewal configuration uses the same ACME webroot.
 - HTTPS requests proxy to `127.0.0.1:18080`, preserve the original Host header,
-  disable proxy buffering, and use a 300-second proxy read timeout. nginx limits
-  request bodies to 2 MiB for the entire virtual host, including the UI and
-  REST API as well as MCP.
+  disable proxy buffering, and use a 300-second proxy read timeout.
+- `client_max_body_size` is `16m` for the entire virtual host, including the UI
+  and REST API as well as MCP. Attachment uploads send base64 JSON, so a 10 MiB
+  file is about 14 MB on the wire; the previous `2m` value rejected anything
+  above roughly 1.5 MiB with an nginx HTML `413` before the app saw it. The app
+  still enforces its own `14 MiB` route limit and the `10 MiB` decoded limit, so
+  an over-limit upload that fits under 16m returns the JSON
+  `413 attachment_too_large`; only bodies above 16m get the nginx page.
 - The isolated phase 9 test container and its volume were removed after the
   tests. No Layers backend was listening on `127.0.0.1:18080` at that point,
   so the HTTPS endpoint returned 502 despite having a valid certificate.

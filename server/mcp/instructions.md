@@ -1,5 +1,7 @@
 # Layers agent instructions
 
+This text is the `initialize` instructions for this MCP server and the return value of the `how_to_work_with_this_mcp` tool. If a client did not surface it, call that tool and follow it.
+
 Layers MCP tools are the source of truth. This MCP connection is bound to exactly one project: its owner and the project id are fixed by the credential. The credential may be a project API key or an OAuth connection; the credential type does not change the tools or permissions. Never ask for a password, API key, OAuth code, access token, or another project id in chat. Use list_projects to see the bound project and use that project id on every project tool. A different project id returns not_found. The REST API is not available to this credential.
 
 ## What a Layers project looks like
@@ -63,7 +65,7 @@ In both modes: ask instead of inventing scope, keep one expectation per criterio
 
 Every tool result is an envelope `{ status, body, etag }`. Check `status` before using `body`. A failed call also returns the envelope with `isError: true` and the API error in `body.error`, which carries `code`, `message` and sometimes `details`. Branch on `error.code`, not only on the HTTP status. `etag` is the exact ETag header value when present, otherwise null.
 
-An ETag is a quoted revision such as `"12"`. Pass the `etag` value to `ifMatch` verbatim, including the quotes. The ETag from get_document belongs to replace_document; the separate ETag from get_project belongs to update_project and delete_project. Never swap them. After a successful write, use the returned `etag` for the next write. On a revision conflict, reread and rebase; never blindly retry or overwrite.
+An ETag is a quoted revision such as `"12"`. Pass the `etag` value to `ifMatch` verbatim, including the quotes. The ETag from get_document belongs to replace_document; the separate ETag from get_project belongs to update_project. Never swap them. After a successful write, use the returned `etag` for the next write. On a revision conflict, reread and rebase; never blindly retry or overwrite.
 
 A write that changes nothing keeps the same revision: an identical document, or an activity-only append, returns the current revision instead of a new one. Compare the returned chapters, `stats` or `createdSubchapters` to decide whether your change landed; do not assume a write was lost.
 
@@ -104,7 +106,9 @@ Every chapter record needs all of its fields. A new chapter looks like this:
 
 Choose IDs yourself for new chapters, criteria and activity entries: unique, lowercase, readable, at most 128 characters, and stable. Never reuse an ID for a different thing, never rename an existing ID, and never collide with an existing ID. Activity entries with a reused ID are silently dropped, so give every new entry a fresh one.
 
-Every chapter must be reachable exactly once: either listed in `rootIds` or referenced by exactly one parent's `childIds`. The list order is the display order. If you add a chapter to `byId` without linking it, the backend silently promotes it to the root; duplicate or cyclic references are silently dropped, so a broken write can look successful.
+Every chapter must be reachable exactly once: either listed in `rootIds` or referenced by exactly one parent's `childIds`. The list order is the display order. `parentId` is derived from that graph on every write and is ignored as input, so link the chapter in `rootIds` or in its parent's `childIds`; an unlinked chapter, a duplicate reference and a cycle each fail the write with `422 validation_failed` and leave the document unchanged.
+
+To add a **top-level** chapter, call create_root_chapter with `title`, optional `description` and optional `finalLevel`. It appends the chapter to the root order, selects it, records the activity entry and returns the updated document. It needs no ETag because the server performs the read-modify-write itself. For a chapter **under an existing parent**, use replace_document and link the new id in the parent's `childIds`; do not put it in `rootIds`.
 
 To delete a chapter, remove it from `byId`, remove it from its parent's `childIds` or `rootIds`, and decide what happens to its children: reparent them or delete them with it. If the chapter came from a criterion, deleting it also deletes that criterion. To keep the criterion and turn the chapter into a manual chapter, detach by clearing `chapterId` in a separate write before deleting anything.
 
@@ -116,7 +120,7 @@ A success criterion with `chapterId` and the subchapter it names are one synchro
 
 Use search_project to find a chapter by keyword or commit prefix before reading it. Search covers chapter titles, descriptions, criterion text, commit hashes, and the auto, human and ai verification text. It searches only the bound project; activity, project metadata and test guidelines are not searched. Commit terms of 4–40 hexadecimal characters match by prefix. Results are chapter-level and reflect the saved document, so read the matched chapter with get_document before editing it. Search does not change the document or its revision.
 
-Ask the user to confirm before deleting the project or a chapter, removing existing criteria or content, or overwriting conflicting changes. Record meaningful documentation changes in activity.
+Ask the user to confirm before deleting a chapter, removing existing criteria or content, or overwriting conflicting changes. Describe each meaningful document write with an activity entry.
 
 ## Attachments
 
@@ -124,7 +128,9 @@ Attachments belong to the bound project document, not to an individual chapter. 
 
 ## Activity
 
-Activity is the project history the person sees. Each new entry is `{ id, message, chapterId, chapterName }`; the server assigns the time and actor. Write one entry per meaningful change, in the user's language, naming the chapter it belongs to, for example "Added 3 criteria to Authorization". Do not log trivia, do not repeat the same event within one session, and do not send existing entries back. Entries are stored newest-first, the project keeps the newest 100, and there is no way to edit or delete them. append_activity adds a standalone note; list_activity pages backward with `limit` and `before`.
+Activity is the project history the person sees. The server records most of it itself: project creation, renames and settings, imported or duplicated projects, attachments added or removed, and the subchapters it creates or deletes while syncing criteria. The server also assigns the entry time and actor.
+
+A replace_document write may carry an optional `activity` array of `{ id, message, chapterId, chapterName }` entries describing the document changes in that write. Include one entry per meaningful change, in the user's language, naming the chapter it belongs to, for example "Added 3 criteria to Authorization". Do not log trivia, do not repeat an event already recorded by the server, and do not send existing entries back. Entries are stored newest-first, the project keeps the newest 100, and there is no way to edit or delete them. Read them with list_activity, which pages backward with `limit` and `before`.
 
 ## Verification and coverage
 
@@ -140,7 +146,7 @@ Nothing is executed. Verification is a declaration, so never claim that a test r
 
 Coverage is declaration-based: only eligible non-root chapters with a non-empty auto-test command count as covered. Coverage rows also carry the chapter commits.
 
-This connection cannot create, import, duplicate or activate projects. Deleting the bound project also invalidates this connection. If authentication fails, ask the user to reconnect through the MCP client's Layers authorization flow rather than asking for a token in chat. Exported instructions describe the export format.
+This connection cannot create, import, duplicate, activate, export or delete projects; the person does those in the Layers UI. Deleting the bound project in the UI also invalidates this connection. If authentication fails, ask the user to reconnect through the MCP client's Layers authorization flow rather than asking for a token in chat.
 
 Commit references are lowercase 7–40 character hexadecimal hashes and belong to chapters, not criteria. Use only hashes the user supplied or that you verified in the repository; never invent a hash, and never state that a commit verifies or covers a criterion.
 

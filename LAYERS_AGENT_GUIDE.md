@@ -632,14 +632,21 @@ Keep the report concise and factual.
 
 When connected through the Layers MCP server, use its project and document
 tools instead of the REST examples above. The server sends adapted instructions
-during initialization. The credential is bound to one project: `list_projects`
+during initialization. Some clients do not surface those instructions, so the
+same guide is available as the `how_to_work_with_this_mcp` tool: call it first
+when you did not receive initialization instructions, and follow it. The
+credential is bound to one project: `list_projects`
 returns only that project, and every other tool requires its project id.
 `search_project` uses the same project-scoped rules as the REST search endpoint;
-read a matched chapter with `get_document` before editing it. Attachment tools
+read a matched chapter with `get_document` before editing it. `create_root_chapter`
+appends one top-level chapter and selects it in a single call, without an ETag;
+nest a chapter under a parent by linking it in that parent's `childIds` through
+`replace_document`. Attachment tools
 are `list_attachments`, `get_attachment`, `add_attachment` and
 `delete_attachment`; they use the same 20-file and 10 MiB limits. `get_attachment`
 returns metadata plus base64 content, and `add_attachment` accepts raw base64. It
-cannot create, import, duplicate or activate projects. A read-only credential
+cannot create, import, duplicate or activate projects, and project export and
+deletion stay REST and UI only. A read-only credential
 can read; a read-write credential can edit. Project metadata and document writes require their
 respective ETags; reread and rebase on a conflict. See `docs/api.md` for Codex
 configuration, HTTPS requirements and limits. Ask before destructive changes.
